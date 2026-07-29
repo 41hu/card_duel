@@ -23,3 +23,6 @@ Thumbs.db
 *.exe
 *.pck
 export_presets.cfg
+*.exe
+*.pck
+*.zip

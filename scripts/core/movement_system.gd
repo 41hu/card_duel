@@ -62,6 +62,7 @@ func _push_opponent(player_idx: int):
 	var other = match_ref.get_player(1 - player_idx)
 	var direction = 1 if player_idx == 0 else -1
 	other.position = Config.clamp_position(other.position + direction)
+	check_trap_trigger(1 - player_idx)
 
 # 吸引：将对方拉向自己1格
 func attract(player_idx: int) -> bool:
@@ -76,8 +77,10 @@ func attract(player_idx: int) -> bool:
 		var my_new = Config.clamp_position(my_pos + back_dir)
 		if my_new == other.position: return false
 		player.position = my_new
+		check_trap_trigger(player_idx)
 		return true
 	other.position = new_pos
+	check_trap_trigger(1 - player_idx)
 	return true
 
 # 威慑：将对方推远1格
@@ -89,6 +92,7 @@ func deter(player_idx: int) -> bool:
 	if new_pos == my_pos:
 		return false
 	other.position = new_pos
+	check_trap_trigger(1 - player_idx)
 	return true
 
 # 检查陷阱触发
@@ -101,6 +105,11 @@ func check_trap_trigger(player_idx: int) -> int:
 		if traps[i].position == player.position:
 			damage += 3
 			traps.remove_at(i)
+
+	if damage > 0:
+		player.hp -= damage
+		match_ref.add_log(player_idx, "踩陷阱-%dHP" % damage)
+	return damage
 
 	return damage
 

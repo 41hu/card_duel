@@ -23,6 +23,16 @@ var _log_vbox: VBoxContainer
 var _resp_popup: Control
 var _wpn_popup: Control
 var _card_info: Label
+var _skill_labels = {
+	"swordsman": "近战命中:抽1或回2HP(1/回)",
+	"archer": "首张远程免费",
+	"mage": "弃1牌:魔法+2(1/回)",
+	"paladin": "首伤-2 + 防具+1耐久",
+	"assassin": "免费移动1格/回",
+	"priest": "回复额外+2",
+	"berserker": "受伤后近战+1(2回)",
+	"warlock": "功能点+1|余点抽1",
+}
 
 func _n():
 	return LocalGame if LocalGame.game != null else Network
@@ -282,7 +292,8 @@ func _refresh_all(state: Dictionary):
 			var btn = Button.new()
 			btn.text = "%s [%s]" % [cn, al]
 			if in_disc and card.uid in _discard_selected:
-				btn.text = "[弃] " + btn.text
+				btn.text = "✕ " + btn.text
+				btn.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
 			btn.size = Vector2(64, 64)
 			btn.set_meta("card_data", cm)
 			btn.pressed.connect(_on_card_clicked.bind(card.uid, tid))
@@ -334,6 +345,18 @@ func _fmt_player(p, tag: String) -> String:
 		txt += " 防具:" + p.armor.data.name + "(%d/3)" % p.armor.durability
 	if p.get("frozen", false):
 		txt += " 冻结!"
+	txt += "\n技能:" + _skill_labels.get(p.char_id, "?")
+	if p.get("dots", []).size() > 0:
+		for d in p.dots:
+			txt += " | " + d.type + "(-%dHP" % d.damage
+			if d.duration > 0: txt += ",%d回" % d.duration
+			txt += ")"
+	if p.get("buffs", []).size() > 0:
+		for b in p.buffs:
+			var sign = "+" if b.value > 0 else ""
+			txt += " | " + b.type + "(" + sign + str(b.value)
+			if b.duration > 0: txt += ",%d回" % b.duration
+			txt += ")"
 	return txt
 
 func _on_card_clicked(card_uid: int, type_id: String):

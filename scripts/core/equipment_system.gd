@@ -24,7 +24,7 @@ func discard_weapon_offer(player_idx: int):
 
 func equip_armor(player_idx: int, armor_type_id: String) -> Dictionary:
 	var player = match_ref.get_player(player_idx)
-	var dur = 4 if player.char_id == "paladin" else 3
+	var dur = 3 + match_ref.char_skills.armor_durability_bonus(player_idx)
 	if not player.armor.is_empty():
 		match_ref.card_systems[player_idx].discard.append(player.armor.duplicate())
 	player.armor = {id=armor_type_id, data=Config.ARMOR_DB[armor_type_id], durability=dur}

@@ -49,11 +49,6 @@ func calculate_attack(attacker_idx: int, defender_idx: int, card_type_id: String
 
 	base_damage = armor_result.damage
 
-	# 圣骑士被动：每回合首次受伤-2
-	if defender.char_id == "paladin" and defender.damage_reduction_used == false:
-		base_damage = max(0, base_damage - 2)
-		defender.damage_reduction_used = true
-
 	return {damage=base_damage, blocked=false, msg="", damage_type=damage_type}
 
 # ---------- 武器伤害加成 ----------

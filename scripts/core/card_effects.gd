@@ -1,12 +1,12 @@
 # card_effects.gd — 卡牌效果系统（加新卡只需改 config + 本文件注册表）
 extends RefCounted
 
-var match
+var _m
 var _handlers: Dictionary
 
 
 func _init(m):
-	match = m
+	_m = m
 	_handlers = {
 		"near": _atk, "range": _atk, "magic": _atk,
 		"heavy": _atk, "pierce": _atk, "chant": _atk,
@@ -28,98 +28,98 @@ func execute(player_idx: int, card: Dictionary) -> Dictionary:
 
 # 攻击卡
 func _atk(player_idx: int, card: Dictionary):
-	return match._handle_attack_card(player_idx, card)
+	return _m._handle_attack_card(player_idx, card)
 
 func _atk_move(player_idx: int, card: Dictionary):
-	return match._handle_move_card(player_idx, card)
+	return _m._handle_move_card(player_idx, card)
 
 func _atk_attract(player_idx: int, card: Dictionary):
-	match.movement.attract(player_idx)
-	match.card_systems[player_idx].play_card(card.uid)
-	match.add_log(player_idx, "吸引")
+	_m.movement.attract(player_idx)
+	_m.card_systems[player_idx].play_card(card.uid)
+	_m.add_log(player_idx, "吸引")
 	return {success=true}
 
 func _atk_deter(player_idx: int, card: Dictionary):
-	match.movement.deter(player_idx)
-	match.card_systems[player_idx].play_card(card.uid)
-	match.add_log(player_idx, "威慑")
+	_m.movement.deter(player_idx)
+	_m.card_systems[player_idx].play_card(card.uid)
+	_m.add_log(player_idx, "威慑")
 	return {success=true}
 
 func _atk_freeze(player_idx: int, card: Dictionary):
-	var ok = match.status.freeze_player(1 - player_idx)
-	match.card_systems[player_idx].play_card(card.uid)
-	match.add_log(player_idx, "冻结" if ok else "冻结失败")
+	var ok = _m.status.freeze_player(1 - player_idx)
+	_m.card_systems[player_idx].play_card(card.uid)
+	_m.add_log(player_idx, "冻结" if ok else "冻结失败")
 	return {success=ok}
 
 func _atk_destroy(player_idx: int, card: Dictionary):
-	return match._handle_destroy(player_idx, card)
+	return _m._handle_destroy(player_idx, card)
 
 func _atk_seize(player_idx: int, card: Dictionary):
-	return match._handle_seize(player_idx, card)
+	return _m._handle_seize(player_idx, card)
 
 func _heal_3(player_idx: int, card: Dictionary):
-	return match._handle_heal(player_idx, card, 3)
+	return _m._handle_heal(player_idx, card, 3)
 
 func _heal_5(player_idx: int, card: Dictionary):
-	return match._handle_heal(player_idx, card, 5)
+	return _m._handle_heal(player_idx, card, 5)
 
 func _buff_near(player_idx: int, card: Dictionary):
-	match.players[player_idx].near_power += 1
-	match.card_systems[player_idx].play_card(card.uid)
-	match.add_log(player_idx, "近战+1")
+	_m.players[player_idx].near_power += 1
+	_m.card_systems[player_idx].play_card(card.uid)
+	_m.add_log(player_idx, "近战+1")
 	return {success=true}
 
 func _buff_range(player_idx: int, card: Dictionary):
-	match.players[player_idx].range_power += 1
-	match.card_systems[player_idx].play_card(card.uid)
-	match.add_log(player_idx, "远程+1")
+	_m.players[player_idx].range_power += 1
+	_m.card_systems[player_idx].play_card(card.uid)
+	_m.add_log(player_idx, "远程+1")
 	return {success=true}
 
 func _buff_magic(player_idx: int, card: Dictionary):
-	match.players[player_idx].magic_power += 1
-	match.card_systems[player_idx].play_card(card.uid)
-	match.add_log(player_idx, "魔法+1")
+	_m.players[player_idx].magic_power += 1
+	_m.card_systems[player_idx].play_card(card.uid)
+	_m.add_log(player_idx, "魔法+1")
 	return {success=true}
 
 func _blessing(player_idx: int, card: Dictionary):
-	match.card_systems[player_idx].play_card(card.uid)
-	match.card_systems[player_idx].draw_cards(2)
-	match.add_log(player_idx, "天赐")
+	_m.card_systems[player_idx].play_card(card.uid)
+	_m.card_systems[player_idx].draw_cards(2)
+	_m.add_log(player_idx, "天赐")
 	return {success=true}
 
 func _trap(player_idx: int, card: Dictionary):
-	var p = match.players[player_idx]
+	var p = _m.players[player_idx]
 	var pos = card.get("trap_pos", p.position + (1 if player_idx == 1 else -1))
-	if match.movement.place_trap(player_idx, pos):
-		match.card_systems[player_idx].play_card(card.uid)
-		match.add_log(player_idx, "陷阱于%d" % pos)
+	if _m.movement.place_trap(player_idx, pos):
+		_m.card_systems[player_idx].play_card(card.uid)
+		_m.add_log(player_idx, "陷阱于%d" % pos)
 		return {success=true}
 	return {success=false, msg="无法放置"}
 
 func _near_weapon(player_idx: int, card: Dictionary):
-	return match._handle_weapon_card(player_idx, card, "near")
+	return _m._handle_weapon_card(player_idx, card, "near")
 
 func _range_weapon(player_idx: int, card: Dictionary):
-	return match._handle_weapon_card(player_idx, card, "range")
+	return _m._handle_weapon_card(player_idx, card, "range")
 
 func _magic_weapon(player_idx: int, card: Dictionary):
-	return match._handle_weapon_card(player_idx, card, "magic")
+	return _m._handle_weapon_card(player_idx, card, "magic")
 
 func _near_armor(player_idx: int, card: Dictionary):
-	match.card_systems[player_idx].play_card(card.uid)
-	match.equipment.equip_armor(player_idx, "near_armor")
-	match.add_log(player_idx, "装备防具")
+	_m.card_systems[player_idx].play_card(card.uid)
+	_m.equipment.equip_armor(player_idx, "near_armor")
+	_m.add_log(player_idx, "装备防具")
 	return {success=true}
 
 func _range_armor(player_idx: int, card: Dictionary):
-	match.card_systems[player_idx].play_card(card.uid)
-	match.equipment.equip_armor(player_idx, "range_armor")
-	match.add_log(player_idx, "装备防具")
+	_m.card_systems[player_idx].play_card(card.uid)
+	_m.equipment.equip_armor(player_idx, "range_armor")
+	_m.add_log(player_idx, "装备防具")
 	return {success=true}
 
 func _magic_armor(player_idx: int, card: Dictionary):
-	match.card_systems[player_idx].play_card(card.uid)
-	match.equipment.equip_armor(player_idx, "magic_armor")
-	match.add_log(player_idx, "装备防具")
+	_m.card_systems[player_idx].play_card(card.uid)
+	_m.equipment.equip_armor(player_idx, "magic_armor")
+	_m.add_log(player_idx, "装备防具")
 	return {success=true}
 

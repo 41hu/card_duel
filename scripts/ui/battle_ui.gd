@@ -531,9 +531,7 @@ func _on_error(msg: String):
 	status_label.text = "错误: " + msg
 
 func _on_skill_use():
-	var me = _game_state.players[0] if _game_state.players[0].index == _player_index else _game_state.players[1]
-	if me.char_id == "mage" and not me.get("mage_buff_used", false):
-		_n().send_play_card(-999, {"skill": "mage_discard"})
+	_n().send_use_skill("mage_discard")
 	skill_confirm.visible = false
 	skill_cancel.visible = false
 	skill_btn.visible = true

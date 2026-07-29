@@ -2,6 +2,8 @@
 extends RefCounted
 
 var match
+var _handlers: Dictionary
+
 
 func _init(m):
 	match = m
@@ -121,4 +123,3 @@ func _magic_armor(player_idx: int, card: Dictionary):
 	match.add_log(player_idx, "装备防具")
 	return {success=true}
 
-var _handlers: Dictionary

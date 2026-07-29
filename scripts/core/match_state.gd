@@ -200,7 +200,10 @@ func _do_play_card(player_idx: int, data: Dictionary) -> Dictionary:
 func _execute_card_effect(player_idx: int, card: Dictionary) -> Dictionary:
 	return card_effects.execute(player_idx, card)
 func _handle_skill(player_idx: int, skill: String, params: Dictionary = {}) -> Dictionary:
-	return char_skills.use_skill(player_idx, skill, params)
+	var r = char_skills.use_skill(player_idx, skill, params)
+	if r.get("success", false):
+		state_changed.emit(get_full_state())
+	return r
 func _use_card(player_idx: int, card: Dictionary):
 	card_systems[player_idx].play_card(card.uid)
 

@@ -23,7 +23,7 @@ var _log_vbox: VBoxContainer
 @onready var card_info = $CardInfo
 @onready var skill_btn = $SkillBtn
 @onready var skill_confirm = $SkillConfirm
-@onready var var _skill_waiting: bool = false
+@onready var _skill_waiting: bool = false
 var _resp_popup: Control
 var _wpn_popup: Control
 var _skill_labels = {

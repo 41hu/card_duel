@@ -19,6 +19,13 @@ run/main_scene="res://scenes/main_menu.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://assets/icon.svg"
 
+[autoload]
+
+Config="*res://scripts/autoload/config.gd"
+Network="*res://scripts/autoload/network.gd"
+LocalGame="*res://scripts/autoload/local_game.gd"
+McpInteractionServer="*res://scripts/autoload/mcp_interaction_server.gd"
+
 [display]
 
 window/size/viewport_width=1920
@@ -28,13 +35,6 @@ window/size/window_height_override=1080
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
-[autoload]
-
-Config="*res://scripts/autoload/config.gd"
-Network="*res://scripts/autoload/network.gd"
-LocalGame="*res://scripts/autoload/local_game.gd"
-McpInteractionServer="*res://scripts/autoload/mcp_interaction_server.gd"
-
 [editor_plugins]
 
 enabled=PackedStringArray("res://addons/hasturoperationgd/plugin.cfg")
@@ -42,3 +42,4 @@ enabled=PackedStringArray("res://addons/hasturoperationgd/plugin.cfg")
 [rendering]
 
 textures/canvas_textures/default_texture_filter=0
+textures/vram_compression/import_etc2_astc=true

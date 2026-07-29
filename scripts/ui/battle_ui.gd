@@ -20,9 +20,12 @@ var _board_cells: Array = []
 var _board_container: Control
 var _log_scroll: ScrollContainer
 var _log_vbox: VBoxContainer
+@onready var card_info = $CardInfo
+@onready var skill_btn = $SkillBtn
+@onready var skill_confirm = $SkillConfirm
+@onready var var _skill_waiting: bool = false
 var _resp_popup: Control
 var _wpn_popup: Control
-var _card_info: Label
 var _skill_labels = {
 	"swordsman": "近战命中:抽1或回2HP(1/回)",
 	"archer": "首张远程免费",
@@ -38,12 +41,19 @@ func _n():
 	return LocalGame if LocalGame.game != null else Network
 
 func _ready():
-	_card_info = Label.new()
-	_card_info.position = Vector2(10, 338)
-	_card_info.size = Vector2(350, 30)
-	_card_info.add_theme_font_size_override("font_size", 14)
-	_card_info.add_theme_color_override("font_color", Color(0.8, 0.8, 0.5))
-	add_child(_card_info)
+	skill_cancel.pressed.connect(func():
+		skill_btn.visible = true
+		skill_confirm.visible = false
+		skill_cancel.visible = false
+		_skill_waiting = false
+	)
+	skill_btn.pressed.connect(func():
+		skill_btn.visible = false
+		skill_confirm.visible = true
+		skill_cancel.visible = true
+		_skill_waiting = false
+	)
+	skill_confirm.pressed.connect(_on_skill_use)
 	_build_board()
 	_build_log()
 	_build_popups()
@@ -65,7 +75,7 @@ func _on_cancel_select():
 	_discard_selected.clear()
 	confirm_btn.visible = false
 	cancel_btn.visible = false
-	_card_info.text = ""
+	card_info.text = ""
 	_refresh_highlight()
 
 func _build_board():
@@ -226,11 +236,11 @@ func _on_state_updated(state: Dictionary):
 		_discard_selected.clear()
 		confirm_btn.visible = false
 		cancel_btn.visible = false
-		_card_info.text = ""
+		card_info.text = ""
 	_refresh_all(state)
 
 func _refresh_all(state: Dictionary):
-	_card_info.text = ""
+	card_info.text = ""
 	var pls = state.players
 	if pls.size() < 2:
 		return
@@ -382,13 +392,13 @@ func _on_card_clicked(card_uid: int, type_id: String):
 		_selected_uid = -1
 		confirm_btn.visible = false
 		cancel_btn.visible = false
-		_card_info.text = ""
+		card_info.text = ""
 	else:
 		_selected_uid = card_uid
 		_selected_type = type_id
 		confirm_btn.visible = true
 		cancel_btn.visible = true
-		_card_info.text = Config.card_name(type_id) + ": " + Config.CARD_DB.get(type_id, {}).get("desc", "")
+		card_info.text = Config.card_name(type_id) + ": " + Config.CARD_DB.get(type_id, {}).get("desc", "")
 	_refresh_highlight()
 
 func _on_confirm_card():
@@ -519,6 +529,14 @@ func _on_game_ended(_r: Dictionary):
 
 func _on_error(msg: String):
 	status_label.text = "错误: " + msg
+
+func _on_skill_use():
+	var me = _game_state.players[0] if _game_state.players[0].index == _player_index else _game_state.players[1]
+	if me.char_id == "mage" and not me.get("mage_buff_used", false):
+		_n().send_play_card(-999, {"skill": "mage_discard"})
+	skill_confirm.visible = false
+	skill_cancel.visible = false
+	skill_btn.visible = true
 
 func _on_end_turn():
 	if not _is_my_turn:

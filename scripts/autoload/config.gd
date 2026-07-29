@@ -46,11 +46,11 @@ var CARD_DB = {
 	"move":     {name="移动",   cat=CardCategory.MOVE,   ap=APType.MOVE, cost=1, desc="移动1格"},
 
 	# 功能牌 (11张)
-	"attract":  {name="吸引",   cat=CardCategory.ATTRACT, ap=APType.FUNCTION, cost=1, desc="拉对方1格"},
-	"deter":    {name="威慑",   cat=CardCategory.DETER,   ap=APType.FUNCTION, cost=1, desc="推对方1格"},
-	"freeze":   {name="冻结",   cat=CardCategory.FREEZE,  ap=APType.FUNCTION, cost=1, desc="跳过对方下个出牌阶段"},
-	"destroy":  {name="摧毁",   cat=CardCategory.DESTROY, ap=APType.FUNCTION, cost=1, desc="盲丢1手牌或摧毁1装备"},
-	"seize":    {name="夺取",   cat=CardCategory.SEIZE,   ap=APType.FUNCTION, cost=1, desc="盲抽对方1手牌"},
+	"attract":  {name="吸引",   cat=CardCategory.ATTRACT, ap=APType.NONE, cost=0, desc="拉对方1格"},
+	"deter":    {name="威慑",   cat=CardCategory.DETER,   ap=APType.NONE, cost=0, desc="推对方1格"},
+	"freeze":   {name="冻结",   cat=CardCategory.FREEZE,  ap=APType.NONE, cost=0, desc="跳过对方下个出牌阶段"},
+	"destroy":  {name="摧毁",   cat=CardCategory.DESTROY, ap=APType.NONE, cost=0, desc="盲丢1手牌或摧毁1装备"},
+	"seize":    {name="夺取",   cat=CardCategory.SEIZE,   ap=APType.NONE, cost=0, desc="盲抽对方1手牌"},
 
 	# 回复 (5张)
 	"heal_3":   {name="回复+3", cat=CardCategory.HEAL_3,  ap=APType.NONE, cost=0, desc="回复3点HP"},
@@ -66,14 +66,14 @@ var CARD_DB = {
 	"trap":     {name="陷阱",   cat=CardCategory.TRAP,     ap=APType.NONE, cost=0, desc="在空格放置陷阱，触发造成3伤害"},
 
 	# 武器牌 (各2张)
-	"near_weapon":  {name="近战武器", cat=CardCategory.NEAR_WEAPON,  ap=APType.FUNCTION, cost=1, desc="幻化随机近战武器"},
-	"range_weapon": {name="远程武器", cat=CardCategory.RANGE_WEAPON, ap=APType.FUNCTION, cost=1, desc="幻化随机远程武器"},
-	"magic_weapon": {name="法术武器", cat=CardCategory.MAGIC_WEAPON, ap=APType.FUNCTION, cost=1, desc="幻化随机法术武器"},
+	"near_weapon":  {name="近战武器", cat=CardCategory.NEAR_WEAPON,  ap=APType.NONE, cost=0, desc="幻化随机近战武器"},
+	"range_weapon": {name="远程武器", cat=CardCategory.RANGE_WEAPON, ap=APType.NONE, cost=0, desc="幻化随机远程武器"},
+	"magic_weapon": {name="法术武器", cat=CardCategory.MAGIC_WEAPON, ap=APType.NONE, cost=0, desc="幻化随机法术武器"},
 
 	# 防具牌 (各1张)
-	"near_armor":  {name="近战防具", cat=CardCategory.NEAR_ARMOR,  ap=APType.FUNCTION, cost=1, desc="装备近战防具(3耐久)"},
-	"range_armor": {name="远程防具", cat=CardCategory.RANGE_ARMOR, ap=APType.FUNCTION, cost=1, desc="装备远程防具(3耐久)"},
-	"magic_armor": {name="法术防具", cat=CardCategory.MAGIC_ARMOR, ap=APType.FUNCTION, cost=1, desc="装备法术防具(3耐久)"},
+	"near_armor":  {name="近战防具", cat=CardCategory.NEAR_ARMOR,  ap=APType.NONE, cost=0, desc="装备近战防具(3耐久)"},
+	"range_armor": {name="远程防具", cat=CardCategory.RANGE_ARMOR, ap=APType.NONE, cost=0, desc="装备远程防具(3耐久)"},
+	"magic_armor": {name="法术防具", cat=CardCategory.MAGIC_ARMOR, ap=APType.NONE, cost=0, desc="装备法术防具(3耐久)"},
 }
 
 # ---------- 卡牌数量 ----------

@@ -72,7 +72,7 @@ func use_skill(player_idx: int, skill: String, params: Dictionary) -> Dictionary
 	if p.skill_used_this_turn: return {success=false, msg="本回合已使用过"}
 	p.skill_used_this_turn = true
 	match skill:
-		"mage_discard": return _mage_discard(player_idx)
+		"mage_discard": return _mage_discard(player_idx, params)
 		"assassin_move": return _assassin_move(player_idx, params)
 	return {success=false, msg="未知技能"}
 
@@ -98,10 +98,11 @@ func _berserker_rage(player_idx: int):
 	_ms.status.add_buff(player_idx, "attack_up", 1, 2)
 	_ms.add_log(player_idx, "狂战士+1近战")
 
-func _mage_discard(player_idx: int) -> Dictionary:
+func _mage_discard(player_idx: int, params: Dictionary) -> Dictionary:
+	var uid = params.get("card_uid", -1)
 	var cs = _ms.card_systems[player_idx]
-	if cs.hand.is_empty(): return {success=false, msg="没有可弃的牌"}
-	cs.random_discard(1)
+	if not cs.has_card(uid): return {success=false, msg="没有此牌"}
+	cs.discard_card(uid)
 	_ms.players[player_idx].mage_buffed = true
 	_ms.add_log(player_idx, "弃牌强化:下次魔法+2")
 	return {success=true}

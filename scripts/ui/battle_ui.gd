@@ -546,12 +546,29 @@ func _on_error(msg: String):
 func _on_skill_use():
 	var me = _game_state.players[0] if _game_state.players[0].index == _player_index else _game_state.players[1]
 	if me.char_id == "mage":
-		_n().send_use_skill("mage_discard")
+		_show_mage_pick()
 	elif me.char_id == "assassin":
 		_popup_move(-1)  # uid=-1 for assassin free move
 	skill_confirm.visible = false
 	skill_cancel.visible = false
 	skill_btn.visible = true
+
+func _show_mage_pick():
+	var c = Control.new()
+	c.z_index = 10; c.position = Vector2(0,0); c.size = Vector2(800,500)
+	var bg = ColorRect.new(); bg.color = Color(0,0,0,0.6)
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
+	var vb = VBoxContainer.new()
+	vb.position = Vector2(220, 140); vb.size = Vector2(360, 260); c.add_child(vb)
+	vb.add_child(_lbl("选择一张要弃的牌："))
+	var mh = (_game_state.players[0] if _game_state.players[0].index == _player_index else _game_state.players[1]).get("hand", [])
+	for card in mh:
+		var b = Button.new()
+		b.text = Config.card_name(card.type_id)
+		b.pressed.connect(func(uid=card.uid): c.queue_free(); _n().send_use_skill("mage_discard", {"card_uid": uid}))
+		vb.add_child(b)
+	var cb = Button.new(); cb.text = "取消"; cb.pressed.connect(func(): c.queue_free()); vb.add_child(cb)
+	add_child(c)
 
 func _on_end_turn():
 	if not _is_my_turn:

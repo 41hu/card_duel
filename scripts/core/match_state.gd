@@ -146,7 +146,6 @@ func _action_phase():
 	player.damage_reduction_used = false
 	player.ap_attack = 2
 	player.ap_move = 1
-	if player.char_id == "assassin": player.ap_move += 1
 	player.ap_function = 1
 	if player.char_id == "warlock": player.ap_function += 1
 	state_changed.emit(get_full_state())
@@ -248,6 +247,17 @@ func _handle_skill(player_idx: int, skill: String) -> Dictionary:
 		card_systems[player_idx].random_discard(1)
 		player.mage_buffed = true
 		add_log(player_idx, "弃牌强化:下次魔法+2")
+		return {success=true}
+	if skill == "assassin_move":
+		if player.char_id != "assassin": return {success=false, msg="仅刺客可用"}
+		if player.skill_used_this_turn: return {success=false, msg="本回合已使用过"}
+		player.skill_used_this_turn = true
+		var dir = action_data.get("direction", 0)
+		if dir == 0: return {success=false, msg="请选择方向"}
+		if not movement.move_player(player_idx, dir): return {success=false, msg="无法移动"}
+		var td = movement.check_trap_trigger(player_idx)
+		if td > 0: player.hp -= td
+		add_log(player_idx, "刺客闪现")
 		return {success=true}
 	return {success=false, msg="未知技能"}
 

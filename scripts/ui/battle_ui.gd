@@ -337,6 +337,12 @@ func _refresh_all(state: Dictionary):
 		if not _is_my_turn:
 			confirm_btn.visible = false
 			cancel_btn.visible = false
+		# 技能按钮
+		if _is_my_turn and me.char_id in ["mage", "assassin"] and not me.get("skill_used_this_turn", false):
+			skill_btn.visible = true
+			skill_btn.text = "法术强化" if me.char_id == "mage" else "暗影步"
+		else:
+			skill_btn.visible = false
 
 func _fmt_player(p, tag: String) -> String:
 	var hp_pct = float(p.hp) / max(p.max_hp, 1)
@@ -457,11 +463,17 @@ func _popup_move(card_uid: int):
 	vb.add_child(hb)
 	var lb = Button.new()
 	lb.text = "向左"
-	lb.pressed.connect(func(): c.queue_free(); _n().send_play_card(card_uid, {"direction": -1}))
+	if card_uid < 0:
+		lb.pressed.connect(func(): c.queue_free(); _n().send_use_skill("assassin_move", {"direction": -1}))
+	else:
+		lb.pressed.connect(func(): c.queue_free(); _n().send_play_card(card_uid, {"direction": -1}))
 	hb.add_child(lb)
 	var rb = Button.new()
 	rb.text = "向右"
-	rb.pressed.connect(func(): c.queue_free(); _n().send_play_card(card_uid, {"direction": 1}))
+	if card_uid < 0:
+		rb.pressed.connect(func(): c.queue_free(); _n().send_use_skill("assassin_move", {"direction": 1}))
+	else:
+		rb.pressed.connect(func(): c.queue_free(); _n().send_play_card(card_uid, {"direction": 1}))
 	hb.add_child(rb)
 	var cb = Button.new()
 	cb.text = "取消"
@@ -531,7 +543,11 @@ func _on_error(msg: String):
 	status_label.text = "错误: " + msg
 
 func _on_skill_use():
-	_n().send_use_skill("mage_discard")
+	var me = _game_state.players[0] if _game_state.players[0].index == _player_index else _game_state.players[1]
+	if me.char_id == "mage":
+		_n().send_use_skill("mage_discard")
+	elif me.char_id == "assassin":
+		_popup_move(-1)  # uid=-1 for assassin free move
 	skill_confirm.visible = false
 	skill_cancel.visible = false
 	skill_btn.visible = true

@@ -22,10 +22,10 @@ color = Color(0.06, 0.08, 0.12, 1)
 
 [node name="OppInfo" type="Label" parent="." unique_id=1702823590]
 layout_mode = 0
-offset_left = 15.0
-offset_top = 8.0
-offset_right = 785.0
-offset_bottom = 78.0
+offset_left = 1118.0
+offset_top = 798.0
+offset_right = 1888.0
+offset_bottom = 868.0
 theme_override_colors/font_color = Color(1, 0.7, 0.5, 1)
 theme_override_font_sizes/font_size = 12
 autowrap_mode = 3
@@ -59,10 +59,10 @@ alignment = 1
 
 [node name="MeInfo" type="Label" parent="." unique_id=583079327]
 layout_mode = 0
-offset_left = 15.0
-offset_top = 480.0
-offset_right = 785.0
-offset_bottom = 530.0
+offset_left = 26.0
+offset_top = 723.0
+offset_right = 796.0
+offset_bottom = 773.0
 theme_override_colors/font_color = Color(0.5, 0.8, 1, 1)
 theme_override_font_sizes/font_size = 12
 autowrap_mode = 3
@@ -76,7 +76,6 @@ offset_bottom = 575.0
 text = "结束出牌"
 
 [node name="ConfirmBtn" type="Button" parent="." unique_id=1261071547]
-visible = false
 layout_mode = 0
 offset_left = 135.0
 offset_top = 540.0
@@ -85,7 +84,6 @@ offset_bottom = 575.0
 text = "确认使用"
 
 [node name="CancelBtn" type="Button" parent="." unique_id=944431625]
-visible = false
 layout_mode = 0
 offset_left = 240.0
 offset_top = 540.0
@@ -95,9 +93,45 @@ text = "取消"
 
 [node name="StatusLabel" type="Label" parent="." unique_id=1446921292]
 layout_mode = 0
-offset_left = 310.0
-offset_top = 540.0
-offset_right = 790.0
-offset_bottom = 575.0
+offset_left = 558.0
+offset_top = 539.0
+offset_right = 1038.0
+offset_bottom = 574.0
 theme_override_colors/font_color = Color(0.6, 0.6, 0.6, 1)
 vertical_alignment = 1
+
+[node name="CardInfo" type="Label" parent="."]
+layout_mode = 0
+offset_left = 158.0
+offset_top = 338.0
+offset_right = 508.0
+offset_bottom = 368.0
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.8, 0.8, 0.5, 1)
+
+[node name="SkillBtn" type="Button" parent="."]
+visible = false
+layout_mode = 0
+offset_left = 310.0
+offset_top = 540.0
+offset_right = 410.0
+offset_bottom = 575.0
+text = "技能"
+
+[node name="SkillConfirm" type="Button" parent="."]
+visible = false
+layout_mode = 0
+offset_left = 415.0
+offset_top = 540.0
+offset_right = 515.0
+offset_bottom = 575.0
+text = "确认技能"
+
+[node name="SkillCancel" type="Button" parent="."]
+visible = false
+layout_mode = 0
+offset_left = 520.0
+offset_top = 540.0
+offset_right = 580.0
+offset_bottom = 575.0
+text = "取消"

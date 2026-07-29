@@ -1,0 +1,103 @@
+[gd_scene format=3 uid="uid://btl4w2j8r6y1"]
+
+[ext_resource type="Script" uid="uid://c1fu85fig3g55" path="res://scripts/ui/battle_ui.gd" id="1_btl"]
+
+[node name="BattleScene" type="Control" unique_id=62604844]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_btl")
+
+[node name="Bg" type="ColorRect" parent="." unique_id=1984902068]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.06, 0.08, 0.12, 1)
+
+[node name="OppInfo" type="Label" parent="." unique_id=1702823590]
+layout_mode = 0
+offset_left = 15.0
+offset_top = 8.0
+offset_right = 785.0
+offset_bottom = 78.0
+theme_override_colors/font_color = Color(1, 0.7, 0.5, 1)
+theme_override_font_sizes/font_size = 12
+autowrap_mode = 3
+
+[node name="PhaseLabel" type="Label" parent="." unique_id=582543779]
+layout_mode = 0
+offset_left = 100.0
+offset_top = 85.0
+offset_right = 700.0
+offset_bottom = 115.0
+theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
+theme_override_font_sizes/font_size = 18
+horizontal_alignment = 1
+
+[node name="HandTitle" type="Label" parent="." unique_id=1382061419]
+layout_mode = 0
+offset_left = 487.0
+offset_top = 301.0
+offset_right = 537.0
+offset_bottom = 326.0
+theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
+text = "手牌"
+
+[node name="HandArea" type="HBoxContainer" parent="." unique_id=853645005]
+layout_mode = 0
+offset_left = 188.0
+offset_top = 372.0
+offset_right = 968.0
+offset_bottom = 472.0
+alignment = 1
+
+[node name="MeInfo" type="Label" parent="." unique_id=583079327]
+layout_mode = 0
+offset_left = 15.0
+offset_top = 480.0
+offset_right = 785.0
+offset_bottom = 530.0
+theme_override_colors/font_color = Color(0.5, 0.8, 1, 1)
+theme_override_font_sizes/font_size = 12
+autowrap_mode = 3
+
+[node name="EndTurnBtn" type="Button" parent="." unique_id=694292902]
+layout_mode = 0
+offset_left = 10.0
+offset_top = 540.0
+offset_right = 130.0
+offset_bottom = 575.0
+text = "结束出牌"
+
+[node name="ConfirmBtn" type="Button" parent="." unique_id=1261071547]
+visible = false
+layout_mode = 0
+offset_left = 135.0
+offset_top = 540.0
+offset_right = 235.0
+offset_bottom = 575.0
+text = "确认使用"
+
+[node name="CancelBtn" type="Button" parent="." unique_id=944431625]
+visible = false
+layout_mode = 0
+offset_left = 240.0
+offset_top = 540.0
+offset_right = 300.0
+offset_bottom = 575.0
+text = "取消"
+
+[node name="StatusLabel" type="Label" parent="." unique_id=1446921292]
+layout_mode = 0
+offset_left = 310.0
+offset_top = 540.0
+offset_right = 790.0
+offset_bottom = 575.0
+theme_override_colors/font_color = Color(0.6, 0.6, 0.6, 1)
+vertical_alignment = 1

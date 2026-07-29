@@ -1,0 +1,236 @@
+[gd_scene load_steps=2 format=3 uid="uid://c5v8p0k2q3n4x"]
+
+[ext_resource type="Script" path="res://scripts/ui/main_menu.gd" id="1_main"]
+
+[node name="MainMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_main")
+
+[node name="Bg" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.1, 0.12, 0.18, 1)
+
+[node name="Title" type="Label" parent="."]
+layout_mode = 0
+offset_left = 200.0
+offset_top = 80.0
+offset_right = 600.0
+offset_bottom = 150.0
+text = "卡牌对决"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 64
+theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
+
+[node name="MainPanel" type="Control" parent="."]
+layout_mode = 0
+offset_left = 250.0
+offset_top = 220.0
+offset_right = 550.0
+offset_bottom = 450.0
+
+[node name="CreateBtn" type="Button" parent="MainPanel"]
+layout_mode = 0
+offset_left = 40.0
+offset_top = 20.0
+offset_right = 260.0
+offset_bottom = 80.0
+text = "创建房间"
+theme_override_font_sizes/font_size = 22
+
+[node name="JoinBtn" type="Button" parent="MainPanel"]
+layout_mode = 0
+offset_left = 40.0
+offset_top = 110.0
+offset_right = 260.0
+offset_bottom = 170.0
+text = "加入房间"
+theme_override_font_sizes/font_size = 22
+
+[node name="SelfBtn" type="Button" parent="MainPanel"]
+layout_mode = 0
+offset_left = 40.0
+offset_top = 200.0
+offset_right = 260.0
+offset_bottom = 260.0
+text = "自我对战"
+theme_override_font_sizes/font_size = 22
+
+[node name="CreatePanel" type="Control" parent="."]
+visible = false
+layout_mode = 0
+offset_left = 200.0
+offset_top = 160.0
+offset_right = 600.0
+offset_bottom = 500.0
+
+[node name="CreateTitle" type="Label" parent="CreatePanel"]
+layout_mode = 0
+offset_left = 50.0
+offset_top = 0.0
+offset_right = 350.0
+offset_bottom = 40.0
+text = "创建房间"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 28
+theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
+
+[node name="CServerLabel" type="Label" parent="CreatePanel"]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 60.0
+offset_right = 150.0
+offset_bottom = 90.0
+text = "服务器地址"
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+
+[node name="CServerInput" type="LineEdit" parent="CreatePanel"]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 90.0
+offset_right = 370.0
+offset_bottom = 125.0
+text = "ws://127.0.0.1:17890"
+
+[node name="CNameLabel" type="Label" parent="CreatePanel"]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 145.0
+offset_right = 150.0
+offset_bottom = 175.0
+text = "玩家名称"
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+
+[node name="CNameInput" type="LineEdit" parent="CreatePanel"]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 175.0
+offset_right = 370.0
+offset_bottom = 210.0
+text = "Player1"
+
+[node name="CCreateBtn" type="Button" parent="CreatePanel"]
+layout_mode = 0
+offset_left = 130.0
+offset_top = 240.0
+offset_right = 270.0
+offset_bottom = 290.0
+text = "创建"
+
+[node name="CBackBtn" type="Button" parent="CreatePanel"]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 240.0
+offset_right = 90.0
+offset_bottom = 290.0
+text = "返回"
+
+[node name="CRoomLabel" type="Label" parent="CreatePanel"]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 305.0
+offset_right = 370.0
+offset_bottom = 340.0
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 20
+theme_override_colors/font_color = Color(0.3, 1, 0.3, 1)
+
+[node name="JoinPanel" type="Control" parent="."]
+visible = false
+layout_mode = 0
+offset_left = 200.0
+offset_top = 160.0
+offset_right = 600.0
+offset_bottom = 520.0
+
+[node name="JoinTitle" type="Label" parent="JoinPanel"]
+layout_mode = 0
+offset_left = 50.0
+offset_top = 0.0
+offset_right = 350.0
+offset_bottom = 40.0
+text = "加入房间"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 28
+theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
+
+[node name="JServerLabel" type="Label" parent="JoinPanel"]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 60.0
+offset_right = 150.0
+offset_bottom = 90.0
+text = "服务器地址"
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+
+[node name="JServerInput" type="LineEdit" parent="JoinPanel"]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 90.0
+offset_right = 370.0
+offset_bottom = 125.0
+text = "ws://127.0.0.1:17890"
+
+[node name="JRoomLabel" type="Label" parent="JoinPanel"]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 145.0
+offset_right = 150.0
+offset_bottom = 175.0
+text = "房间号"
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+
+[node name="JRoomInput" type="LineEdit" parent="JoinPanel"]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 175.0
+offset_right = 370.0
+offset_bottom = 210.0
+placeholder_text = "输入房间号"
+
+[node name="JNameLabel" type="Label" parent="JoinPanel"]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 230.0
+offset_right = 150.0
+offset_bottom = 260.0
+text = "玩家名称"
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+
+[node name="JNameInput" type="LineEdit" parent="JoinPanel"]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 260.0
+offset_right = 370.0
+offset_bottom = 295.0
+text = "Player2"
+
+[node name="JJoinBtn" type="Button" parent="JoinPanel"]
+layout_mode = 0
+offset_left = 130.0
+offset_top = 320.0
+offset_right = 270.0
+offset_bottom = 370.0
+text = "加入"
+
+[node name="JBackBtn" type="Button" parent="JoinPanel"]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 320.0
+offset_right = 90.0
+offset_bottom = 370.0
+text = "返回"
+
+[node name="StatusLabel" type="Label" parent="."]
+layout_mode = 0
+offset_left = 100.0
+offset_top = 560.0
+offset_right = 700.0
+offset_bottom = 590.0
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(0.6, 0.6, 0.6, 1)

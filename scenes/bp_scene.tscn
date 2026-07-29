@@ -1,0 +1,70 @@
+[gd_scene format=3 uid="uid://bp7m2n8k4q1x"]
+
+[ext_resource type="Script" uid="uid://dvio2p65cq7gf" path="res://scripts/ui/bp_ui.gd" id="1_bp"]
+
+[node name="BPScene" type="Control" unique_id=674156191]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_bp")
+
+[node name="Bg" type="ColorRect" parent="." unique_id=159857949]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.08, 0.1, 0.15, 1)
+
+[node name="Title" type="Label" parent="." unique_id=155432898]
+layout_mode = 0
+offset_left = 200.0
+offset_top = 10.0
+offset_right = 600.0
+offset_bottom = 55.0
+theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
+theme_override_font_sizes/font_size = 36
+text = "BP 禁选阶段"
+horizontal_alignment = 1
+
+[node name="PhaseLabel" type="Label" parent="." unique_id=1081214818]
+layout_mode = 0
+offset_left = 80.0
+offset_top = 60.0
+offset_right = 720.0
+offset_bottom = 95.0
+theme_override_colors/font_color = Color(1, 0.5, 0.3, 1)
+theme_override_font_sizes/font_size = 24
+horizontal_alignment = 1
+
+[node name="TurnLabel" type="Label" parent="." unique_id=2001614810]
+layout_mode = 0
+offset_left = 80.0
+offset_top = 95.0
+offset_right = 720.0
+offset_bottom = 120.0
+theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
+theme_override_font_sizes/font_size = 16
+horizontal_alignment = 1
+
+[node name="CharGrid" type="GridContainer" parent="." unique_id=10912715]
+layout_mode = 0
+offset_left = 40.0
+offset_top = 130.0
+offset_right = 1056.0
+offset_bottom = 548.0
+columns = 4
+
+[node name="StatusLabel" type="Label" parent="." unique_id=1678046552]
+layout_mode = 0
+offset_left = 215.0
+offset_top = 587.0
+offset_right = 855.0
+offset_bottom = 612.0
+theme_override_colors/font_color = Color(1, 0.6, 0.3, 1)
+theme_override_font_sizes/font_size = 16
+horizontal_alignment = 1

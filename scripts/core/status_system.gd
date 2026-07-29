@@ -1,0 +1,81 @@
+# status_system.gd — 状态系统（Buff、DoT、冻结、被动技能标记）
+extends RefCounted
+
+var match_ref
+
+func _init(match):
+	match_ref = match
+
+# 添加Buff {type, value, duration} duration=-1表示回合结束清除
+func add_buff(player_idx: int, buff_type: String, value: int, duration: int):
+	var player = match_ref.get_player(player_idx)
+	player.buffs.append({type=buff_type, value=value, duration=duration})
+
+# 添加DoT {type, damage_per_turn, duration}
+func add_dot(player_idx: int, dot_type: String, damage: int, duration: int):
+	var player = match_ref.get_player(player_idx)
+	# 灼烧可叠加
+	player.dots.append({type=dot_type, damage=damage, duration=duration})
+
+# 冻结玩家
+func freeze_player(player_idx: int) -> bool:
+	var player = match_ref.get_player(player_idx)
+	# 不能连续冻结
+	if player.frozen_lockout:
+		return false
+	player.frozen = true
+	return true
+
+# 清除冻结
+func clear_freeze(player_idx: int):
+	var player = match_ref.get_player(player_idx)
+	player.frozen = false
+	player.frozen_lockout = true  # 本回合不能被再次冻结
+
+# 回合开始处理
+func on_turn_start(player_idx: int):
+	var player = match_ref.get_player(player_idx)
+	player.frozen_lockout = false  # 重置冻结锁
+
+# 回合结束处理
+func on_turn_end(player_idx: int):
+	var player = match_ref.get_player(player_idx)
+
+	# 处理有限持续时间的buff
+	for i in range(player.buffs.size() - 1, -1, -1):
+		if player.buffs[i].duration > 0:
+			player.buffs[i].duration -= 1
+			if player.buffs[i].duration <= 0:
+				player.buffs.remove_at(i)
+
+	# 清理回合性buff（duration=-1，每回合结束时清除）
+	for i in range(player.buffs.size() - 1, -1, -1):
+		if player.buffs[i].duration == -1:
+			player.buffs.remove_at(i)
+
+	# 清除冻结移动限制
+	player.frozen_move = false
+
+	# 重置圣骑士被动
+	player.damage_reduction_used = false
+
+	# 清除技能使用标记
+	player.skill_used_this_turn = false
+
+# 获取攻击力修正
+func get_attack_modifier(player_idx: int) -> int:
+	var player = match_ref.get_player(player_idx)
+	var mod = 0
+	for buff in player.buffs:
+		if buff.type == "attack_up":
+			mod += buff.value
+		elif buff.type == "attack_down":
+			mod += buff.value  # value为负
+	return mod
+
+# 获取移动修正（霜咬效果等）
+func get_move_modifier(player_idx: int) -> int:
+	var player = match_ref.get_player(player_idx)
+	if player.frozen_move:
+		return -999  # 位移=0
+	return 0

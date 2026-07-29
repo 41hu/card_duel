@@ -1,0 +1,22 @@
+# Godot
+.godot/
+*.uid
+*.import
+*.translation
+
+# User data
+user/
+
+# Editor plugins (not needed for server)
+addons/
+
+# MCP bridge (local only)
+mcp_interaction_server.gd
+mcp_interaction_server.gd.uid
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

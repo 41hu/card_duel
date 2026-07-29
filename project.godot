@@ -1,0 +1,35 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[animation]
+
+compatibility/default_parent_skeleton_in_mesh_instance_3d=true
+
+[application]
+
+config/name="Card Duel"
+run/main_scene="res://scenes/main_menu.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+config/icon="res://assets/icon.svg"
+
+[autoload]
+
+Config="*res://scripts/autoload/config.gd"
+Network="*res://scripts/autoload/network.gd"
+LocalGame="*res://scripts/autoload/local_game.gd"
+McpInteractionServer="*res://scripts/autoload/mcp_interaction_server.gd"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/hasturoperationgd/plugin.cfg")
+
+[rendering]
+
+textures/canvas_textures/default_texture_filter=0

@@ -20,3 +20,6 @@ mcp_interaction_server.gd.uid
 # OS
 .DS_Store
 Thumbs.db
+*.exe
+*.pck
+export_presets.cfg

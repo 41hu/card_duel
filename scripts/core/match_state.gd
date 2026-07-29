@@ -365,6 +365,7 @@ func confirm_discard(player_idx: int, card_uids: Array = []):
 	if not waiting_for_discard or player_idx != current_player: return
 	for uid in card_uids:
 		card_systems[current_player].discard_card(uid)
+	state_changed.emit(get_full_state())
 	var limit = movement.get_hand_limit(current_player)
 	if card_systems[current_player].hand.size() > limit: return
 	waiting_for_discard = false

@@ -371,12 +371,14 @@ func _on_card_clicked(card_uid: int, type_id: String):
 func _on_confirm_card():
 	if _selected_uid < 0:
 		return
-	if _selected_type in ["move", "destroy", "trap"]:
+	if _selected_type in ["move", "destroy"]:
 		match _selected_type:
 			"move": _popup_move(_selected_uid)
 			"destroy": _popup_destroy(_selected_uid)
-			"trap": _popup_trap(_selected_uid)
 		_selected_uid = -1
+		confirm_btn.visible = false
+	elif _selected_type == "trap":
+		_popup_trap(_selected_uid)
 		confirm_btn.visible = false
 	else:
 		_n().send_play_card(_selected_uid)

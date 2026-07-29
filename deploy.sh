@@ -7,7 +7,7 @@ set -e
 echo "=== Card Duel 服务器部署 ==="
 
 # 1. 安装 Godot 4.7.1 (headless)
-GODOT_URL="https://github.com/godotengine/godot/releases/download/4.7.1-stable/Godot_v4.7.1-stable_linux.x86_64.zip"
+GODOT_URL="https://ghproxy.com/https://github.com/godotengine/godot/releases/download/4.7.1-stable/Godot_v4.7.1-stable_linux.x86_64.zip"
 GODOT_DIR="$HOME/godot"
 GODOT_BIN="$GODOT_DIR/Godot_v4.7.1-stable_linux.x86_64"
 

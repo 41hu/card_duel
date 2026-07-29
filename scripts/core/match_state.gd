@@ -33,6 +33,7 @@ var pending_attack_card: String = ""
 var pending_attack_uid: int = -1
 var game_result: Dictionary = {}
 var char_skills
+var card_effects
 var waiting_for_discard: bool = false
 var discard_count: int = 0
 
@@ -48,6 +49,7 @@ func _init():
 	status = StatusSys.new(self)
 	bp = BPSys.new(self)
 	char_skills = preload("res://scripts/core/character_skills.gd").new(self)
+	card_effects = preload("res://scripts/core/card_effects.gd").new(self)
 
 func init_match(p1_char_id: String, p2_char_id: String):
 	var p1_char = Config.CHARACTER_DB[p1_char_id]
@@ -196,39 +198,8 @@ func _do_play_card(player_idx: int, data: Dictionary) -> Dictionary:
 	return result
 
 func _execute_card_effect(player_idx: int, card: Dictionary) -> Dictionary:
-	var type_id = card.type_id
-	var player = players[player_idx]
-	var opp = 1 - player_idx
-	if type_id in ["near", "range", "magic", "heavy", "pierce", "chant"]:
-		return _handle_attack_card(player_idx, card)
-	match type_id:
-		"move": return _handle_move_card(player_idx, card)
-		"attract": movement.attract(player_idx); _use_card(player_idx, card); add_log(player_idx, "吸引"); return {success=true}
-		"deter": movement.deter(player_idx); _use_card(player_idx, card); add_log(player_idx, "威慑"); return {success=true}
-		"freeze":
-			var ok = status.freeze_player(opp)
-			_use_card(player_idx, card)
-			add_log(player_idx, "冻结" if ok else "冻结失败")
-			return {success=ok}
-		"destroy": return _handle_destroy(player_idx, card)
-		"seize": return _handle_seize(player_idx, card)
-		"heal_3": return _handle_heal(player_idx, card, 3)
-		"heal_5": return _handle_heal(player_idx, card, 5)
-		"near_buf": player.near_power += 1; _use_card(player_idx, card); add_log(player_idx, "近战+1"); return {success=true}
-		"range_buf": player.range_power += 1; _use_card(player_idx, card); add_log(player_idx, "远程+1"); return {success=true}
-		"magic_buf": player.magic_power += 1; _use_card(player_idx, card); add_log(player_idx, "魔法+1"); return {success=true}
-		"blessing": card_systems[player_idx].play_card(card.uid); card_systems[player_idx].draw_cards(2); add_log(player_idx, "天赐"); return {success=true}
-		"trap":
-			var pos = card.get("trap_pos", player.position + (1 if player_idx == 1 else -1))
-			if movement.place_trap(player_idx, pos): _use_card(player_idx, card); add_log(player_idx, "陷阱于%d" % pos); return {success=true}
-			return {success=false, msg="该格无法放置"}
-		"near_weapon": return _handle_weapon_card(player_idx, card, "near")
-		"range_weapon": return _handle_weapon_card(player_idx, card, "range")
-		"magic_weapon": return _handle_weapon_card(player_idx, card, "magic")
-		_: if type_id in ["near_armor", "range_armor", "magic_armor"]:
-			_use_card(player_idx, card); equipment.equip_armor(player_idx, type_id); add_log(player_idx, "装备防具"); return {success=true}
-	return {success=false, msg="未知卡牌"}
-
+	return card_effects.execute(player_idx, card)
+func _handle_skill(player_idx: int, skill: String) -> Dictionary:
 func _handle_skill(player_idx: int, skill: String) -> Dictionary:
 	return char_skills.use_skill(player_idx, skill, {})
 func _use_card(player_idx: int, card: Dictionary):

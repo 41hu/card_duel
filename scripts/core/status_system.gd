@@ -24,6 +24,7 @@ func freeze_player(player_idx: int) -> bool:
 	if player.frozen_lockout:
 		return false
 	player.frozen = true
+	player.frozen_lockout = true
 	return true
 
 # 清除冻结

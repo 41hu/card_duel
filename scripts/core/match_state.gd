@@ -159,7 +159,7 @@ func process_action(player_idx: int, action_data: Dictionary) -> Dictionary:
 	match action:
 		"play_card": return _do_play_card(player_idx, action_data)
 		"end_turn": _discard_phase(); return {success=true, msg="结束出牌"}
-		"use_skill": return _handle_skill(player_idx, action_data.get("skill", ""))
+		"use_skill": return _handle_skill(player_idx, action_data.get("skill", ""), action_data)
 	return {success=false, msg="未知行动"}
 
 func _do_play_card(player_idx: int, data: Dictionary) -> Dictionary:
@@ -199,8 +199,8 @@ func _do_play_card(player_idx: int, data: Dictionary) -> Dictionary:
 
 func _execute_card_effect(player_idx: int, card: Dictionary) -> Dictionary:
 	return card_effects.execute(player_idx, card)
-func _handle_skill(player_idx: int, skill: String) -> Dictionary:
-	return char_skills.use_skill(player_idx, skill, {})
+func _handle_skill(player_idx: int, skill: String, params: Dictionary = {}) -> Dictionary:
+	return char_skills.use_skill(player_idx, skill, params)
 func _use_card(player_idx: int, card: Dictionary):
 	card_systems[player_idx].play_card(card.uid)
 

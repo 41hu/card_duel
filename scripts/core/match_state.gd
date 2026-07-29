@@ -230,8 +230,7 @@ func _execute_card_effect(player_idx: int, card: Dictionary) -> Dictionary:
 	return {success=false, msg="未知卡牌"}
 
 func _handle_skill(player_idx: int, skill: String) -> Dictionary:
-	return char_skills.use_skill(player_idx, skill, action_data)
-func _use_card(player_idx: int, card: Dictionary):
+	return char_skills.use_skill(player_idx, skill, {})
 func _use_card(player_idx: int, card: Dictionary):
 	card_systems[player_idx].play_card(card.uid)
 

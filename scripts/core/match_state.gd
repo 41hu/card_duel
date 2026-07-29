@@ -32,6 +32,7 @@ var attacker_last_type: int = 0
 var pending_attack_card: String = ""
 var pending_attack_uid: int = -1
 var game_result: Dictionary = {}
+var char_skills
 var waiting_for_discard: bool = false
 var discard_count: int = 0
 
@@ -46,6 +47,7 @@ func _init():
 	equipment = EquipmentSys.new(self)
 	status = StatusSys.new(self)
 	bp = BPSys.new(self)
+	char_skills = preload("res://scripts/core/character_skills.gd").new(self)
 
 func init_match(p1_char_id: String, p2_char_id: String):
 	var p1_char = Config.CHARACTER_DB[p1_char_id]
@@ -139,15 +141,7 @@ func _action_phase():
 		status.clear_freeze(current_player)
 		_discard_phase()
 		return
-	player.skill_used_this_turn = false
-	player.free_move_used = false
-	player.mage_buffed = false
-	player.combo_attacks_this_turn = []
-	player.damage_reduction_used = false
-	player.ap_attack = 2
-	player.ap_move = 1
-	player.ap_function = 1
-	if player.char_id == "warlock": player.ap_function += 1
+	char_skills.on_turn_start(current_player)
 	state_changed.emit(get_full_state())
 
 func process_action(player_idx: int, action_data: Dictionary) -> Dictionary:
@@ -185,9 +179,7 @@ func _do_play_card(player_idx: int, data: Dictionary) -> Dictionary:
 		Config.APType.FUNCTION: ap_ok = (player.ap_function >= cd.cost)
 		Config.APType.NONE: ap_ok = true
 	if not ap_ok: return {success=false, msg="行动点不足"}
-	var free_archer = false
-	if player.char_id == "archer" and type_id == "range" and not player.skill_used_this_turn:
-		free_archer = true
+	var free_archer = char_skills.can_attack_free(player_idx, type_id)
 	if type_id == "blessing":
 		if player.free_move_used: return {success=false, msg="本回合已使用过天赐"}
 		player.free_move_used = true
@@ -238,29 +230,8 @@ func _execute_card_effect(player_idx: int, card: Dictionary) -> Dictionary:
 	return {success=false, msg="未知卡牌"}
 
 func _handle_skill(player_idx: int, skill: String) -> Dictionary:
-	var player = players[player_idx]
-	if skill == "mage_discard":
-		if player.char_id != "mage": return {success=false, msg="仅法师可用"}
-		if player.mage_buffed: return {success=false, msg="本回合已强化过"}
-		if card_systems[player_idx].hand.is_empty(): return {success=false, msg="没有可弃的牌"}
-		# 随机弃1张
-		card_systems[player_idx].random_discard(1)
-		player.mage_buffed = true
-		add_log(player_idx, "弃牌强化:下次魔法+2")
-		return {success=true}
-	if skill == "assassin_move":
-		if player.char_id != "assassin": return {success=false, msg="仅刺客可用"}
-		if player.skill_used_this_turn: return {success=false, msg="本回合已使用过"}
-		player.skill_used_this_turn = true
-		var dir = action_data.get("direction", 0)
-		if dir == 0: return {success=false, msg="请选择方向"}
-		if not movement.move_player(player_idx, dir): return {success=false, msg="无法移动"}
-		var td = movement.check_trap_trigger(player_idx)
-		if td > 0: player.hp -= td
-		add_log(player_idx, "刺客闪现")
-		return {success=true}
-	return {success=false, msg="未知技能"}
-
+	return char_skills.use_skill(player_idx, skill, action_data)
+func _use_card(player_idx: int, card: Dictionary):
 func _use_card(player_idx: int, card: Dictionary):
 	card_systems[player_idx].play_card(card.uid)
 
@@ -278,11 +249,7 @@ func _handle_attack_card(player_idx: int, card: Dictionary) -> Dictionary:
 	attacker_last_type = Config.get_damage_type(type_id)
 	var calc = combat.calculate_attack(player_idx, opp, type_id)
 	attacker_last_damage = calc.damage
-	# 法师被动：本回合弃牌强化后魔法+2
-	if type_id in ["magic", "chant"] and player.mage_buffed:
-		attacker_last_damage += 2
-		player.mage_buffed = false
-		add_log(player_idx, "法师强化: +2伤害")
+	attacker_last_damage += char_skills.on_attack_cast(player_idx, type_id)
 	if attacker_last_damage <= 0:
 		match Config.get_card_ap_type(type_id):
 			Config.APType.ATTACK: player.ap_attack += Config.get_card_ap_cost(type_id)
@@ -313,15 +280,8 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		players[defender_idx].hp -= final_damage
 		add_log(attacker_idx, "造成%d伤害" % final_damage)
 		combat.apply_on_hit_effects(attacker_idx, defender_idx, final_damage, attacker_last_type)
-		var attacker = players[attacker_idx]
-		if attacker.char_id == "swordsman" and not attacker.skill_used_this_turn:
-			if attacker_last_type == Config.DamageType.PHYSICAL:
-				attacker.skill_used_this_turn = true
-				attacker.hp = min(attacker.max_hp, attacker.hp + 2)
-				add_log(attacker_idx, "剑士+2HP")
-		if players[defender_idx].char_id == "berserker":
-			status.add_buff(defender_idx, "attack_up", 1, 2)
-			add_log(defender_idx, "狂战士+1近战")
+		char_skills.on_attack_hit(attacker_idx, defender_idx, final_damage, attacker_last_type)
+		final_damage = char_skills.on_taking_damage(defender_idx, attacker_idx, final_damage)
 	if players[defender_idx].hp <= 0: _handle_death(defender_idx)
 	if phase == Config.Phase.GAME_OVER: return
 	turn_phase = Config.TurnPhase.ACTION
@@ -360,7 +320,7 @@ func _handle_seize(player_idx: int, card: Dictionary) -> Dictionary:
 
 func _handle_heal(player_idx: int, card: Dictionary, amount: int) -> Dictionary:
 	var player = players[player_idx]
-	if player.char_id == "priest": amount += 2
+	amount = char_skills.on_heal(player_idx, amount)
 	player.hp = min(player.max_hp, player.hp + amount); _use_card(player_idx, card)
 	add_log(player_idx, "+%dHP" % amount); return {success=true}
 
@@ -405,8 +365,7 @@ func confirm_discard(player_idx: int, card_uids: Array = []):
 
 func _finish_discard():
 	var player = players[current_player]
-	if player.char_id == "warlock" and player.ap_function >= 1:
-		card_systems[current_player].draw_cards(1); add_log(current_player, "术士+1抽")
+	char_skills.on_turn_end(current_player)
 	status.on_turn_end(current_player)
 	_advance_to_next_player()
 

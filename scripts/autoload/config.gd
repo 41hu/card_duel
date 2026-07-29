@@ -46,11 +46,11 @@ var CARD_DB = {
 	"move":     {name="移动",   cat=CardCategory.MOVE,   ap=APType.MOVE, cost=1, desc="移动1格"},
 
 	# 功能牌 (11张)
-	"attract":  {name="吸引",   cat=CardCategory.ATTRACT, ap=APType.NONE, cost=0, desc="拉对方1格"},
-	"deter":    {name="威慑",   cat=CardCategory.DETER,   ap=APType.NONE, cost=0, desc="推对方1格"},
-	"freeze":   {name="冻结",   cat=CardCategory.FREEZE,  ap=APType.NONE, cost=0, desc="跳过对方下个出牌阶段"},
-	"destroy":  {name="摧毁",   cat=CardCategory.DESTROY, ap=APType.NONE, cost=0, desc="盲丢1手牌或摧毁1装备"},
-	"seize":    {name="夺取",   cat=CardCategory.SEIZE,   ap=APType.NONE, cost=0, desc="盲抽对方1手牌"},
+	"attract":  {name="吸引",   cat=CardCategory.ATTRACT, ap=APType.FUNCTION, cost=1, desc="拉对方1格"},
+	"deter":    {name="威慑",   cat=CardCategory.DETER,   ap=APType.FUNCTION, cost=1, desc="推对方1格"},
+	"freeze":   {name="冻结",   cat=CardCategory.FREEZE,  ap=APType.FUNCTION, cost=1, desc="跳过对方下个出牌阶段"},
+	"destroy":  {name="摧毁",   cat=CardCategory.DESTROY, ap=APType.FUNCTION, cost=1, desc="盲丢1手牌或摧毁1装备"},
+	"seize":    {name="夺取",   cat=CardCategory.SEIZE,   ap=APType.FUNCTION, cost=1, desc="盲抽对方1手牌"},
 
 	# 回复 (5张)
 	"heal_3":   {name="回复+3", cat=CardCategory.HEAL_3,  ap=APType.NONE, cost=0, desc="回复3点HP"},

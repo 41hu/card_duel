@@ -124,10 +124,11 @@ func _phase_name(state: Dictionary) -> String:
 		3: return "弃牌"
 	return "?"
 
-func send_use_skill(skill_name: String):
+func send_use_skill(skill_name: String, extra: Dictionary = {}):
 	if not game: return
-	if skill_name == "mage_discard":
-		game.process_action(game.current_player, {"action": "use_skill", "skill": "mage_discard"})
+	var data = {"action": "use_skill", "skill": skill_name}
+	for key in extra: data[key] = extra[key]
+	game.process_action(game.current_player, data)
 
 func disconnect_from_server():
 	game = null

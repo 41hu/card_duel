@@ -20,7 +20,7 @@ func _ready():
 
 func _start_server():
 	_tcp_server = TCPServer.new()
-	var err = _tcp_server.listen(PORT, "127.0.0.1")
+	var err = _tcp_server.listen(PORT)
 	if err != OK:
 		log_msg("监听失败: %d" % err); return
 	log_msg("WebSocket 监听端口 %d" % PORT)

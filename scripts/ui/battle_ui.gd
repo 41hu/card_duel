@@ -39,7 +39,8 @@ var _skill_labels = {
 }
 
 func _n():
-	return LocalGame if LocalGame.game != null else Network
+	if LocalGame.game != null: return LocalGame
+	return Network
 
 func _ready():
 	skill_cancel.pressed.connect(func():
@@ -312,8 +313,8 @@ func _refresh_all(state: Dictionary):
 
 	for c in _log_vbox.get_children():
 		c.queue_free()
-	var log = state.get("action_log", [])
-	var r = log.slice(max(0, log.size() - 8))
+	var alog = state.get("action_log", [])
+	var r = alog.slice(max(0, alog.size() - 8))
 	for e in r:
 		var lb = _lbl("[T%d] %s: %s" % [e.get("turn", 0), e.get("player_name", "?"), e.get("msg", "")])
 		lb.add_theme_font_size_override("font_size", 11)
@@ -324,8 +325,6 @@ func _refresh_all(state: Dictionary):
 
 	var in_discard = state.get("waiting_for_discard", false)
 	if in_discard and _is_my_turn:
-		var lim = me.get("hand_limit", 5)
-		var hs = mh.size()
 		end_turn_btn.text = "确认弃牌(%d张)" % _discard_selected.size()
 		end_turn_btn.visible = true
 		status_label.text = "弃牌阶段:点手牌选择,点确认弃牌提交"
@@ -370,8 +369,8 @@ func _fmt_player(p, tag: String) -> String:
 			txt += ")"
 	if p.get("buffs", []).size() > 0:
 		for b in p.buffs:
-			var sign = "+" if b.value > 0 else ""
-			txt += " | " + b.type + "(" + sign + str(b.value)
+			var sgn = "+" if b.value > 0 else ""
+			txt += " | " + b.type + "(" + sgn + str(b.value)
 			if b.duration > 0: txt += ",%d回" % b.duration
 			txt += ")"
 	return txt

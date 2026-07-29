@@ -13,14 +13,14 @@ signal response_needed(attack_info: Dictionary)
 signal game_ended(result: Dictionary)
 signal network_error(msg: String)
 
-var game: MatchStateClass
-var _current_view: int = -1  # -1=双方, 0=P1, 1=P2
-var _player_names = ["自己(P1)", "自己(P2)"]
-
 const MatchStateClass = preload("res://scripts/core/match_state.gd")
 
+var game: MatchStateClass
+var _current_view: int = -1
+var _player_names = ["自己(P1)", "自己(P2)"]
+
 func start_local_game(p1_char: String, p2_char: String):
-	game =MatchStateClass.new()
+	game = MatchStateClass.new()
 	game.state_changed.connect(_on_state)
 	game.weapon_prompt.connect(_on_weapon)
 	game.response_needed.connect(_on_response)

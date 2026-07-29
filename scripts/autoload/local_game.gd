@@ -124,6 +124,11 @@ func _phase_name(state: Dictionary) -> String:
 		3: return "弃牌"
 	return "?"
 
+func send_use_skill(skill_name: String):
+	if not game: return
+	if skill_name == "mage_discard":
+		game.process_action(game.current_player, {"action": "use_skill", "skill": "mage_discard"})
+
 func disconnect_from_server():
 	game = null
 

@@ -117,6 +117,9 @@ func send_discard_one(card_uid: int):
 func send_confirm_discard(card_uids: Array = []):
 	send({"t": "confirm_discard", "card_uids": card_uids})
 
+func send_use_skill(skill_name: String):
+	send({"t": "use_skill", "skill": skill_name})
+
 func _handle_packet(raw: String):
 	var data = JSON.parse_string(raw)
 	if data == null:

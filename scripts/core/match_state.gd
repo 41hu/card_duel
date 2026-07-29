@@ -86,6 +86,7 @@ func _create_player(idx: int, char_id: String, char_data: Dictionary) -> Diction
 		weapon={}, armor={}, buffs=[], dots=[],
 		frozen=false, frozen_lockout=false, frozen_move=false,
 		damage_reduction_used=false, skill_used_this_turn=false, free_move_used=false,
+		mage_buffed=false,
 		combo_attacks_this_turn=[],
 	}
 
@@ -140,10 +141,12 @@ func _action_phase():
 		return
 	player.skill_used_this_turn = false
 	player.free_move_used = false
+	player.mage_buffed = false
 	player.combo_attacks_this_turn = []
 	player.damage_reduction_used = false
 	player.ap_attack = 2
 	player.ap_move = 1
+	if player.char_id == "assassin": player.ap_move += 1
 	player.ap_function = 1
 	if player.char_id == "warlock": player.ap_function += 1
 	state_changed.emit(get_full_state())
@@ -161,6 +164,7 @@ func process_action(player_idx: int, action_data: Dictionary) -> Dictionary:
 	match action:
 		"play_card": return _do_play_card(player_idx, action_data)
 		"end_turn": _discard_phase(); return {success=true, msg="结束出牌"}
+		"use_skill": return _handle_skill(player_idx, action_data.get("skill", ""))
 	return {success=false, msg="未知行动"}
 
 func _do_play_card(player_idx: int, data: Dictionary) -> Dictionary:
@@ -234,6 +238,19 @@ func _execute_card_effect(player_idx: int, card: Dictionary) -> Dictionary:
 			_use_card(player_idx, card); equipment.equip_armor(player_idx, type_id); add_log(player_idx, "装备防具"); return {success=true}
 	return {success=false, msg="未知卡牌"}
 
+func _handle_skill(player_idx: int, skill: String) -> Dictionary:
+	var player = players[player_idx]
+	if skill == "mage_discard":
+		if player.char_id != "mage": return {success=false, msg="仅法师可用"}
+		if player.mage_buffed: return {success=false, msg="本回合已强化过"}
+		if card_systems[player_idx].hand.is_empty(): return {success=false, msg="没有可弃的牌"}
+		# 随机弃1张
+		card_systems[player_idx].random_discard(1)
+		player.mage_buffed = true
+		add_log(player_idx, "弃牌强化:下次魔法+2")
+		return {success=true}
+	return {success=false, msg="未知技能"}
+
 func _use_card(player_idx: int, card: Dictionary):
 	card_systems[player_idx].play_card(card.uid)
 
@@ -251,6 +268,11 @@ func _handle_attack_card(player_idx: int, card: Dictionary) -> Dictionary:
 	attacker_last_type = Config.get_damage_type(type_id)
 	var calc = combat.calculate_attack(player_idx, opp, type_id)
 	attacker_last_damage = calc.damage
+	# 法师被动：本回合弃牌强化后魔法+2
+	if type_id in ["magic", "chant"] and player.mage_buffed:
+		attacker_last_damage += 2
+		player.mage_buffed = false
+		add_log(player_idx, "法师强化: +2伤害")
 	if attacker_last_damage <= 0:
 		match Config.get_card_ap_type(type_id):
 			Config.APType.ATTACK: player.ap_attack += Config.get_card_ap_cost(type_id)

@@ -5,13 +5,13 @@ const Style = preload("res://scripts/theme/style_const.gd")
 @onready var _vbox: VBoxContainer = $VBox
 
 func _ready():
-	pass  # 子节点 VBox 已在场景中创建
+	_vbox.layout_mode = 0
+	_vbox.size_flags_vertical = 0
 
-# 显示最近 N 条日志
 func show_logs(action_log: Array, max_count: int = 8, my_index: int = -1):
 	for c in _vbox.get_children():
 		c.queue_free()
-	var r = action_log.slice(max(0, action_log.size() - max_count))
+	var r = action_log.slice(max(0, action_log.size() - 999))
 	for e in r:
 		var lb = Label.new()
 		lb.text = "[T%d] %s: %s" % [e.get("turn", 0), e.get("player_name", "?"), e.get("msg", "")]
@@ -21,7 +21,10 @@ func show_logs(action_log: Array, max_count: int = 8, my_index: int = -1):
 		else:
 			lb.add_theme_color_override("font_color", Style.LOG_TEXT)
 		_vbox.add_child(lb)
-	# 下一帧滚动到底部
+	# 强制 VBox 按内容撑高
+	_vbox.size = Vector2(size.x, 0)
+	await get_tree().process_frame
+	_vbox.size = Vector2(size.x, _vbox.get_minimum_size().y)
 	call_deferred("_scroll_bottom")
 
 func _scroll_bottom():

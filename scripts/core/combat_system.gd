@@ -152,9 +152,9 @@ func process_response(_attacker_idx: int, defender_idx: int, attack_card: String
 	defender_cs.play_card(response_card_uid)
 
 	match effect:
-		"block": return {success=true, effect="block"}
-		"restrain": return {success=true, effect="restrain", value=value}
-		"dodge": return {success=true, effect="dodge"}
+		"block": return {success=true, effect="block", response_card=card_id}
+		"restrain": return {success=true, effect="restrain", value=value, response_card=card_id}
+		"dodge": return {success=true, effect="dodge", response_card=card_id}
 	return {success=false}
 
 # ---------- 计算长弓的距离衰减修正 ----------

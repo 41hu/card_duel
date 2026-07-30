@@ -299,10 +299,13 @@ func _handle_attack_card(player_idx: int, card: Dictionary) -> Dictionary:
 	attacker_last_damage = calc.damage
 	attacker_last_damage += char_skills.on_attack_cast(player_idx, type_id)
 	if attacker_last_damage <= 0:
-		_use_card(player_idx, card)
-		add_log(player_idx, "被防具挡下")
-		state_changed.emit(get_full_state())
-		return {success=true, msg="被防具挡下"}
+		if calc.get("blocked", false):
+			_use_card(player_idx, card)
+			add_log(player_idx, "被防具挡下")
+			state_changed.emit(get_full_state())
+			return {success=true, msg="被防具挡下"}
+		
+		return {success=false, msg="无法造成伤害"}
 	phase = Config.Phase.RESPONSE_WINDOW
 	response_pending = true
 	response_needed.emit(opp, {attacker=player_idx, card=type_id, damage=calc.damage, distance=distance})
@@ -321,7 +324,7 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 				"block": final_damage = floori(final_damage / 2.0)
 				"restrain": final_damage = max(0, final_damage - rr.value)
 				"dodge": final_damage = 0
-			add_log(defender_idx, "卡牌响应")
+			add_log(defender_idx, "用%s响应" % Config.card_name(rr.get("response_card", "")))
 		else:
 			if respond: add_log(defender_idx, "无法响应")
 	card_systems[attacker_idx].play_card(pending_attack_uid)
@@ -483,7 +486,6 @@ func _check_permanent_death(player_idx: int):
 		state_changed.emit(get_full_state())
 		game_ended.emit(game_result)
 
-# ---- 计时器系统 ----
 func check_timers():
 	var now = Time.get_ticks_msec()
 	if phase == Config.Phase.BP_PHASE:

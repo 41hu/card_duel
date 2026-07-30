@@ -14,6 +14,7 @@ const CardWidget = preload("res://scripts/ui/components/card_widget.gd")
 @onready var status_label = $StatusLabel
 @onready var board = $Board
 @onready var action_log = $ActionLog
+var _deck_label: Label
 
 var _game_state: Dictionary = {}
 var _player_index: int = -1
@@ -28,6 +29,7 @@ var _discard_selected: Array = []
 var _last_hp: Array = [-1, -1]
 var _last_turn: int = -1
 var _last_player: int = -1
+var _cheat_on: bool = false
 var _timer_left: int = -1
 var _skill_waiting: bool = false
 var _resp_popup: Control
@@ -62,6 +64,10 @@ func _ready():
 	)
 	skill_confirm.pressed.connect(_on_skill_use)
 	board.cell_clicked.connect(_on_board_cell_clicked)
+	_deck_label = Label.new()
+	_deck_label.add_theme_font_size_override("font_size", 12)
+	_deck_label.add_theme_color_override("font_color", Style.HAND_TITLE)
+	add_child(_deck_label)
 	_build_popups()
 	end_turn_btn.pressed.connect(_on_end_turn)
 	confirm_btn.pressed.connect(_on_confirm_card)
@@ -76,6 +82,15 @@ func _ready():
 	if not cached.is_empty():
 		_on_state_updated(cached)
 		_n().battle_state_cache = {}
+
+func _input(event):
+	if not OS.is_debug_build(): return
+	if not event is InputEventKey or not event.pressed: return
+	if event.keycode == KEY_F12: _cheat_on = not _cheat_on; return
+	if not _cheat_on or not _is_my_turn: return
+	var cheat = {KEY_F1: "near", KEY_F2: "range", KEY_F3: "magic", KEY_F4: "heavy", KEY_F5: "range_weapon", KEY_F6: "magic_weapon", KEY_F7: "move", KEY_F8: "blessing", KEY_F9: "heal_3", KEY_F10: "near_weapon"}
+	if event.keycode in cheat:
+		_n().send_use_skill("_cheat", {"type_id": cheat[event.keycode]})
 
 func _on_cancel_select():
 	_selected_uid = -1
@@ -269,6 +284,9 @@ func _refresh_all(state: Dictionary):
 		_last_turn = state.turn_number; _last_player = state.current_player
 		_flash(phase_label)
 
+	_deck_label.text = "牌堆:%d  弃牌:%d" % [state.get("deck_size", 0), state.get("discard_size", 0)]
+	_deck_label.position = Vector2(12, 12)
+
 	board.update(pls, state.get("traps", []), _player_index)
 
 	for c in hand_area.get_children():
@@ -300,6 +318,9 @@ func _refresh_all(state: Dictionary):
 			hand_area.add_child(cw)
 
 	action_log.show_logs(state.get("action_log", []), 8, _player_index)
+
+	if state.get("revealed_to", -1) == _player_index:
+		_on_hand_revealed(state.get("revealed_hand", []))
 
 	if state.get("response_pending", false) and state.current_player != _player_index:
 		_show_resp_popup(state.get("pending_attack_card", ""))
@@ -337,7 +358,7 @@ func _fmt_player(p, tag: String) -> String:
 	var txt = "[%s] %s HP:%d/%d[%s] 坐标:%d\n" % [tag, p.char_name, p.hp, p.max_hp, bar, p.position]
 	txt += "近%d 远%d 魔%d | %s | 手牌:%d/%d" % [p.near_power, p.range_power, p.magic_power, ap, p.hand_size, p.get("hand_limit", 5)]
 	if not p.weapon.is_empty():
-		txt += " | 武器:%s(%s)" % [p.weapon.data.name, p.weapon.data.desc]
+		txt += " | 武器:%s[%s](%s)" % [p.weapon.data.name, {"near":"近战","range":"远程","magic":"法术"}.get(p.weapon.data.type, "?"), p.weapon.data.desc]
 	if not p.armor.is_empty():
 		txt += " | 防具:%s" % p.armor.data.name + "(%d/%d)" % [p.armor.durability, p.armor.get("max_durability", 3)]
 	if p.get("frozen", false):
@@ -399,7 +420,7 @@ func _on_card_clicked(card_uid: int, type_id: String):
 	_refresh_highlight()
 
 func _on_confirm_card():
-	if _selected_uid < 0:
+	if _selected_uid == -1:
 		return
 	if _selected_type in ["move", "destroy"]:
 		match _selected_type:

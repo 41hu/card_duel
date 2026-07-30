@@ -139,7 +139,7 @@ func process_response(_attacker_idx: int, defender_idx: int, attack_card: String
 		# 远程卡可牵制远程/穿心，也可牵制魔法/吟唱
 		if attack_card in ["range", "pierce", "magic", "chant"]:
 			effect = "restrain"
-			value = defender.range_power - match_ref.movement.get_distance()
+			value = max(0, defender.range_power - match_ref.movement.get_distance())
 		else:
 			return {success=false, msg="远程卡不能响应该攻击"}
 	elif card_id in ["magic"]:
@@ -188,7 +188,8 @@ func apply_on_hit_effects(attacker_idx: int, defender_idx: int, damage: int, dam
 
 	# 鹰眼：远程命中后查看对方手牌
 	if weapon_id == "hawkeye":
-		pass  # 服务端在回复中附带对方手牌信息
+		match_ref._reveal_to = attacker_idx
+		match_ref._reveal_from = defender_idx
 
 	# 毒牙：远程命中后中毒-2×2回合
 	if weapon_id == "toxic_fang":

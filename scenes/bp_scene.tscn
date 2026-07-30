@@ -22,10 +22,10 @@ color = Color(0.08, 0.1, 0.15, 1)
 
 [node name="Title" type="Label" parent="." unique_id=155432898]
 layout_mode = 0
-offset_left = 200.0
-offset_top = 10.0
-offset_right = 600.0
-offset_bottom = 55.0
+offset_left = 781.0
+offset_top = 44.0
+offset_right = 1099.0
+offset_bottom = 111.0
 theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
 theme_override_font_sizes/font_size = 36
 text = "BP 禁选阶段"

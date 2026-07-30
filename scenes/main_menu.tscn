@@ -1,95 +1,98 @@
-[gd_scene load_steps=2 format=3 uid="uid://c5v8p0k2q3n4x"]
+[gd_scene format=3 uid="uid://c5v8p0k2q3n4x"]
 
-[ext_resource type="Script" path="res://scripts/ui/main_menu.gd" id="1_main"]
+[ext_resource type="Script" uid="uid://bghjoian43djj" path="res://scripts/ui/main_menu.gd" id="1_main"]
 
-[node name="MainMenu" type="Control"]
+[node name="MainMenu" type="Control" unique_id=1830626318]
 layout_mode = 3
 anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_main")
 
-[node name="Bg" type="ColorRect" parent="."]
+[node name="Bg" type="ColorRect" parent="." unique_id=419150322]
 layout_mode = 1
 anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 color = Color(0.1, 0.12, 0.18, 1)
 
-[node name="Title" type="Label" parent="."]
+[node name="Title" type="Label" parent="." unique_id=269105965]
 layout_mode = 0
-offset_left = 200.0
-offset_top = 80.0
-offset_right = 600.0
-offset_bottom = 150.0
+offset_left = 738.0
+offset_top = 109.0
+offset_right = 1138.0
+offset_bottom = 197.0
+theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
+theme_override_font_sizes/font_size = 64
 text = "卡牌对决"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 64
-theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
 
-[node name="MainPanel" type="Control" parent="."]
-layout_mode = 0
+[node name="MainPanel" type="Control" parent="." unique_id=382630785]
+anchors_preset = 0
 offset_left = 250.0
 offset_top = 220.0
 offset_right = 550.0
 offset_bottom = 450.0
 
-[node name="CreateBtn" type="Button" parent="MainPanel"]
+[node name="CreateBtn" type="Button" parent="MainPanel" unique_id=945651176]
 layout_mode = 0
-offset_left = 40.0
-offset_top = 20.0
-offset_right = 260.0
-offset_bottom = 80.0
+offset_left = 518.0
+offset_top = 36.0
+offset_right = 842.0
+offset_bottom = 172.0
+theme_override_font_sizes/font_size = 22
 text = "创建房间"
-theme_override_font_sizes/font_size = 22
 
-[node name="JoinBtn" type="Button" parent="MainPanel"]
+[node name="JoinBtn" type="Button" parent="MainPanel" unique_id=354150312]
 layout_mode = 0
-offset_left = 40.0
-offset_top = 110.0
-offset_right = 260.0
-offset_bottom = 170.0
+offset_left = 518.0
+offset_top = 244.0
+offset_right = 850.0
+offset_bottom = 375.0
+theme_override_font_sizes/font_size = 22
 text = "加入房间"
-theme_override_font_sizes/font_size = 22
 
-[node name="SelfBtn" type="Button" parent="MainPanel"]
+[node name="SelfBtn" type="Button" parent="MainPanel" unique_id=1625168154]
 layout_mode = 0
-offset_left = 40.0
-offset_top = 200.0
-offset_right = 260.0
-offset_bottom = 260.0
+offset_left = 518.0
+offset_top = 444.0
+offset_right = 857.0
+offset_bottom = 611.0
+theme_override_font_sizes/font_size = 22
 text = "自我对战"
-theme_override_font_sizes/font_size = 22
 
-[node name="CreatePanel" type="Control" parent="."]
+[node name="CreatePanel" type="Control" parent="." unique_id=535578410]
 visible = false
-layout_mode = 0
+anchors_preset = 0
 offset_left = 200.0
 offset_top = 160.0
 offset_right = 600.0
 offset_bottom = 500.0
 
-[node name="CreateTitle" type="Label" parent="CreatePanel"]
+[node name="CreateTitle" type="Label" parent="CreatePanel" unique_id=1535493356]
 layout_mode = 0
 offset_left = 50.0
-offset_top = 0.0
 offset_right = 350.0
 offset_bottom = 40.0
+theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
+theme_override_font_sizes/font_size = 28
 text = "创建房间"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 28
-theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
 
-[node name="CServerLabel" type="Label" parent="CreatePanel"]
+[node name="CServerLabel" type="Label" parent="CreatePanel" unique_id=55338353]
 layout_mode = 0
 offset_left = 30.0
 offset_top = 60.0
 offset_right = 150.0
 offset_bottom = 90.0
-text = "服务器地址"
 theme_override_colors/font_color = Color(1, 1, 1, 1)
+text = "服务器地址"
 
-[node name="CServerInput" type="LineEdit" parent="CreatePanel"]
+[node name="CServerInput" type="LineEdit" parent="CreatePanel" unique_id=2078243818]
 layout_mode = 0
 offset_left = 30.0
 offset_top = 90.0
@@ -97,16 +100,16 @@ offset_right = 370.0
 offset_bottom = 125.0
 text = "ws://127.0.0.1:17890"
 
-[node name="CNameLabel" type="Label" parent="CreatePanel"]
+[node name="CNameLabel" type="Label" parent="CreatePanel" unique_id=891933236]
 layout_mode = 0
 offset_left = 30.0
 offset_top = 145.0
 offset_right = 150.0
 offset_bottom = 175.0
-text = "玩家名称"
 theme_override_colors/font_color = Color(1, 1, 1, 1)
+text = "玩家名称"
 
-[node name="CNameInput" type="LineEdit" parent="CreatePanel"]
+[node name="CNameInput" type="LineEdit" parent="CreatePanel" unique_id=935774265]
 layout_mode = 0
 offset_left = 30.0
 offset_top = 175.0
@@ -114,7 +117,7 @@ offset_right = 370.0
 offset_bottom = 210.0
 text = "Player1"
 
-[node name="CCreateBtn" type="Button" parent="CreatePanel"]
+[node name="CCreateBtn" type="Button" parent="CreatePanel" unique_id=1019601617]
 layout_mode = 0
 offset_left = 130.0
 offset_top = 240.0
@@ -122,7 +125,7 @@ offset_right = 270.0
 offset_bottom = 290.0
 text = "创建"
 
-[node name="CBackBtn" type="Button" parent="CreatePanel"]
+[node name="CBackBtn" type="Button" parent="CreatePanel" unique_id=2025656943]
 layout_mode = 0
 offset_left = 30.0
 offset_top = 240.0
@@ -130,45 +133,44 @@ offset_right = 90.0
 offset_bottom = 290.0
 text = "返回"
 
-[node name="CRoomLabel" type="Label" parent="CreatePanel"]
+[node name="CRoomLabel" type="Label" parent="CreatePanel" unique_id=2062373094]
 layout_mode = 0
 offset_left = 30.0
 offset_top = 305.0
 offset_right = 370.0
 offset_bottom = 340.0
-horizontal_alignment = 1
-theme_override_font_sizes/font_size = 20
 theme_override_colors/font_color = Color(0.3, 1, 0.3, 1)
+theme_override_font_sizes/font_size = 20
+horizontal_alignment = 1
 
-[node name="JoinPanel" type="Control" parent="."]
+[node name="JoinPanel" type="Control" parent="." unique_id=579832077]
 visible = false
-layout_mode = 0
+anchors_preset = 0
 offset_left = 200.0
 offset_top = 160.0
 offset_right = 600.0
 offset_bottom = 520.0
 
-[node name="JoinTitle" type="Label" parent="JoinPanel"]
+[node name="JoinTitle" type="Label" parent="JoinPanel" unique_id=1562938152]
 layout_mode = 0
 offset_left = 50.0
-offset_top = 0.0
 offset_right = 350.0
 offset_bottom = 40.0
+theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
+theme_override_font_sizes/font_size = 28
 text = "加入房间"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 28
-theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
 
-[node name="JServerLabel" type="Label" parent="JoinPanel"]
+[node name="JServerLabel" type="Label" parent="JoinPanel" unique_id=230473057]
 layout_mode = 0
 offset_left = 30.0
 offset_top = 60.0
 offset_right = 150.0
 offset_bottom = 90.0
-text = "服务器地址"
 theme_override_colors/font_color = Color(1, 1, 1, 1)
+text = "服务器地址"
 
-[node name="JServerInput" type="LineEdit" parent="JoinPanel"]
+[node name="JServerInput" type="LineEdit" parent="JoinPanel" unique_id=453201526]
 layout_mode = 0
 offset_left = 30.0
 offset_top = 90.0
@@ -176,16 +178,16 @@ offset_right = 370.0
 offset_bottom = 125.0
 text = "ws://127.0.0.1:17890"
 
-[node name="JRoomLabel" type="Label" parent="JoinPanel"]
+[node name="JRoomLabel" type="Label" parent="JoinPanel" unique_id=1188673080]
 layout_mode = 0
 offset_left = 30.0
 offset_top = 145.0
 offset_right = 150.0
 offset_bottom = 175.0
-text = "房间号"
 theme_override_colors/font_color = Color(1, 1, 1, 1)
+text = "房间号"
 
-[node name="JRoomInput" type="LineEdit" parent="JoinPanel"]
+[node name="JRoomInput" type="LineEdit" parent="JoinPanel" unique_id=1921250047]
 layout_mode = 0
 offset_left = 30.0
 offset_top = 175.0
@@ -193,16 +195,16 @@ offset_right = 370.0
 offset_bottom = 210.0
 placeholder_text = "输入房间号"
 
-[node name="JNameLabel" type="Label" parent="JoinPanel"]
+[node name="JNameLabel" type="Label" parent="JoinPanel" unique_id=878012466]
 layout_mode = 0
 offset_left = 30.0
 offset_top = 230.0
 offset_right = 150.0
 offset_bottom = 260.0
-text = "玩家名称"
 theme_override_colors/font_color = Color(1, 1, 1, 1)
+text = "玩家名称"
 
-[node name="JNameInput" type="LineEdit" parent="JoinPanel"]
+[node name="JNameInput" type="LineEdit" parent="JoinPanel" unique_id=1745761179]
 layout_mode = 0
 offset_left = 30.0
 offset_top = 260.0
@@ -210,7 +212,7 @@ offset_right = 370.0
 offset_bottom = 295.0
 text = "Player2"
 
-[node name="JJoinBtn" type="Button" parent="JoinPanel"]
+[node name="JJoinBtn" type="Button" parent="JoinPanel" unique_id=892275153]
 layout_mode = 0
 offset_left = 130.0
 offset_top = 320.0
@@ -218,7 +220,7 @@ offset_right = 270.0
 offset_bottom = 370.0
 text = "加入"
 
-[node name="JBackBtn" type="Button" parent="JoinPanel"]
+[node name="JBackBtn" type="Button" parent="JoinPanel" unique_id=73646085]
 layout_mode = 0
 offset_left = 30.0
 offset_top = 320.0
@@ -226,11 +228,11 @@ offset_right = 90.0
 offset_bottom = 370.0
 text = "返回"
 
-[node name="StatusLabel" type="Label" parent="."]
+[node name="StatusLabel" type="Label" parent="." unique_id=1194138405]
 layout_mode = 0
-offset_left = 100.0
-offset_top = 560.0
-offset_right = 700.0
-offset_bottom = 590.0
-horizontal_alignment = 1
+offset_left = 643.0
+offset_top = 908.0
+offset_right = 1243.0
+offset_bottom = 938.0
 theme_override_colors/font_color = Color(0.6, 0.6, 0.6, 1)
+horizontal_alignment = 1

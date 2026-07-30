@@ -1,6 +1,8 @@
 [gd_scene format=3 uid="uid://btl4w2j8r6y1"]
 
 [ext_resource type="Script" uid="uid://c1fu85fig3g55" path="res://scripts/ui/battle_ui.gd" id="1_btl"]
+[ext_resource type="Script" uid="uid://cdu6wbs8dqplt" path="res://scripts/ui/components/board_renderer.gd" id="2_brd"]
+[ext_resource type="Script" uid="uid://dcgefa6avvou7" path="res://scripts/ui/components/action_log.gd" id="3_log"]
 
 [node name="BattleScene" type="Control" unique_id=62604844]
 layout_mode = 3
@@ -11,7 +13,7 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_btl")
 
-[node name="Bg" type="ColorRect" parent="." unique_id=1984902068]
+[node name="Bg" type="ColorRect" parent="." unique_id=1844966783]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -20,117 +22,203 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0.06, 0.08, 0.12, 1)
 
-[node name="OppInfo" type="Label" parent="." unique_id=1702823590]
-custom_minimum_size = Vector2(770, 0)
-layout_mode = 0
-offset_left = 1120.0
-offset_top = 832.0
-offset_right = 1890.0
-offset_bottom = 902.0
-theme_override_colors/font_color = Color(1, 0.7, 0.5, 1)
-theme_override_font_sizes/font_size = 12
-autowrap_mode = 3
-
-[node name="PhaseLabel" type="Label" parent="." unique_id=582543779]
-layout_mode = 0
-offset_left = 550.0
-offset_top = 85.0
-offset_right = 1150.0
-offset_bottom = 115.0
+[node name="PhaseLabel" type="Label" parent="." unique_id=783307525]
+layout_mode = 1
+anchors_preset = -1
+anchor_left = 0.5
+anchor_top = 0.05
+anchor_right = 0.5
+anchor_bottom = 0.05
+offset_left = -300.0
+offset_right = 300.0
+offset_bottom = 30.0
+grow_horizontal = 2
+grow_vertical = 2
 theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
 theme_override_font_sizes/font_size = 18
 horizontal_alignment = 1
 
-[node name="HandTitle" type="Label" parent="." unique_id=1382061419]
-layout_mode = 0
-offset_left = 854.0
-offset_top = 316.0
-offset_right = 904.0
-offset_bottom = 341.0
-theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
-text = "手牌"
+[node name="Board" type="Control" parent="." unique_id=1271654454]
+layout_mode = 1
+anchor_left = 0.5
+anchor_top = 0.15
+anchor_right = 0.5
+anchor_bottom = 0.15
+offset_left = -395.0
+offset_right = 395.0
+offset_bottom = 70.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("2_brd")
 
-[node name="HandArea" type="HBoxContainer" parent="." unique_id=853645005]
-layout_mode = 0
-offset_left = 512.0
-offset_top = 401.0
-offset_right = 1292.0
-offset_bottom = 501.0
+[node name="CardInfo" type="Label" parent="." unique_id=839586798]
+layout_mode = 1
+anchors_preset = -1
+anchor_left = 0.5
+anchor_top = 0.26
+anchor_right = 0.5
+anchor_bottom = 0.26
+offset_left = -200.0
+offset_right = 200.0
+offset_bottom = 24.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(0.8, 0.8, 0.5, 1)
+theme_override_font_sizes/font_size = 13
+horizontal_alignment = 1
+
+[node name="HandArea" type="HBoxContainer" parent="." unique_id=2085298927]
+layout_mode = 1
+anchors_preset = -1
+anchor_left = 0.5
+anchor_top = 0.55
+anchor_right = 0.5
+anchor_bottom = 0.55
+offset_left = -435.0
+offset_right = 421.0
+offset_bottom = 174.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 4
 alignment = 1
 
-[node name="MeInfo" type="Label" parent="." unique_id=583079327]
-custom_minimum_size = Vector2(770, 0)
-layout_mode = 0
-offset_left = 16.0
-offset_top = 840.0
-offset_right = 792.0
-offset_bottom = 896.0
+[node name="MeInfo" type="Label" parent="." unique_id=1645208570]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = -388.0
+offset_right = 590.0
+offset_bottom = -312.0
+grow_vertical = 0
 theme_override_colors/font_color = Color(0.5, 0.8, 1, 1)
 theme_override_font_sizes/font_size = 12
 autowrap_mode = 3
 
-[node name="EndTurnBtn" type="Button" parent="." unique_id=694292902]
-layout_mode = 0
-offset_left = 10.0
-offset_top = 540.0
-offset_right = 130.0
-offset_bottom = 575.0
+[node name="OppInfo" type="Label" parent="." unique_id=1324770960]
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -590.0
+offset_top = -388.0
+offset_right = -12.0
+offset_bottom = -312.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_colors/font_color = Color(1, 0.7, 0.5, 1)
+theme_override_font_sizes/font_size = 12
+autowrap_mode = 3
+
+[node name="ActionLog" type="ScrollContainer" parent="." unique_id=1493559683]
+layout_mode = 1
+anchors_preset = 11
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -280.0
+offset_top = 100.0
+offset_right = -12.0
+offset_bottom = -120.0
+script = ExtResource("3_log")
+
+[node name="VBox" type="VBoxContainer" parent="ActionLog" unique_id=812015756]
+layout_mode = 2
+
+[node name="EndTurnBtn" type="Button" parent="." unique_id=1927666764]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -60.0
+offset_top = -65.0
+offset_right = 60.0
+offset_bottom = -30.0
 text = "结束出牌"
 
-[node name="ConfirmBtn" type="Button" parent="." unique_id=1261071547]
-layout_mode = 0
-offset_left = 135.0
-offset_top = 540.0
-offset_right = 235.0
-offset_bottom = 575.0
+[node name="ConfirmBtn" type="Button" parent="." unique_id=1375809674]
+visible = false
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -110.0
+offset_top = -95.0
+offset_right = -10.0
+offset_bottom = -60.0
 text = "确认使用"
 
-[node name="CancelBtn" type="Button" parent="." unique_id=944431625]
-layout_mode = 0
-offset_left = 240.0
-offset_top = 540.0
-offset_right = 300.0
-offset_bottom = 575.0
+[node name="CancelBtn" type="Button" parent="." unique_id=869812671]
+visible = false
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = -95.0
+offset_right = 110.0
+offset_bottom = -60.0
 text = "取消"
 
-[node name="StatusLabel" type="Label" parent="." unique_id=1446921292]
-layout_mode = 0
-offset_left = 558.0
-offset_top = 539.0
-offset_right = 1038.0
-offset_bottom = 574.0
+[node name="StatusLabel" type="Label" parent="." unique_id=1350048436]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -250.0
+offset_top = -149.0
+offset_right = 250.0
+offset_bottom = -119.0
+grow_horizontal = 2
+grow_vertical = 0
 theme_override_colors/font_color = Color(0.6, 0.6, 0.6, 1)
-vertical_alignment = 1
+horizontal_alignment = 1
 
-[node name="CardInfo" type="Label" parent="." unique_id=1783440287]
-layout_mode = 0
-offset_left = 715.0
-offset_top = 544.0
-offset_right = 1065.0
-offset_bottom = 574.0
-theme_override_colors/font_color = Color(0.8, 0.8, 0.5, 1)
-theme_override_font_sizes/font_size = 13
-
-[node name="SkillBtn" type="Button" parent="." unique_id=1228839203]
-layout_mode = 0
-offset_left = 310.0
-offset_top = 540.0
-offset_right = 410.0
-offset_bottom = 575.0
+[node name="SkillBtn" type="Button" parent="." unique_id=2088021127]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 168.0
+offset_top = -200.0
+offset_right = 268.0
+offset_bottom = -165.0
+grow_vertical = 0
 text = "技能"
 
-[node name="SkillConfirm" type="Button" parent="." unique_id=1530011987]
-layout_mode = 0
-offset_left = 415.0
-offset_top = 540.0
-offset_right = 515.0
-offset_bottom = 575.0
+[node name="SkillConfirm" type="Button" parent="." unique_id=1556571759]
+visible = false
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 264.0
+offset_top = -200.0
+offset_right = 364.0
+offset_bottom = -165.0
+grow_vertical = 0
 text = "确认技能"
 
-[node name="SkillCancel" type="Button" parent="." unique_id=46509515]
-layout_mode = 0
-offset_left = 520.0
-offset_top = 540.0
-offset_right = 580.0
-offset_bottom = 575.0
+[node name="SkillCancel" type="Button" parent="." unique_id=247751449]
+visible = false
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 368.0
+offset_top = -200.0
+offset_right = 428.0
+offset_bottom = -165.0
+grow_vertical = 0
 text = "取消"

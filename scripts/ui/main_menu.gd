@@ -1,6 +1,8 @@
 # main_menu.gd — 主菜单界面
 extends Control
 
+const Style = preload("res://scripts/theme/style_const.gd")
+
 @onready var main_panel = $MainPanel
 @onready var create_panel = $CreatePanel
 @onready var join_panel = $JoinPanel
@@ -85,7 +87,7 @@ func _make_ready_btn(parent: Control, y: float) -> Button:
 	btn.text = "准备开始"
 	btn.position = Vector2(100, y)
 	btn.size = Vector2(200, 45)
-	btn.add_theme_color_override("font_color", Color(1, 1, 0.3))
+	btn.add_theme_color_override("font_color", Style.READY_YELLOW)
 	parent.add_child(btn)
 	return btn
 
@@ -95,12 +97,9 @@ func _on_game_starting(data: Dictionary):
 	get_tree().change_scene_to_file("res://scenes/bp_scene.tscn")
 
 func _on_self_play():
-	var ids = Config.CHARACTER_IDS.duplicate()
-	ids.shuffle()
-	var p1 = ids[0]; var p2 = ids[1]
-	LocalGame.start_local_game(p1, p2)
-	get_tree().change_scene_to_file("res://scenes/battle_scene.tscn")
+	LocalGame.start_bp()
+	get_tree().change_scene_to_file("res://scenes/bp_scene.tscn")
 
 func _on_error(msg: String):
 	status_label.text = "错误: " + msg
-	status_label.add_theme_color_override("font_color", Color(1, 0.3, 0.3))
+	status_label.add_theme_color_override("font_color", Style.ERROR_RED)

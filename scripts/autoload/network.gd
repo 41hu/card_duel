@@ -11,6 +11,7 @@ signal bp_state_updated(bp_state: Dictionary)
 signal weapon_prompt(weapon_data: Dictionary)
 signal response_needed(attack_info: Dictionary)
 signal game_ended(result: Dictionary)
+signal hand_revealed(cards: Array)
 signal network_error(msg: String)
 
 var _socket: WebSocketPeer = null
@@ -122,6 +123,12 @@ func send_use_skill(skill_name: String, extra: Dictionary = {}):
 	for key in extra: msg[key] = extra[key]
 	send(msg)
 
+func send_swordsman_choice(choice: String):
+	send({"t": "swordsman_choice", "choice": choice})
+
+func send_reveal_hand():
+	send({"t": "reveal_hand"})
+
 func _handle_packet(raw: String):
 	var data = JSON.parse_string(raw)
 	if data == null:
@@ -153,3 +160,5 @@ func _handle_packet(raw: String):
 			network_error.emit(data.get("msg", "未知错误"))
 		"player_ready":
 			pass
+		"hand_revealed":
+			hand_revealed.emit(data.get("cards", []))

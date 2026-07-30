@@ -1,6 +1,9 @@
 # battle_ui.gd — 对战界面
 extends Control
 
+const Style = preload("res://scripts/theme/style_const.gd")
+const CardWidget = preload("res://scripts/ui/components/card_widget.gd")
+
 @onready var opp_info = $OppInfo
 @onready var phase_label = $PhaseLabel
 @onready var hand_area = $HandArea
@@ -9,6 +12,8 @@ extends Control
 @onready var confirm_btn = $ConfirmBtn
 @onready var cancel_btn = $CancelBtn
 @onready var status_label = $StatusLabel
+@onready var board = $Board
+@onready var action_log = $ActionLog
 
 var _game_state: Dictionary = {}
 var _player_index: int = -1
@@ -16,14 +21,13 @@ var _is_my_turn: bool = false
 var _selected_uid: int = -1
 var _selected_type: String = ""
 var _discard_selected: Array = []
-var _board_cells: Array = []
-var _board_container: Control
-var _log_scroll: ScrollContainer
-var _log_vbox: VBoxContainer
 @onready var card_info = $CardInfo
 @onready var skill_btn = $SkillBtn
 @onready var skill_confirm = $SkillConfirm
 @onready var skill_cancel = $SkillCancel
+var _last_hp: Array = [-1, -1]
+var _last_turn: int = -1
+var _last_player: int = -1
 var _skill_waiting: bool = false
 var _resp_popup: Control
 var _wpn_popup: Control
@@ -56,14 +60,14 @@ func _ready():
 		_skill_waiting = false
 	)
 	skill_confirm.pressed.connect(_on_skill_use)
-	_build_board()
-	_build_log()
+	board.cell_clicked.connect(_on_board_cell_clicked)
 	_build_popups()
 	end_turn_btn.pressed.connect(_on_end_turn)
 	confirm_btn.pressed.connect(_on_confirm_card)
 	cancel_btn.pressed.connect(_on_cancel_select)
 	_n().state_updated.connect(_on_state_updated)
 	_n().response_needed.connect(_on_response_needed)
+	_n().hand_revealed.connect(_on_hand_revealed)
 	_n().weapon_prompt.connect(_on_weapon_prompt)
 	_n().game_ended.connect(_on_game_ended)
 	_n().network_error.connect(_on_error)
@@ -78,47 +82,6 @@ func _on_cancel_select():
 	confirm_btn.visible = false
 	cancel_btn.visible = false
 	card_info.text = ""
-	_refresh_highlight()
-
-func _build_board():
-	_board_container = Control.new()
-	_board_container.position = Vector2(10, 130)
-	_board_container.size = Vector2(790, 70)
-	add_child(_board_container)
-	for i in range(11):
-		var x = i * 72
-		var p = Panel.new()
-		p.position = Vector2(x, 0)
-		p.size = Vector2(68, 70)
-		p.set_meta("index", i)
-		p.mouse_filter = Control.MOUSE_FILTER_STOP
-		p.gui_input.connect(_on_board_click.bind(i))
-		var s = StyleBoxFlat.new()
-		s.bg_color = Color(0.12, 0.14, 0.2)
-		s.border_width_left = 1
-		s.border_width_right = 1
-		s.border_width_top = 1
-		s.border_width_bottom = 1
-		s.border_color = Color(0.25, 0.25, 0.35)
-		p.add_theme_stylebox_override("panel", s)
-		var l = Label.new()
-		l.position = Vector2(0, 0)
-		l.size = Vector2(68, 70)
-		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		l.add_theme_font_size_override("font_size", 10)
-		l.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
-		p.add_child(l)
-		_board_container.add_child(p)
-		_board_cells.append(p)
-
-func _build_log():
-	_log_scroll = ScrollContainer.new()
-	_log_scroll.position = Vector2(10, 210)
-	_log_scroll.size = Vector2(350, 140)
-	add_child(_log_scroll)
-	_log_vbox = VBoxContainer.new()
-	_log_scroll.add_child(_log_vbox)
 
 func _build_popups():
 	_resp_popup = _make_resp_popup()
@@ -126,13 +89,10 @@ func _build_popups():
 
 func _make_resp_popup() -> Control:
 	var c = Control.new()
-	c.position = Vector2(0, 0)
-	c.size = Vector2(800, 500)
-	c.visible = false
-	c.z_index = 10
-	c.name = "RespPopupRoot"
+	c.visible = false; c.z_index = 10; c.name = "RespPopupRoot"
+	c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var bg = ColorRect.new()
-	bg.color = Color(0, 0, 0, 0.6)
+	bg.color = Style.POPUP_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	c.add_child(bg)
 	add_child(c)
@@ -140,7 +100,6 @@ func _make_resp_popup() -> Control:
 
 func _show_resp_popup(atk_card: String):
 	var c = _resp_popup
-	# 清除旧内容
 	for child in c.get_children():
 		if child is ColorRect: continue
 		c.remove_child(child); child.queue_free()
@@ -149,7 +108,6 @@ func _show_resp_popup(atk_card: String):
 	var t = _lbl("对方使用 %s 攻击！选择响应卡：" % atk_card)
 	t.add_theme_font_size_override("font_size", 16)
 	box.add_child(t)
-	# 从防守方手牌数据直接列出可用响应卡
 	var has_any = false
 	var defender_hand = []
 	for p in _game_state.players:
@@ -159,12 +117,9 @@ func _show_resp_popup(atk_card: String):
 	for card in defender_hand:
 		var tid = card.type_id
 		var ok = false
-		if tid in ["magic"]:
-			ok = true
-		elif tid in ["range"] and atk_card in ["range", "pierce", "magic", "chant"]:
-			ok = true
-		elif tid in ["near"] and atk_card in ["near", "heavy"]:
-			ok = true
+		if tid in ["magic"]: ok = true
+		elif tid in ["range"] and atk_card in ["range", "pierce", "magic", "chant"]: ok = true
+		elif tid in ["near"] and atk_card in ["near", "heavy"]: ok = true
 		if ok:
 			has_any = true
 			var rb = Button.new()
@@ -179,12 +134,10 @@ func _show_resp_popup(atk_card: String):
 
 func _make_wpn_popup() -> Control:
 	var c = Control.new()
-	c.position = Vector2(0, 0)
-	c.size = Vector2(800, 500)
-	c.visible = false
-	c.z_index = 10
+	c.visible = false; c.z_index = 10
+	c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var bg = ColorRect.new()
-	bg.color = Color(0, 0, 0, 0.6)
+	bg.color = Style.POPUP_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	c.add_child(bg)
 	add_child(c)
@@ -194,37 +147,61 @@ func _make_wpn_popup() -> Control:
 	box.add_child(t)
 	var d = _lbl("")
 	d.name = "WpnDesc"
-	d.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+	d.add_theme_color_override("font_color", Style.HAND_TITLE)
 	box.add_child(d)
 	var hb = HBoxContainer.new()
 	box.add_child(hb)
-	var eb = Button.new()
-	eb.text = "装备"
+	var eb = Button.new(); eb.text = "装备"
 	eb.pressed.connect(func(): c.visible = false; _n().send_weapon_choice(true))
 	hb.add_child(eb)
-	var db = Button.new()
-	db.text = "丢弃"
+	var db = Button.new(); db.text = "丢弃"
 	db.pressed.connect(func(): c.visible = false; _n().send_weapon_choice(false))
 	hb.add_child(db)
 	return c
 
 func _box(parent: Control, x: float, y: float, w: float, h: float) -> VBoxContainer:
 	var vb = VBoxContainer.new()
-	vb.position = Vector2(x + 10, y + 10)
-	vb.size = Vector2(w - 20, h - 20)
+	vb.layout_mode = 1
+	vb.anchor_left = 0.5; vb.anchor_right = 0.5
+	vb.anchor_top = 0.5; vb.anchor_bottom = 0.5
+	vb.offset_left = -(w - 20) / 2.0
+	vb.offset_top = -(h - 20) / 2.0
+	vb.offset_right = (w - 20) / 2.0
+	vb.offset_bottom = (h - 20) / 2.0
 	parent.add_child(vb)
 	return vb
+
+func _popup_box(w: float, h: float) -> VBoxContainer:
+	var vb = VBoxContainer.new()
+	vb.layout_mode = 1
+	vb.anchor_left = 0.5; vb.anchor_right = 0.5
+	vb.anchor_top = 0.5; vb.anchor_bottom = 0.5
+	vb.offset_left = -w / 2.0; vb.offset_right = w / 2.0
+	vb.offset_top = -h / 2.0; vb.offset_bottom = h / 2.0
+	return vb
+
+func _flash(node: Control):
+	var tw = create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	tw.tween_property(node, "scale", Vector2(1.15, 1.15), 0.15)
+	tw.tween_property(node, "scale", Vector2.ONE, 0.3)
+
+func _flash_hp(node: Control, is_heal: bool):
+	var c = Style.ME_GREEN if is_heal else Style.OPP_RED
+	var default = node.get_theme_color("font_color")
+	node.add_theme_color_override("font_color", c)
+	var tw = create_tween().set_ease(Tween.EASE_OUT)
+	tw.tween_interval(1.0)
+	tw.tween_callback(func(): node.add_theme_color_override("font_color", default))
 
 func _lbl(txt: String) -> Label:
 	var l = Label.new()
 	l.text = txt
-	l.add_theme_color_override("font_color", Color.WHITE)
+	l.add_theme_color_override("font_color", Style.LOG_TEXT)
 	return l
 
 func _on_state_updated(state: Dictionary):
 	_game_state = state
 	if _n() == LocalGame:
-		# 响应窗口期间扮演防守方，其他时间扮演当前回合玩家
 		if state.get("response_pending", false):
 			_player_index = 1 - state.current_player
 		else:
@@ -250,123 +227,90 @@ func _refresh_all(state: Dictionary):
 	var me = pls[0] if pls[0].index == _player_index else pls[1]
 	opp_info.text = _fmt_player(opp, "对手")
 	me_info.text = _fmt_player(me, "自己")
+	for p in pls:
+		if p.hp != _last_hp[p.index]:
+			var lbl = me_info if p.index == _player_index else opp_info
+			_flash_hp(lbl, p.hp > _last_hp[p.index])
+			_last_hp[p.index] = p.hp
 	var tp = ["判定", "摸牌", "出牌", "弃牌"]
 	var tn = tp[state.get("turn_phase", 0)] if state.get("turn_phase", 0) < tp.size() else "?"
 	var who = "你的回合" if _is_my_turn else "对手回合"
 	phase_label.text = "T%d | %s | %s" % [state.turn_number, tn, who]
+	if state.turn_number != _last_turn or state.current_player != _last_player:
+		_last_turn = state.turn_number; _last_player = state.current_player
+		_flash(phase_label)
 
-	for cell in _board_cells:
-		var idx = cell.get_meta("index")
-		var lbl = cell.get_child(0)
-		lbl.text = str(idx)
-		lbl.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
-	for p in pls:
-		var pos = p.position
-		if pos >= 0 and pos < _board_cells.size():
-			var lbl = _board_cells[pos].get_child(0)
-			lbl.text = "P%d" % (p.index + 1)
-			var col = Color(0.3, 1, 0.3) if p.index == _player_index else Color(1, 0.4, 0.4)
-			lbl.add_theme_color_override("font_color", col)
-	for t in state.get("traps", []):
-		var pos = t.position
-		if pos >= 0 and pos < _board_cells.size():
-			_board_cells[pos].get_child(0).text += " X"
+	board.update(pls, state.get("traps", []), _player_index)
 
 	for c in hand_area.get_children():
 		c.queue_free()
 	var mh = me.get("hand", [])
 	if mh.is_empty():
 		var el = _lbl("无手牌")
-		el.add_theme_color_override("font_color", Color(0.4, 0.4, 0.4))
+		el.add_theme_color_override("font_color", Style.EMPTY_HAND)
 		hand_area.add_child(el)
 	else:
 		var can_resp = state.get("response_pending", false) and state.current_player != _player_index
 		var in_disc = state.get("waiting_for_discard", false) and _is_my_turn
+		if in_disc: _selected_uid = -1
 		for card in mh:
 			var tid = card.type_id
 			var cd = Config.CARD_DB.get(tid, {})
-			var cn = cd.get("name", tid)
-			var al = ""
-			match cd.get("ap", 0):
-				Config.APType.ATTACK: al = "攻"
-				Config.APType.MOVE: al = "移"
-				Config.APType.FUNCTION: al = "功"
-				_: al = "免"
-			var cm = {"uid": card.uid, "type_id": tid, "can_respond": false, "discard_selected": card.uid in _discard_selected}
+			var cw = CardWidget.new()
+			cw.setup(card.uid, tid, cd.get("name", tid), cd.get("ap", 0), card.uid in _discard_selected)
+			cw.pressed.connect(_on_card_clicked.bind(tid))
 			if can_resp:
 				var atk = state.get("pending_attack_card", "")
-				if tid in ["magic"]:
-					cm.can_respond = true
-				elif tid in ["range"]:
-					cm.can_respond = atk in ["range", "pierce", "magic", "chant"]
-				elif tid in ["near"]:
-					cm.can_respond = atk in ["near", "heavy"]
-			var btn = Button.new()
-			btn.text = "%s" % cn
+				if tid in ["magic"]: cw.set_respondable(true)
+				elif tid in ["range"]: cw.set_respondable(atk in ["range", "pierce", "magic", "chant"])
+				elif tid in ["near"]: cw.set_respondable(atk in ["near", "heavy"])
 			if in_disc and card.uid in _discard_selected:
-				btn.text = "✕ " + btn.text
-				btn.add_theme_color_override("font_color", Color(1, 0.4, 0.4))
-				cm.orig_color = Color(1, 0.4, 0.4)
-			else:
-				# 卡牌颜色: 攻击红, 位移蓝, 功能青, 免费黄
-				var ap = cd.get("ap", 0)
-				var col = Color(1, 0.9, 0.3)
-				match ap:
-					Config.APType.ATTACK: col = Color(1, 0.5, 0.4)
-					Config.APType.MOVE: col = Color(0.4, 0.6, 1)
-					Config.APType.FUNCTION: col = Color(0.3, 0.9, 0.6)
-				btn.add_theme_color_override("font_color", col)
-				cm.orig_color = col
-			btn.size = Vector2(64, 64)
-			btn.set_meta("card_data", cm)
-			btn.pressed.connect(_on_card_clicked.bind(card.uid, tid))
-			hand_area.add_child(btn)
+				cw.set_discard_mark(true)
+			if card.uid == _selected_uid:
+				cw.set_selected(true)
+			hand_area.add_child(cw)
 
-	for c in _log_vbox.get_children():
-		c.queue_free()
-	var alog = state.get("action_log", [])
-	var r = alog.slice(max(0, alog.size() - 8))
-	for e in r:
-		var lb = _lbl("[T%d] %s: %s" % [e.get("turn", 0), e.get("player_name", "?"), e.get("msg", "")])
-		lb.add_theme_font_size_override("font_size", 11)
-		_log_vbox.add_child(lb)
+	action_log.show_logs(state.get("action_log", []), 8, _player_index)
 
 	if state.get("response_pending", false) and state.current_player != _player_index:
 		_show_resp_popup(state.get("pending_attack_card", ""))
 
 	var in_discard = state.get("waiting_for_discard", false)
 	if in_discard and _is_my_turn:
-		end_turn_btn.text = "确认弃牌(%d张)" % _discard_selected.size()
-		end_turn_btn.visible = true
-		status_label.text = "弃牌阶段:点手牌选择,点确认弃牌提交"
+		var need = me.get("hand", []).size() - me.get("hand_limit", 5)
+		var txt = "确认弃牌(%d张)" % _discard_selected.size()
+		end_turn_btn.text = txt; end_turn_btn.visible = true
+		if need > 0:
+			status_label.text = "还需弃%d张（手牌上限%d）" % [need, me.get("hand_limit", 5)]
+		else:
+			status_label.text = "手牌未超上限，可主动多弃（选%d张）" % _discard_selected.size()
 		confirm_btn.visible = false
-		cancel_btn.visible = true
 	else:
 		_discard_selected.clear()
 		end_turn_btn.text = "结束出牌"
 		end_turn_btn.visible = _is_my_turn
 		confirm_btn.visible = false
 		cancel_btn.visible = false
-		# 技能按钮
-		if _is_my_turn and me.char_id in ["mage", "assassin"] and not me.get("skill_used_this_turn", false):
-			skill_btn.visible = true
-			skill_btn.text = "法术强化" if me.char_id == "mage" else "暗影步"
-		else:
-			skill_btn.visible = false
+		status_label.text = ""
+		var active_skill = me.get("active_skill", "")
+		skill_btn.visible = _is_my_turn and active_skill != ""
+		if active_skill == "mage_discard": skill_btn.text = "法术强化"
+		elif active_skill == "assassin_move": skill_btn.text = "暗影步"
+		if me.get("pending_swordsman_skill", false):
+			_show_swordsman_popup()
 
 func _fmt_player(p, tag: String) -> String:
 	var hp_pct = float(p.hp) / max(p.max_hp, 1)
 	var bar = ""
 	for _i in range(20):
 		bar += "=" if (float(_i) / 20.0) < hp_pct else "-"
-	# 行动点圆圈
 	var ap = _ap_circles(p.get("ap_attack", 0), p.get("ap_move", 0), p.get("ap_function", 0))
 	var txt = "[%s] %s HP:%d/%d[%s] 坐标:%d\n" % [tag, p.char_name, p.hp, p.max_hp, bar, p.position]
 	txt += "近%d 远%d 魔%d | %s | 手牌:%d/%d" % [p.near_power, p.range_power, p.magic_power, ap, p.hand_size, p.get("hand_limit", 5)]
 	if not p.weapon.is_empty():
-		txt += " | 武器:%s" % p.weapon.data.name
+		txt += " | 武器:%s(%s)" % [p.weapon.data.name, p.weapon.data.desc]
 	if not p.armor.is_empty():
-		txt += " | 防具:%s" % p.armor.data.name + "(%d/3)" % p.armor.durability
+		txt += " | 防具:%s" % p.armor.data.name + "(%d/%d)" % [p.armor.durability, p.armor.get("max_durability", 3)]
 	if p.get("frozen", false):
 		txt += " | 冻结!"
 	var dots = p.get("dots", [])
@@ -397,7 +341,6 @@ func _ap_circles(atk: int, mov: int, fun: int) -> String:
 
 func _on_card_clicked(card_uid: int, type_id: String):
 	var state = _game_state
-	# 响应模式:直接发送选中卡作为响应
 	if state.get("response_pending", false) and state.current_player != _player_index:
 		_resp_popup.visible = false
 		_n().send_response(true, card_uid)
@@ -405,7 +348,6 @@ func _on_card_clicked(card_uid: int, type_id: String):
 	if not _is_my_turn:
 		return
 
-	# 弃牌模式:切换选中
 	if state.get("waiting_for_discard", false):
 		if card_uid in _discard_selected:
 			_discard_selected.erase(card_uid)
@@ -446,26 +388,11 @@ func _on_confirm_card():
 	cancel_btn.visible = false
 
 func _refresh_highlight():
-	# 先恢复所有卡的颜色
 	for child in hand_area.get_children():
-		if child is Button:
-			var cm = child.get_meta("card_data", {})
-			var orig = cm.get("orig_color", Color.WHITE)
-			child.remove_theme_color_override("font_color")
-			child.add_theme_color_override("font_color", orig)
-	# 再高亮选中的卡
-	for child in hand_area.get_children():
-		if child is Button:
-			var cm = child.get_meta("card_data", {})
-			if cm.get("uid", -1) == _selected_uid:
-				child.remove_theme_color_override("font_color")
-				child.add_theme_color_override("font_color", Color(0.3, 1, 1))
+		if child is CardWidget:
+			child.set_selected(child.card_uid == _selected_uid)
 
-func _on_board_click(event: InputEvent, cell_index: int):
-	if not (event is InputEventMouseButton):
-		return
-	if not event.pressed or event.button_index != MOUSE_BUTTON_LEFT:
-		return
+func _on_board_cell_clicked(cell_index: int):
 	if _selected_type != "trap" or not _is_my_turn:
 		return
 	_n().send_play_card(_selected_uid, {"trap_pos": cell_index})
@@ -476,33 +403,26 @@ func _on_board_click(event: InputEvent, cell_index: int):
 
 func _popup_move(card_uid: int):
 	var c = Control.new()
-	c.z_index = 10
-	c.position = Vector2(0, 0)
-	c.size = Vector2(800, 500)
-	var bg = ColorRect.new()
-	bg.color = Color(0, 0, 0, 0.6)
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	c.add_child(bg)
-	var vb = VBoxContainer.new()
-	vb.position = Vector2(260, 200)
-	vb.size = Vector2(280, 140)
-	c.add_child(vb)
+	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
+	var vb = _popup_box(280, 140); c.add_child(vb)
 	vb.add_child(_lbl("移动方向"))
 	var hb = HBoxContainer.new()
 	vb.add_child(hb)
 	var lb = Button.new()
-	lb.text = "向左"
+	lb.text = "左1格"
 	if card_uid < 0:
 		lb.pressed.connect(func(): c.queue_free(); _n().send_use_skill("assassin_move", {"direction": -1}))
 	else:
-		lb.pressed.connect(func(): c.queue_free(); _n().send_play_card(card_uid, {"direction": -1}))
+		lb.pressed.connect(func(): c.queue_free(); _n().send_play_card(card_uid, {"direction": -1, "steps": 1}))
 	hb.add_child(lb)
 	var rb = Button.new()
-	rb.text = "向右"
+	rb.text = "右1格"
 	if card_uid < 0:
 		rb.pressed.connect(func(): c.queue_free(); _n().send_use_skill("assassin_move", {"direction": 1}))
 	else:
-		rb.pressed.connect(func(): c.queue_free(); _n().send_play_card(card_uid, {"direction": 1}))
+		rb.pressed.connect(func(): c.queue_free(); _n().send_play_card(card_uid, {"direction": 1, "steps": 1}))
 	hb.add_child(rb)
 	var cb = Button.new()
 	cb.text = "取消"
@@ -512,23 +432,15 @@ func _popup_move(card_uid: int):
 
 func _popup_destroy(card_uid: int):
 	var c = Control.new()
-	c.z_index = 10
-	c.position = Vector2(0, 0)
-	c.size = Vector2(800, 500)
-	var bg = ColorRect.new()
-	bg.color = Color(0, 0, 0, 0.6)
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	c.add_child(bg)
-	var vb = VBoxContainer.new()
-	vb.position = Vector2(260, 180)
-	vb.size = Vector2(280, 200)
-	c.add_child(vb)
+	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
+	var vb = _popup_box(280, 200); c.add_child(vb)
 	vb.add_child(_lbl("摧毁: 选择目标"))
 	var hb = Button.new()
 	hb.text = "盲丢对方1手牌"
 	hb.pressed.connect(func(): c.queue_free(); _n().send_play_card(card_uid, {"destroy_target": "hand"}))
 	vb.add_child(hb)
-	# 检查对方装备，只显示有效选项
 	var pls = _game_state.players
 	var opp = pls[0] if pls[0].index != _player_index else pls[1]
 	if not opp.weapon.is_empty():
@@ -576,18 +488,17 @@ func _on_skill_use():
 	if me.char_id == "mage":
 		_show_mage_pick()
 	elif me.char_id == "assassin":
-		_popup_move(-1)  # uid=-1 for assassin free move
+		_popup_move(-1)
 	skill_confirm.visible = false
 	skill_cancel.visible = false
 	skill_btn.visible = true
 
 func _show_mage_pick():
 	var c = Control.new()
-	c.z_index = 10; c.position = Vector2(0,0); c.size = Vector2(800,500)
-	var bg = ColorRect.new(); bg.color = Color(0,0,0,0.6)
+	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
-	var vb = VBoxContainer.new()
-	vb.position = Vector2(220, 140); vb.size = Vector2(360, 260); c.add_child(vb)
+	var vb = _popup_box(360, 260); c.add_child(vb)
 	vb.add_child(_lbl("选择一张要弃的牌："))
 	var mh = (_game_state.players[0] if _game_state.players[0].index == _player_index else _game_state.players[1]).get("hand", [])
 	for card in mh:
@@ -596,6 +507,38 @@ func _show_mage_pick():
 		b.pressed.connect(func(uid=card.uid): c.queue_free(); _n().send_use_skill("mage_discard", {"card_uid": uid}))
 		vb.add_child(b)
 	var cb = Button.new(); cb.text = "取消"; cb.pressed.connect(func(): c.queue_free()); vb.add_child(cb)
+	add_child(c)
+
+func _on_hand_revealed(cards: Array):
+	var c = Control.new()
+	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
+	var vb = _popup_box(320, 300); c.add_child(vb)
+	vb.add_child(_lbl("对方手牌："))
+	if cards.is_empty():
+		vb.add_child(_lbl("  (无手牌)"))
+	else:
+		for tid in cards:
+			vb.add_child(_lbl("  " + Config.card_name(tid)))
+	var cb = Button.new(); cb.text = "关闭"
+	cb.pressed.connect(func(): c.queue_free()); vb.add_child(cb)
+	add_child(c)
+
+func _show_swordsman_popup():
+	var c = Control.new()
+	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
+	var vb = _popup_box(280, 140); c.add_child(vb)
+	vb.add_child(_lbl("剑士技能: 近战命中后"))
+	var hb = HBoxContainer.new(); vb.add_child(hb)
+	var hbtn = Button.new(); hbtn.text = "回2HP"
+	hbtn.pressed.connect(func(): c.queue_free(); _n().send_swordsman_choice("heal"))
+	hb.add_child(hbtn)
+	var dbtn = Button.new(); dbtn.text = "抽1张牌"
+	dbtn.pressed.connect(func(): c.queue_free(); _n().send_swordsman_choice("draw"))
+	hb.add_child(dbtn)
 	add_child(c)
 
 func _on_end_turn():

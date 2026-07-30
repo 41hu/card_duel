@@ -45,7 +45,7 @@ func distance_to_own_edge(player_idx: int) -> int:
 
 # 手牌上限
 func get_hand_limit(player_idx: int) -> int:
-	return distance_to_own_edge(player_idx) + 1
+	return distance_to_own_edge(player_idx) + 1 + match_ref.char_skills.hand_limit_bonus(player_idx)
 
 # 推人逻辑
 func _can_push(player_idx: int) -> bool:
@@ -111,8 +111,6 @@ func check_trap_trigger(player_idx: int) -> int:
 	if damage > 0:
 		player.hp -= damage
 		match_ref.add_log(player_idx, "踩陷阱-%dHP" % damage)
-	return damage
-
 	return damage
 
 # 放置陷阱

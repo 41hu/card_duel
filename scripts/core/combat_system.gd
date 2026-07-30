@@ -1,4 +1,8 @@
-# combat_system.gd — 战斗系统（伤害计算、响应处理、武器/防具效果）
+# ============================================================
+# combat_system.gd — 战斗系统
+# 核心函数: calculate_attack / process_response / apply_on_hit_effects
+# 攻击结算: 伤害→响应窗口→响应效果→扣HP→命中特效→死亡判定
+# ============================================================
 extends RefCounted
 
 var match_ref  # Weak reference to MatchState for accessing player data
@@ -40,7 +44,9 @@ func calculate_attack(attacker_idx: int, defender_idx: int, card_type_id: String
 			base_damage = attacker.magic_power + 3
 
 	# 应用武器效果（伤害加成）
-	base_damage = _apply_weapon_damage_bonus(attacker, base_damage)
+	base_damage = _apply_weapon_damage_bonus(attacker, base_damage, damage_type)
+	# 应用Buff修正（狂战士等）
+	base_damage += match_ref.status.get_attack_modifier(attacker_idx)
 
 	# 检查防具
 	var armor_result = _check_armor(defender, damage_type, base_damage)
@@ -52,18 +58,20 @@ func calculate_attack(attacker_idx: int, defender_idx: int, card_type_id: String
 	return {damage=base_damage, blocked=false, msg="", damage_type=damage_type}
 
 # ---------- 武器伤害加成 ----------
-func _apply_weapon_damage_bonus(attacker, base_damage: int) -> int:
-	var dmg = base_damage
+func _apply_weapon_damage_bonus(attacker, base_damage: int, damage_type: int) -> int:
 	if attacker.weapon.is_empty():
-		return dmg
-	var weapon_id = attacker.weapon.id
-	match weapon_id:
-		"flame_sword":
-			dmg += 2
-		"lunge":
-			dmg += 1
-		"sage_book":
-			dmg += 2
+		return base_damage
+	# 武器类型必须匹配伤害类型
+	if not Config.weapon_matches_damage_type(attacker.weapon.data.type, damage_type):
+		return base_damage
+	var dmg = base_damage
+	match attacker.weapon.id:
+		"flame_sword": dmg += 2
+		"lunge": dmg += 1
+		"sage_book": dmg += 2
+		"resonance":
+			if attacker.combo_attacks_this_turn.size() > 1:
+				dmg += 2
 	return dmg
 
 # ---------- 防具检查 ----------
@@ -89,19 +97,19 @@ func _check_armor(defender, damage_type: int, damage: int) -> Dictionary:
 		return {completely_blocked=false, damage=damage, msg=""}
 
 	# 第1次：完全免疫
-	if durability == 3:
+	if durability == defender.armor.get("max_durability", 3):
 		defender.armor.durability -= 1
 		return {completely_blocked=true, damage=0, msg="防具完全免疫了伤害！"}
 
 	# 第2、3次：减半
 	defender.armor.durability -= 1
-	var reduced = int(damage / 2)
+	var reduced = floori(damage / 2.0)
 	if defender.armor.durability <= 0:
 		defender.armor = {}
 	return {completely_blocked=false, damage=reduced, msg="防具减免了一半伤害"}
 
 # ---------- 响应处理 ----------
-func process_response(attacker_idx: int, defender_idx: int, attack_card: String, response_card_uid: int) -> Dictionary:
+func process_response(_attacker_idx: int, defender_idx: int, attack_card: String, response_card_uid: int) -> Dictionary:
 	var defender = match_ref.get_player(defender_idx)
 	var defender_cs = match_ref.card_systems[defender_idx]
 
@@ -164,34 +172,37 @@ func apply_on_hit_effects(attacker_idx: int, defender_idx: int, damage: int, dam
 
 	if attacker.weapon.is_empty():
 		return
+	# 武器类型必须匹配伤害类型
+	if not Config.weapon_matches_damage_type(attacker.weapon.data.type, damage_type):
+		return
 
 	var weapon_id = attacker.weapon.id
 
-	# 霜咬：命中后对方下回合位移=0
+	# 霜咬：近战命中后对方下回合位移=0
 	if weapon_id == "frost_bite":
 		defender.frozen_move = true
 
 	# 嗜血：近战≥3伤害回2HP
-	if weapon_id == "bloodthirst" and damage_type == Config.DamageType.PHYSICAL and damage >= 3:
+	if weapon_id == "bloodthirst" and damage >= 3:
 		attacker.hp = min(attacker.max_hp, attacker.hp + 2)
 
-	# 鹰眼：命中后查看对方手牌 (由服务端处理)
+	# 鹰眼：远程命中后查看对方手牌
 	if weapon_id == "hawkeye":
 		pass  # 服务端在回复中附带对方手牌信息
 
-	# 毒牙：中毒-2×2回合
+	# 毒牙：远程命中后中毒-2×2回合
 	if weapon_id == "toxic_fang":
 		match_ref.status.add_dot(defender_idx, "poison", 2, 2)
 
-	# 灼烧：可叠加-1HP/回合
+	# 灼烧：魔法命中后灼烧可叠加-1HP/回合
 	if weapon_id == "scorch":
-		match_ref.status.add_dot(defender_idx, "burn", 1, -1)  # -1表示无限持续
+		match_ref.status.add_dot(defender_idx, "burn", 1, -1)
 
-	# 时滞：命中后对方下回合攻击-1
+	# 时滞：魔法命中后对方下回合攻击-1
 	if weapon_id == "time_lag":
 		match_ref.status.add_buff(defender_idx, "attack_down", -1, 1)
 
-	# 共鸣：在 _handle_magic_attack 中已处理
+	# 共鸣：在 _apply_weapon_damage_bonus 中处理（本回合已出过其他攻击则+2）
 
 # ---------- 处置DoT伤害 ----------
 func apply_dot_damage(player_idx: int) -> int:

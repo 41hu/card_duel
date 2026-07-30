@@ -1,4 +1,37 @@
-# match_state.gd — 对局状态机（服务端权威，整合所有子系统）
+# ============================================================
+# match_state.gd — 对局状态机（服务端权威，唯一真实数据源）
+#
+# 【架构】：服务端运行本文件实例，客户端只做UI渲染。
+# 每个对局一个 MatchState 实例，server_room.gd 创建并管理。
+# LocalGame autoload 创建 MatchState 实例用于本地自我对战。
+#
+# 【子系统】：
+#   card_systems[i]  — CardSystem 牌堆管理（双方共享牌堆）
+#   combat           — CombatSystem 伤害计算/响应/武器防具
+#   movement         — MovementSystem 11格棋盘/距离/陷阱
+#   equipment        — EquipmentSystem 武器幻化/防具管理
+#   status           — StatusSystem Buff/DoT/冻结
+#   bp               — BPSystem 禁选流程
+#   char_skills      — CharacterSkills 角色技能钩子
+#   card_effects     — CardEffects 卡牌效果注册表
+#
+# 【回合流程】（每回合4个阶段，严格顺序）：
+#   _judgment_phase → _draw_phase → _action_phase → _discard_phase
+#   判定(DoT/死亡)   摸牌(N张)    等待客户端操作   等待客户端弃牌
+#   ↓ 调用 char_skills.on_turn_start
+#   ↓ 调用 char_skills.on_opponent_turn_start
+#
+# 【消息协议】：客户端发送 JSON，服务端处理后广播状态
+#   play_card    → process_action → _do_play_card → card_effects.execute
+#   end_turn     → _discard_phase
+#   respond      → process_response
+#   weapon_choice→ confirm_weapon
+#   discard_one / confirm_discard → 弃牌阶段操作
+#   use_skill    → char_skills.use_skill
+#
+# 【状态广播】：get_full_state() 序列化所有可见状态为 Dictionary，
+#   通过 state_changed 信号发送。网络模式下 server_main 做隐私过滤。
+# ============================================================
 extends RefCounted
 
 const CombatSys = preload("res://scripts/core/combat_system.gd")
@@ -90,9 +123,11 @@ func _create_player(idx: int, char_id: String, char_data: Dictionary) -> Diction
 		weapon={}, armor={}, buffs=[], dots=[],
 		frozen=false, frozen_lockout=false, frozen_move=false,
 		damage_reduction_used=false, skill_used_this_turn=false, free_move_used=false,
-		mage_buffed=false,
+		damage_bonus={},
 		combo_attacks_this_turn=[],
 		upgrades={},
+		skill_counts={},
+		pending_swordsman_skill=false,
 	}
 
 func get_player(idx: int): return players[idx]
@@ -132,7 +167,7 @@ func _judgment_phase():
 func _draw_phase():
 	if phase == Config.Phase.GAME_OVER: return
 	turn_phase = Config.TurnPhase.DRAW
-	card_systems[current_player].draw_cards(2)
+	card_systems[current_player].draw_cards(char_skills.draw_count(current_player))
 	add_log(current_player, "抽了2张牌")
 	_action_phase()
 
@@ -162,17 +197,27 @@ func process_action(player_idx: int, action_data: Dictionary) -> Dictionary:
 		"play_card": return _do_play_card(player_idx, action_data)
 		"end_turn": _discard_phase(); return {success=true, msg="结束出牌"}
 		"use_skill": return _handle_skill(player_idx, action_data.get("skill", ""), action_data)
+		"swordsman_choice": return _handle_swordsman_choice(player_idx, action_data)
 	return {success=false, msg="未知行动"}
 
 func _do_play_card(player_idx: int, data: Dictionary) -> Dictionary:
 	var card_uid = data.get("card_uid", -1)
 	var extra = data.get("extra", {})
-	var card_sys = card_systems[player_idx]
+	# 支持从对方手牌出牌（extra.from_opponent=true）
+	var from_idx = player_idx
+	if extra.has("from_opponent") and extra.from_opponent:
+		from_idx = 1 - player_idx
+	var card_sys = card_systems[from_idx]
 	if not card_sys.has_card(card_uid): return {success=false, msg="手牌中没有此卡"}
 	var card = {}
 	for c in card_sys.hand:
 		if c.uid == card_uid: card = c.duplicate(); break
 	for key in extra: card[key] = extra[key]
+	# 支持"当作某牌打出"：extra中as_type覆盖原始type_id（预留功能）
+	if extra.has("as_type"):
+		if not Config.CARD_DB.has(extra.as_type):
+			return {success=false, msg="无效卡牌类型"}
+		card.type_id = extra.as_type
 	var type_id = card.type_id
 	var player = players[player_idx]
 	var cd = Config.CARD_DB[type_id]
@@ -194,6 +239,12 @@ func _do_play_card(player_idx: int, data: Dictionary) -> Dictionary:
 			Config.APType.FUNCTION: player.ap_function -= cd.cost
 	var result = _execute_card_effect(player_idx, card)
 	if not result.get("success", false) and result.get("phase") != "choose":
+		# 效果失败，返还已扣除的 AP
+		if not free_archer and cd.ap != Config.APType.NONE:
+			match cd.ap:
+				Config.APType.ATTACK: player.ap_attack += cd.cost
+				Config.APType.MOVE: player.ap_move += cd.cost
+				Config.APType.FUNCTION: player.ap_function += cd.cost
 		return result
 	if free_archer: player.skill_used_this_turn = true
 	state_changed.emit(get_full_state())
@@ -206,6 +257,24 @@ func _handle_skill(player_idx: int, skill: String, params: Dictionary = {}) -> D
 	if r.get("success", false):
 		state_changed.emit(get_full_state())
 	return r
+
+func _handle_swordsman_choice(player_idx: int, data: Dictionary) -> Dictionary:
+	var p = players[player_idx]
+	if not p.get("pending_swordsman_skill", false): return {success=false, msg="无可用技能"}
+	if p.skill_used_this_turn: return {success=false, msg="本回合已使用过"}
+	var choice = data.get("choice", "")
+	if choice == "heal":
+		p.hp = min(p.max_hp, p.hp + 2)
+		add_log(player_idx, "剑士+2HP")
+	elif choice == "draw":
+		card_systems[player_idx].draw_cards(1)
+		add_log(player_idx, "剑士抽1张")
+	else:
+		return {success=false, msg="无效选择"}
+	p.skill_used_this_turn = true
+	p.pending_swordsman_skill = false
+	state_changed.emit(get_full_state())
+	return {success=true}
 func _use_card(player_idx: int, card: Dictionary):
 	card_systems[player_idx].play_card(card.uid)
 
@@ -253,7 +322,7 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		var rr = combat.process_response(attacker_idx, defender_idx, pending_attack_card, card_uid)
 		if rr.success:
 			match rr.effect:
-				"block": final_damage = int(final_damage / 2)
+				"block": final_damage = floori(final_damage / 2.0)
 				"restrain": final_damage = max(0, final_damage - rr.value)
 				"dodge": final_damage = 0
 			add_log(defender_idx, "卡牌响应")
@@ -270,11 +339,12 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		state_changed.emit(get_full_state())
 		return
 	if final_damage > 0:
+		# 技能减伤（圣骑士等）：在扣血前调用
+		final_damage = char_skills.on_taking_damage(defender_idx, attacker_idx, final_damage)
 		players[defender_idx].hp -= final_damage
 		add_log(attacker_idx, "造成%d伤害" % final_damage)
 		combat.apply_on_hit_effects(attacker_idx, defender_idx, final_damage, attacker_last_type)
 		char_skills.on_attack_hit(attacker_idx, defender_idx, final_damage, attacker_last_type)
-		final_damage = char_skills.on_taking_damage(defender_idx, attacker_idx, final_damage)
 	if players[defender_idx].hp <= 0: _handle_death(defender_idx)
 	if phase == Config.Phase.GAME_OVER: return
 	turn_phase = Config.TurnPhase.ACTION
@@ -284,8 +354,14 @@ func skip_response(defender_idx: int): process_response(defender_idx, false)
 
 func _handle_move_card(player_idx: int, card: Dictionary) -> Dictionary:
 	var direction = card.get("direction", 0)
-	if direction == 0: return {success=false, msg="请选择移动方向"}
-	if not movement.move_player(player_idx, direction): return {success=false, msg="无法移动"}
+	var steps = card.get("steps", 1)
+	if direction != -1 and direction != 1: return {success=false, msg="无效移动方向"}
+	if not char_skills.move_distances(player_idx).has(steps):
+		return {success=false, msg="不支持%d步移动" % steps}
+	if status.get_move_modifier(player_idx) < 0:
+		return {success=false, msg="本回合无法移动"}
+	for _s in range(steps):
+		if not movement.move_player(player_idx, direction): break
 	_use_card(player_idx, card)
 	add_log(player_idx, "移动到%d" % players[player_idx].position)
 	var td = movement.check_trap_trigger(player_idx)
@@ -303,6 +379,7 @@ func _handle_destroy(player_idx: int, card: Dictionary) -> Dictionary:
 		if traps.size() > 0: traps.pop_back(); _use_card(player_idx, card); add_log(player_idx, "摧毁陷阱"); return {success=true}
 		return {success=false, msg="场上没有陷阱"}
 	var et = card.get("equip_type", "weapon")
+	if et != "weapon" and et != "armor": return {success=false, msg="无效装备类型"}
 	var msg = equipment.destroy_equipment(opp, et); _use_card(player_idx, card); add_log(player_idx, msg); return {success=true}
 
 func _handle_seize(player_idx: int, card: Dictionary) -> Dictionary:
@@ -329,7 +406,7 @@ func confirm_weapon(player_idx: int, accept: bool):
 	if waiting_for_weapon_choice != player_idx: return
 	waiting_for_weapon_choice = -1
 	if accept: equipment.equip_weapon(player_idx, pending_weapon_id); add_log(player_idx, "装备武器")
-	else: add_log(player_idx, "放弃武器")
+	else: equipment.discard_weapon_offer(pending_weapon_id); add_log(player_idx, "放弃武器")
 	pending_weapon_id = ""; state_changed.emit(get_full_state())
 
 func _discard_phase():
@@ -357,7 +434,6 @@ func confirm_discard(player_idx: int, card_uids: Array = []):
 	_finish_discard()
 
 func _finish_discard():
-	var player = players[current_player]
 	char_skills.on_turn_end(current_player)
 	status.on_turn_end(current_player)
 	_advance_to_next_player()
@@ -391,7 +467,7 @@ func _use_heal_in_resurrection(player_idx: int):
 	var card = card_systems[player_idx].use_heal_card()
 	if card.is_empty(): return
 	var amount = 3 if card.type_id == "heal_3" else 5
-	if players[player_idx].char_id == "priest": amount += 2
+	amount = char_skills.on_heal(player_idx, amount)
 	players[player_idx].hp = min(players[player_idx].max_hp, players[player_idx].hp + amount)
 
 func _check_permanent_death(player_idx: int):
@@ -404,6 +480,30 @@ func _check_permanent_death(player_idx: int):
 
 func add_log(player_idx: int, msg: String):
 	action_log.append({turn=turn_number, player=player_idx, player_name=Config.char_name(players[player_idx].char_id), msg=msg})
+
+# 偷对手一张牌到自己手牌（返回uid，-1表示失败）
+func steal_card(player_idx: int, target_uid: int) -> int:
+	var opp = 1 - player_idx
+	if not card_systems[opp].has_card(target_uid): return -1
+	var card = card_systems[opp].play_card(target_uid)
+	if card.is_empty(): return -1
+	card_systems[player_idx].add_to_hand(card)
+	add_log(player_idx, "取走对方1张牌")
+	return card.uid
+
+# 归还一张牌给对手
+func return_card(player_idx: int, card_uid: int) -> bool:
+	var opp = 1 - player_idx
+	if not card_systems[player_idx].has_card(card_uid): return false
+	var card = card_systems[player_idx].play_card(card_uid)
+	if card.is_empty(): return false
+	card_systems[opp].add_to_hand(card)
+	return true
+
+# 查看对手手牌（返回 type_id 列表，不含 uid）
+func reveal_opponent_hand(asking_player_idx: int) -> Array:
+	var opp = 1 - asking_player_idx
+	return card_systems[opp].get_hand_type_ids()
 
 func get_full_state(full: bool = false) -> Dictionary:
 	var state = {
@@ -425,6 +525,8 @@ func get_full_state(full: bool = false) -> Dictionary:
 			ap_attack=p.get("ap_attack",0), ap_move=p.get("ap_move",0), ap_function=p.get("ap_function",0),
 			hand_size=cs.hand.size(), deck_size=cs.deck.size(),
 			hand=cs.hand.duplicate(), hand_limit=movement.get_hand_limit(i),
+			active_skill=char_skills.has_active_skill(i),
+			pending_swordsman_skill=p.get("pending_swordsman_skill", false),
 		})
 	if full: state.bp_state = bp.get_bp_state()
 	return state

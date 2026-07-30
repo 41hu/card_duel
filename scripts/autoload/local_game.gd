@@ -11,12 +11,12 @@ signal bp_state_updated(bp_state: Dictionary)
 signal weapon_prompt(weapon_data: Dictionary)
 signal response_needed(attack_info: Dictionary)
 signal game_ended(result: Dictionary)
+signal hand_revealed(cards: Array)
 signal network_error(msg: String)
 
 const MatchStateClass = preload("res://scripts/core/match_state.gd")
 
 var game: MatchStateClass
-var _current_view: int = -1
 var _player_names = ["自己(P1)", "自己(P2)"]
 
 func start_local_game(p1_char: String, p2_char: String):
@@ -29,6 +29,13 @@ func start_local_game(p1_char: String, p2_char: String):
 	game._start_game()
 	# 缓存初始状态供 battle_ui 读取
 	battle_state_cache = game.get_full_state()
+
+# 启动本地自我对战的 BP 流程
+func start_bp():
+	game = MatchStateClass.new()
+	game.bp.reset()
+	bp_state_cache = game.bp.get_bp_state()
+	bp_state_cache["t"] = "bp_state"
 
 func _on_state(state: Dictionary):
 	state["t"] = "game_state"
@@ -43,10 +50,10 @@ func _on_state(state: Dictionary):
 		f.close()
 	state_updated.emit(state)
 
-func _on_weapon(player_idx: int, weapon: Dictionary):
+func _on_weapon(_player_idx: int, weapon: Dictionary):
 	weapon_prompt.emit(weapon)
 
-func _on_response(defender_idx: int, attack_info: Dictionary):
+func _on_response(_defender_idx: int, attack_info: Dictionary):
 	attack_info["t"] = "response_needed"
 	response_needed.emit(attack_info)
 
@@ -71,7 +78,6 @@ var player_index: int = 0
 
 func send_bp_action(action: String, char_id: String):
 	if not game: return
-	var idx = 0 if game.bp.bp_phase.begins_with("first") == (game.bp._bp_first == 0) else 1
 	# Determine who is acting based on phase
 	var phase = game.bp.bp_phase
 	var acting = -1
@@ -130,8 +136,18 @@ func send_use_skill(skill_name: String, extra: Dictionary = {}):
 	for key in extra: data[key] = extra[key]
 	game.process_action(game.current_player, data)
 
+func send_swordsman_choice(choice: String):
+	if not game: return
+	game.process_action(game.current_player, {"action": "swordsman_choice", "choice": choice})
+
+func send_reveal_hand():
+	if not game: return
+	var hand = game.reveal_opponent_hand(game.current_player)
+	hand_revealed.emit(hand)
+
 func disconnect_from_server():
 	game = null
+	server_disconnected.emit()
 
 func get_connected() -> bool:
 	return game != null

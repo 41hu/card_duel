@@ -1,4 +1,13 @@
-# card_effects.gd — 卡牌效果系统（加新卡只需改 config + 本文件注册表）
+# ============================================================
+# card_effects.gd — 卡牌效果注册表
+#
+# 【用法】：
+#   加新卡：1) config.gd 的 CARD_DB 加一行
+#           2) 本文件 _handlers 注册表加一行 -> 写效果函数
+#
+#   execute(player_idx, card) 根据 card.type_id 查表执行效果
+#   每个效果函数签名为 func(player_idx, card) -> {success, msg}
+# ============================================================
 extends RefCounted
 
 var _m

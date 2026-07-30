@@ -26,17 +26,12 @@ jobs:
 
       - name: Export Windows .exe
         run: |
-          mkdir -p export
-          ./Godot_v4.7.1-stable_linux.x86_64 --headless --path . --export-release "Windows Desktop" "export/Card Duel.exe"
-
-      - name: Zip Export
-        run: |
-          cd export
-          zip -r ../CardDuel_Windows.zip .
+          mkdir -p dist
+          ./Godot_v4.7.1-stable_linux.x86_64 --headless --path . --export-release "Windows Desktop" "dist/Card Duel.exe"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CardDuel-Windows
-          path: CardDuel_Windows.zip
+          name: CardDuel
+          path: dist/
           retention-days: 30

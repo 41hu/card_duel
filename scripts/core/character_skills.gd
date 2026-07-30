@@ -59,6 +59,11 @@ func on_attack_cast(player_idx: int, type_id: String) -> int:
 		_ms.add_log(player_idx, "法师强化: +2")
 	return bonus
 
+func on_opponent_turn_start(current_player_idx: int):
+	var opp = 1 - current_player_idx
+	match _ms.players[opp].char_id:
+		_: pass  # 加新角色在这里
+
 func has_active_skill(player_idx: int) -> String:
 	var p = _ms.players[player_idx]
 	if p.skill_used_this_turn: return ""
@@ -75,6 +80,31 @@ func use_skill(player_idx: int, skill: String, params: Dictionary) -> Dictionary
 		"mage_discard": return _mage_discard(player_idx, params)
 		"assassin_move": return _assassin_move(player_idx, params)
 	return {success=false, msg="未知技能"}
+
+# 技能升级：弃N张牌永久增强技能效果。加新角色写在这里
+func can_upgrade_skill(player_idx: int) -> String:
+	match _ms.players[player_idx].char_id:
+		_: return ""  # 默认不可升级
+
+func upgrade_skill(player_idx: int, discarded_count: int) -> Dictionary:
+	var p = _ms.players[player_idx]
+	var key = str("up_", p.char_id)
+	p.upgrades[key] = p.upgrades.get(key, 0) + discarded_count
+	_ms.add_log(player_idx, "技能永久增强! (+%d级)" % discarded_count)
+	return {success=true}
+
+# 免疫检测：加新角色在这里
+func is_immune(player_idx: int, effect: String) -> bool:
+	match _ms.players[player_idx].char_id:
+		_: return false
+
+# 修改生命上限（保底1）
+func modify_max_hp(player_idx: int, delta: int):
+	var p = _ms.players[player_idx]
+	p.max_hp = max(1, p.max_hp + delta)
+	p.hp = min(p.hp, p.max_hp)
+	_ms.add_log(player_idx, "生命上限%+d" % delta)
+	if delta > 0: p.hp = min(p.hp + delta, p.max_hp)
 
 func armor_durability_bonus(player_idx: int) -> int:
 	if _ms.players[player_idx].char_id == "paladin": return 1

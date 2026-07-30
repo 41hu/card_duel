@@ -70,12 +70,12 @@ func _on_disconnected(): status_label.text = "断开连接"
 func _on_room_created(room_id: String):
 	c_room_label.text = "房间号: %s" % room_id
 	status_label.text = "等待对手加入..."
-	var btn = _make_ready_btn(create_panel, 310)
+	var btn = _make_ready_btn(create_panel, 360)
 	btn.pressed.connect(func(): Network.ready_up(); btn.disabled = true; btn.text = "已准备")
 
 func _on_room_joined(room_id: String, _players: Array):
 	status_label.text = "已加入房间 %s" % room_id
-	var btn = _make_ready_btn(join_panel, 350)
+	var btn = _make_ready_btn(join_panel, 390)
 	btn.pressed.connect(func(): Network.ready_up(); btn.disabled = true; btn.text = "已准备")
 
 func _make_ready_btn(parent: Control, y: float) -> Button:

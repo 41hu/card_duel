@@ -306,14 +306,17 @@ func _refresh_all(state: Dictionary):
 			if in_disc and card.uid in _discard_selected:
 				btn.text = "✕ " + btn.text
 				btn.add_theme_color_override("font_color", Color(1, 0.4, 0.4))
+				cm.orig_color = Color(1, 0.4, 0.4)
 			else:
 				# 卡牌颜色: 攻击红, 位移蓝, 功能青, 免费黄
 				var ap = cd.get("ap", 0)
+				var col = Color(1, 0.9, 0.3)
 				match ap:
-					Config.APType.ATTACK: btn.add_theme_color_override("font_color", Color(1, 0.5, 0.4))
-					Config.APType.MOVE: btn.add_theme_color_override("font_color", Color(0.4, 0.6, 1))
-					Config.APType.FUNCTION: btn.add_theme_color_override("font_color", Color(0.3, 0.9, 0.6))
-					_: btn.add_theme_color_override("font_color", Color(1, 0.9, 0.3))
+					Config.APType.ATTACK: col = Color(1, 0.5, 0.4)
+					Config.APType.MOVE: col = Color(0.4, 0.6, 1)
+					Config.APType.FUNCTION: col = Color(0.3, 0.9, 0.6)
+				btn.add_theme_color_override("font_color", col)
+				cm.orig_color = col
 			btn.size = Vector2(64, 64)
 			btn.set_meta("card_data", cm)
 			btn.pressed.connect(_on_card_clicked.bind(card.uid, tid))
@@ -342,9 +345,8 @@ func _refresh_all(state: Dictionary):
 		_discard_selected.clear()
 		end_turn_btn.text = "结束出牌"
 		end_turn_btn.visible = _is_my_turn
-		if not _is_my_turn:
-			confirm_btn.visible = false
-			cancel_btn.visible = false
+		confirm_btn.visible = false
+		cancel_btn.visible = false
 		# 技能按钮
 		if _is_my_turn and me.char_id in ["mage", "assassin"] and not me.get("skill_used_this_turn", false):
 			skill_btn.visible = true
@@ -444,11 +446,20 @@ func _on_confirm_card():
 	cancel_btn.visible = false
 
 func _refresh_highlight():
+	# 先恢复所有卡的颜色
 	for child in hand_area.get_children():
 		if child is Button:
 			var cm = child.get_meta("card_data", {})
-			var col = Color(1, 1, 0) if cm.get("uid", -1) == _selected_uid else Color.WHITE
-			child.add_theme_color_override("font_color", col)
+			var orig = cm.get("orig_color", Color.WHITE)
+			child.remove_theme_color_override("font_color")
+			child.add_theme_color_override("font_color", orig)
+	# 再高亮选中的卡
+	for child in hand_area.get_children():
+		if child is Button:
+			var cm = child.get_meta("card_data", {})
+			if cm.get("uid", -1) == _selected_uid:
+				child.remove_theme_color_override("font_color")
+				child.add_theme_color_override("font_color", Color(0.3, 1, 1))
 
 func _on_board_click(event: InputEvent, cell_index: int):
 	if not (event is InputEventMouseButton):

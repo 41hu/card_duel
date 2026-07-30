@@ -21,20 +21,21 @@ grow_vertical = 2
 color = Color(0.06, 0.08, 0.12, 1)
 
 [node name="OppInfo" type="Label" parent="." unique_id=1702823590]
+custom_minimum_size = Vector2(770, 0)
 layout_mode = 0
-offset_left = 1118.0
-offset_top = 798.0
-offset_right = 1888.0
-offset_bottom = 868.0
+offset_left = 1120.0
+offset_top = 832.0
+offset_right = 1890.0
+offset_bottom = 902.0
 theme_override_colors/font_color = Color(1, 0.7, 0.5, 1)
 theme_override_font_sizes/font_size = 12
 autowrap_mode = 3
 
 [node name="PhaseLabel" type="Label" parent="." unique_id=582543779]
 layout_mode = 0
-offset_left = 100.0
+offset_left = 550.0
 offset_top = 85.0
-offset_right = 700.0
+offset_right = 1150.0
 offset_bottom = 115.0
 theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
 theme_override_font_sizes/font_size = 18
@@ -42,27 +43,28 @@ horizontal_alignment = 1
 
 [node name="HandTitle" type="Label" parent="." unique_id=1382061419]
 layout_mode = 0
-offset_left = 487.0
-offset_top = 301.0
-offset_right = 537.0
-offset_bottom = 326.0
+offset_left = 854.0
+offset_top = 316.0
+offset_right = 904.0
+offset_bottom = 341.0
 theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
 text = "手牌"
 
 [node name="HandArea" type="HBoxContainer" parent="." unique_id=853645005]
 layout_mode = 0
-offset_left = 188.0
-offset_top = 372.0
-offset_right = 968.0
-offset_bottom = 472.0
+offset_left = 512.0
+offset_top = 401.0
+offset_right = 1292.0
+offset_bottom = 501.0
 alignment = 1
 
 [node name="MeInfo" type="Label" parent="." unique_id=583079327]
+custom_minimum_size = Vector2(770, 0)
 layout_mode = 0
-offset_left = 26.0
-offset_top = 723.0
-offset_right = 796.0
-offset_bottom = 773.0
+offset_left = 16.0
+offset_top = 840.0
+offset_right = 792.0
+offset_bottom = 896.0
 theme_override_colors/font_color = Color(0.5, 0.8, 1, 1)
 theme_override_font_sizes/font_size = 12
 autowrap_mode = 3
@@ -100,17 +102,16 @@ offset_bottom = 574.0
 theme_override_colors/font_color = Color(0.6, 0.6, 0.6, 1)
 vertical_alignment = 1
 
-[node name="CardInfo" type="Label" parent="."]
+[node name="CardInfo" type="Label" parent="." unique_id=1783440287]
 layout_mode = 0
-offset_left = 158.0
-offset_top = 338.0
-offset_right = 508.0
-offset_bottom = 368.0
-theme_override_font_sizes/font_size = 13
+offset_left = 715.0
+offset_top = 544.0
+offset_right = 1065.0
+offset_bottom = 574.0
 theme_override_colors/font_color = Color(0.8, 0.8, 0.5, 1)
+theme_override_font_sizes/font_size = 13
 
-[node name="SkillBtn" type="Button" parent="."]
-visible = false
+[node name="SkillBtn" type="Button" parent="." unique_id=1228839203]
 layout_mode = 0
 offset_left = 310.0
 offset_top = 540.0
@@ -118,8 +119,7 @@ offset_right = 410.0
 offset_bottom = 575.0
 text = "技能"
 
-[node name="SkillConfirm" type="Button" parent="."]
-visible = false
+[node name="SkillConfirm" type="Button" parent="." unique_id=1530011987]
 layout_mode = 0
 offset_left = 415.0
 offset_top = 540.0
@@ -127,8 +127,7 @@ offset_right = 515.0
 offset_bottom = 575.0
 text = "确认技能"
 
-[node name="SkillCancel" type="Button" parent="."]
-visible = false
+[node name="SkillCancel" type="Button" parent="." unique_id=46509515]
 layout_mode = 0
 offset_left = 520.0
 offset_top = 540.0

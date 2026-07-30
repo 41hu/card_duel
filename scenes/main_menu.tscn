@@ -68,10 +68,10 @@ text = "自我对战"
 [node name="CreatePanel" type="Control" parent="." unique_id=535578410]
 visible = false
 anchors_preset = 0
-offset_left = 200.0
-offset_top = 160.0
-offset_right = 600.0
-offset_bottom = 500.0
+offset_left = 743.0
+offset_top = 217.0
+offset_right = 1143.0
+offset_bottom = 617.0
 
 [node name="CreateTitle" type="Label" parent="CreatePanel" unique_id=1535493356]
 layout_mode = 0
@@ -146,10 +146,10 @@ horizontal_alignment = 1
 [node name="JoinPanel" type="Control" parent="." unique_id=579832077]
 visible = false
 anchors_preset = 0
-offset_left = 200.0
-offset_top = 160.0
-offset_right = 600.0
-offset_bottom = 520.0
+offset_left = 731.0
+offset_top = 207.0
+offset_right = 1129.0
+offset_bottom = 689.0
 
 [node name="JoinTitle" type="Label" parent="JoinPanel" unique_id=1562938152]
 layout_mode = 0

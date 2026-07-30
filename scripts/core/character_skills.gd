@@ -259,7 +259,7 @@ func _berserker_rage(player_idx: int):
 	_ms.add_log(player_idx, "狂战士+1近战")
 
 func _mage_discard(player_idx: int, params: Dictionary) -> Dictionary:
-	var uid = params.get("card_uid", -1)
+	var uid = int(params.get("card_uid", -1))
 	var cs = _ms.card_systems[player_idx]
 	if not cs.has_card(uid): return {success=false, msg="没有此牌"}
 	cs.discard_card(uid)

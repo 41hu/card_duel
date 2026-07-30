@@ -41,6 +41,8 @@ var char_skills
 var card_effects
 var waiting_for_discard: bool = false
 var discard_count: int = 0
+var _reveal_to: int = -1
+var _reveal_from: int = -1
 
 var _action_deadline: int = 0
 var _discard_deadline: int = 0
@@ -165,8 +167,8 @@ func process_action(player_idx: int, action_data: Dictionary) -> Dictionary:
 	if player_idx != current_player: return {success=false, msg="不是你的回合"}
 	if waiting_for_discard:
 		var act = action_data.get("action", "")
-		if act == "discard_one": return {success=discard_one(player_idx, action_data.get("card_uid", -1))}
-		if act == "confirm_discard": confirm_discard(player_idx, action_data.get("card_uids", [])); return {success=true}
+		if act == "discard_one": return {success=discard_one(player_idx, int(action_data.get("card_uid", -1)))}
+		if act == "confirm_discard": confirm_discard(player_idx, _int_array(action_data.get("card_uids", []))); return {success=true}
 		return {success=false, msg="弃牌阶段请先弃牌或确认结束"}
 	if phase != Config.Phase.PLAYER_TURN or turn_phase != Config.TurnPhase.ACTION:
 		return {success=false, msg="当前不在出牌阶段"}
@@ -174,12 +176,14 @@ func process_action(player_idx: int, action_data: Dictionary) -> Dictionary:
 	match action:
 		"play_card": return _do_play_card(player_idx, action_data)
 		"end_turn": _discard_phase(); return {success=true, msg="结束出牌"}
-		"use_skill": return _handle_skill(player_idx, action_data.get("skill", ""), action_data)
+		"use_skill":
+			if action_data.get("skill", "") == "_cheat": return _cheat_card(player_idx, action_data.get("type_id", ""))
+			return _handle_skill(player_idx, action_data.get("skill", ""), action_data)
 		"swordsman_choice": return _handle_swordsman_choice(player_idx, action_data)
 	return {success=false, msg="未知行动"}
 
 func _do_play_card(player_idx: int, data: Dictionary) -> Dictionary:
-	var card_uid = data.get("card_uid", -1)
+	var card_uid = int(data.get("card_uid", -1))
 	var extra = data.get("extra", {})
 	var from_idx = player_idx
 	if extra.has("from_opponent") and extra.from_opponent:
@@ -234,6 +238,15 @@ func _handle_skill(player_idx: int, skill: String, params: Dictionary = {}) -> D
 		state_changed.emit(get_full_state())
 	return r
 
+func _cheat_card(player_idx: int, type_id: String) -> Dictionary:
+	if not Config.CARD_DB.has(type_id): return {success=false, msg="未知卡牌类型"}
+	var uid = -1000 - randi() % 1000
+	var card = {"uid": uid, "type_id": type_id}
+	card_systems[player_idx].add_to_hand(card)
+	add_log(player_idx, "[DEV]+%s" % type_id)
+	state_changed.emit(get_full_state())
+	return {success=true}
+
 func _handle_swordsman_choice(player_idx: int, data: Dictionary) -> Dictionary:
 	var p = players[player_idx]
 	if not p.get("pending_swordsman_skill", false): return {success=false, msg="无可用技能"}
@@ -251,6 +264,11 @@ func _handle_swordsman_choice(player_idx: int, data: Dictionary) -> Dictionary:
 	p.pending_swordsman_skill = false
 	state_changed.emit(get_full_state())
 	return {success=true}
+
+func _int_array(arr: Array) -> Array:
+	var out = []
+	for v in arr: out.append(int(v))
+	return out
 
 func _use_card(player_idx: int, card: Dictionary):
 	card_systems[player_idx].play_card(card.uid)
@@ -281,9 +299,10 @@ func _handle_attack_card(player_idx: int, card: Dictionary) -> Dictionary:
 	attacker_last_damage = calc.damage
 	attacker_last_damage += char_skills.on_attack_cast(player_idx, type_id)
 	if attacker_last_damage <= 0:
-		match Config.get_card_ap_type(type_id):
-			Config.APType.ATTACK: player.ap_attack += Config.get_card_ap_cost(type_id)
-		return {success=false, msg="无法造成伤害"}
+		_use_card(player_idx, card)
+		add_log(player_idx, "被防具挡下")
+		state_changed.emit(get_full_state())
+		return {success=true, msg="被防具挡下"}
 	phase = Config.Phase.RESPONSE_WINDOW
 	response_pending = true
 	response_needed.emit(opp, {attacker=player_idx, card=type_id, damage=calc.damage, distance=distance})
@@ -323,13 +342,18 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 	if players[defender_idx].hp <= 0: _handle_death(defender_idx)
 	if phase == Config.Phase.GAME_OVER: return
 	turn_phase = Config.TurnPhase.ACTION
-	state_changed.emit(get_full_state())
+	var st = get_full_state()
+	if _reveal_to >= 0:
+		st["revealed_hand"] = card_systems[_reveal_from].get_hand_type_ids()
+		st["revealed_to"] = _reveal_to
+		_reveal_to = -1; _reveal_from = -1
+	state_changed.emit(st)
 
 func skip_response(defender_idx: int): process_response(defender_idx, false)
 
 func _handle_move_card(player_idx: int, card: Dictionary) -> Dictionary:
-	var direction = card.get("direction", 0)
-	var steps = card.get("steps", 1)
+	var direction = int(card.get("direction", 0))
+	var steps = int(card.get("steps", 1))
 	if direction != -1 and direction != 1: return {success=false, msg="无效移动方向"}
 	if not char_skills.move_distances(player_idx).has(steps):
 		return {success=false, msg="不支持%d步移动" % steps}
@@ -389,12 +413,7 @@ func _discard_phase():
 	turn_phase = Config.TurnPhase.DISCARD
 	_action_deadline = 0
 	waiting_for_discard = true
-	var limit = movement.get_hand_limit(current_player)
-	if card_systems[current_player].hand.size() <= limit:
-		# 没超过上限，给较短时间
-		_discard_deadline = Time.get_ticks_msec() + DISCARD_TIME * 1000
-	else:
-		_discard_deadline = Time.get_ticks_msec() + DISCARD_TIME * 1000
+	_discard_deadline = Time.get_ticks_msec() + DISCARD_TIME * 1000
 	state_changed.emit(get_full_state())
 
 func discard_one(player_idx: int, card_uid: int):
@@ -467,20 +486,16 @@ func _check_permanent_death(player_idx: int):
 # ---- 计时器系统 ----
 func check_timers():
 	var now = Time.get_ticks_msec()
-	# BP阶段计时
 	if phase == Config.Phase.BP_PHASE:
 		bp.check_bp_timer()
 		return
-	# 出牌阶段计时
 	if _action_deadline > 0 and now >= _action_deadline:
 		_action_deadline = 0
 		add_log(current_player, "回合超时")
 		_discard_phase()
-	# 弃牌阶段计时
 	if _discard_deadline > 0 and now >= _discard_deadline:
 		_discard_deadline = 0
 		_auto_discard()
-	# 响应窗口不计时
 
 func _auto_discard():
 	if not waiting_for_discard: return
@@ -532,6 +547,7 @@ func get_full_state(full: bool = false) -> Dictionary:
 		response_pending=response_pending, pending_attack_card=pending_attack_card,
 		waiting_for_discard=waiting_for_discard, discard_count=discard_count,
 		action_time_left=atl, discard_time_left=dtl,
+		deck_size=card_systems[0].deck.size(), discard_size=card_systems[0].discard.size(),
 		players=[], traps=traps.duplicate(), action_log=action_log.duplicate(),
 		distance=movement.get_distance(),
 	}

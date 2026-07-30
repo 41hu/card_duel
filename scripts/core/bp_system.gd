@@ -43,15 +43,15 @@ func execute_action(player_idx: int, action: String, char_id: String) -> bool:
 		"first_ban":
 			if not is_first or action != "ban": return false
 			banned_chars.append(char_id); available_chars.erase(char_id)
-			bp_phase = "second_ban"; return true
+			bp_phase = "second_ban"; bp_deadline = Time.get_ticks_msec() + BP_TIME * 1000; return true
 		"second_ban":
 			if is_first or action != "ban": return false
 			banned_chars.append(char_id); available_chars.erase(char_id)
-			bp_phase = "first_pick"; return true
+			bp_phase = "first_pick"; bp_deadline = Time.get_ticks_msec() + BP_TIME * 1000; return true
 		"first_pick":
 			if not is_first or action != "pick": return false
 			picked_chars[0] = char_id; available_chars.erase(char_id)
-			bp_phase = "second_pick"; return true
+			bp_phase = "second_pick"; bp_deadline = Time.get_ticks_msec() + BP_TIME * 1000; return true
 		"second_pick":
 			if is_first or action != "pick": return false
 			picked_chars[1] = char_id; available_chars.erase(char_id)

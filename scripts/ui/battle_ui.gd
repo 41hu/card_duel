@@ -302,10 +302,18 @@ func _refresh_all(state: Dictionary):
 				elif tid in ["near"]:
 					cm.can_respond = atk in ["near", "heavy"]
 			var btn = Button.new()
-			btn.text = "%s [%s]" % [cn, al]
+			btn.text = "%s" % cn
 			if in_disc and card.uid in _discard_selected:
 				btn.text = "✕ " + btn.text
-				btn.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+				btn.add_theme_color_override("font_color", Color(1, 0.4, 0.4))
+			else:
+				# 卡牌颜色: 攻击红, 位移蓝, 功能青, 免费黄
+				var ap = cd.get("ap", 0)
+				match ap:
+					Config.APType.ATTACK: btn.add_theme_color_override("font_color", Color(1, 0.5, 0.4))
+					Config.APType.MOVE: btn.add_theme_color_override("font_color", Color(0.4, 0.6, 1))
+					Config.APType.FUNCTION: btn.add_theme_color_override("font_color", Color(0.3, 0.9, 0.6))
+					_: btn.add_theme_color_override("font_color", Color(1, 0.9, 0.3))
 			btn.size = Vector2(64, 64)
 			btn.set_meta("card_data", cm)
 			btn.pressed.connect(_on_card_clicked.bind(card.uid, tid))
@@ -349,31 +357,41 @@ func _fmt_player(p, tag: String) -> String:
 	var bar = ""
 	for _i in range(20):
 		bar += "=" if (float(_i) / 20.0) < hp_pct else "-"
-	var txt = "%s:%s HP:%d/%d[%s] 坐标:%d 近%d远%d魔%d 攻%d移%d功%d 手牌:%d/%d 堆:%d" % [
-		tag, p.char_name, p.hp, p.max_hp, bar, p.position,
-		p.near_power, p.range_power, p.magic_power,
-		p.get("ap_attack", 0), p.get("ap_move", 0), p.get("ap_function", 0),
-		p.hand_size, p.get("hand_limit", 5), p.deck_size
-	]
+	# 行动点圆圈
+	var ap = _ap_circles(p.get("ap_attack", 0), p.get("ap_move", 0), p.get("ap_function", 0))
+	var txt = "[%s] %s HP:%d/%d[%s] 坐标:%d\n" % [tag, p.char_name, p.hp, p.max_hp, bar, p.position]
+	txt += "近%d 远%d 魔%d | %s | 手牌:%d/%d" % [p.near_power, p.range_power, p.magic_power, ap, p.hand_size, p.get("hand_limit", 5)]
 	if not p.weapon.is_empty():
-		txt += " 武器:" + p.weapon.data.name
+		txt += " | 武器:%s" % p.weapon.data.name
 	if not p.armor.is_empty():
-		txt += " 防具:" + p.armor.data.name + "(%d/3)" % p.armor.durability
+		txt += " | 防具:%s" % p.armor.data.name + "(%d/3)" % p.armor.durability
 	if p.get("frozen", false):
-		txt += " 冻结!"
-	txt += "\n技能:" + _skill_labels.get(p.char_id, "?")
-	if p.get("dots", []).size() > 0:
-		for d in p.dots:
-			txt += " | " + d.type + "(-%dHP" % d.damage
-			if d.duration > 0: txt += ",%d回" % d.duration
-			txt += ")"
-	if p.get("buffs", []).size() > 0:
-		for b in p.buffs:
-			var sgn = "+" if b.value > 0 else ""
-			txt += " | " + b.type + "(" + sgn + str(b.value)
-			if b.duration > 0: txt += ",%d回" % b.duration
-			txt += ")"
-	return txt
+		txt += " | 冻结!"
+	var dots = p.get("dots", [])
+	var buffs = p.get("buffs", [])
+	var skill = _skill_labels.get(p.char_id, "?")
+	var extra = ""
+	if dots.size() > 0 or buffs.size() > 0 or skill != "?":
+		extra += "\n"
+		if dots.size() > 0:
+			for d in dots:
+				var dur = ("%d回" % d.duration) if d.duration > 0 else ("" if d.duration == -1 else "")
+				extra += " [DoT] %s -%dHP %s" % [d.type, d.damage, dur]
+		if buffs.size() > 0:
+			for b in buffs:
+				var sgn = "+" if b.value > 0 else ""
+				var dur = ("%d回" % b.duration) if b.duration > 0 else ("回合" if b.duration == -1 else "")
+				extra += " [Buff] %s %s%d %s" % [b.type, sgn, b.value, dur]
+		if skill != "?":
+			if extra != "": extra += " |"
+			extra += " 技能:%s" % skill
+	return txt + extra
+
+func _ap_circles(atk: int, mov: int, fun: int) -> String:
+	var a = ""; for _i in range(2): a += "●" if _i < atk else "○"
+	var m = ""; for _i in range(1): m += "●" if _i < mov else "○"
+	var f = ""; for _i in range(1): f += "●" if _i < fun else "○"
+	return "攻%s 移%s 功%s" % [a, m, f]
 
 func _on_card_clicked(card_uid: int, type_id: String):
 	var state = _game_state

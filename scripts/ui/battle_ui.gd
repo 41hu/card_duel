@@ -28,6 +28,7 @@ var _discard_selected: Array = []
 var _last_hp: Array = [-1, -1]
 var _last_turn: int = -1
 var _last_player: int = -1
+var _timer_left: int = -1
 var _skill_waiting: bool = false
 var _resp_popup: Control
 var _wpn_popup: Control
@@ -218,6 +219,26 @@ func _on_state_updated(state: Dictionary):
 		card_info.text = ""
 	_refresh_all(state)
 
+func _update_timer_label():
+	if _timer_left <= 0:
+		return
+	var tp = ["判定", "摸牌", "出牌", "弃牌"]
+	var tn = tp[_game_state.get("turn_phase", 0)] if _game_state.get("turn_phase", 0) < tp.size() else "?"
+	var who = "你的回合" if _is_my_turn else "对手回合"
+	phase_label.text = "T%d | %s | %s | %ds" % [_game_state.turn_number, tn, who, _timer_left]
+
+func _process(delta):
+	if _timer_left <= 0:
+		return
+	_timer_elapsed += delta
+	if _timer_elapsed >= 1.0:
+		_timer_elapsed -= 1.0
+		_timer_left -= 1
+		if _timer_left < 0: _timer_left = -1
+		_update_timer_label()
+
+var _timer_elapsed: float = 0.0
+
 func _refresh_all(state: Dictionary):
 	card_info.text = ""
 	var pls = state.players
@@ -235,7 +256,15 @@ func _refresh_all(state: Dictionary):
 	var tp = ["判定", "摸牌", "出牌", "弃牌"]
 	var tn = tp[state.get("turn_phase", 0)] if state.get("turn_phase", 0) < tp.size() else "?"
 	var who = "你的回合" if _is_my_turn else "对手回合"
-	phase_label.text = "T%d | %s | %s" % [state.turn_number, tn, who]
+	# 从服务端同步计时器
+	var timer = state.get("action_time_left", -1)
+	if timer <= 0: timer = state.get("discard_time_left", -1)
+	_timer_left = timer if timer > 0 else -1
+	_timer_elapsed = 0.0
+	if _timer_left > 0:
+		_update_timer_label()
+	else:
+		phase_label.text = "T%d | %s | %s" % [state.turn_number, tn, who]
 	if state.turn_number != _last_turn or state.current_player != _last_player:
 		_last_turn = state.turn_number; _last_player = state.current_player
 		_flash(phase_label)

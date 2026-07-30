@@ -1,0 +1,42 @@
+name: Build and Export Windows
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  export-windows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Godot 4.7.1 + Linux Headless
+        run: |
+          wget -q https://github.com/godotengine/godot/releases/download/4.7.1-stable/Godot_v4.7.1-stable_linux.x86_64.zip
+          unzip -q Godot_v4.7.1-stable_linux.x86_64.zip
+          chmod +x Godot_v4.7.1-stable_linux.x86_64
+
+      - name: Download Windows Export Template
+        run: |
+          mkdir -p ~/.local/share/godot/export_templates/4.7.1.stable
+          wget -q https://github.com/godotengine/godot/releases/download/4.7.1-stable/Godot_v4.7.1-stable_export_templates.tpz
+          unzip -q -o Godot_v4.7.1-stable_export_templates.tpz -d ~/.local/share/godot/export_templates/4.7.1.stable/
+          mv ~/.local/share/godot/export_templates/4.7.1.stable/templates/* ~/.local/share/godot/export_templates/4.7.1.stable/ 2>/dev/null || true
+
+      - name: Export Windows .exe
+        run: |
+          mkdir -p export
+          ./Godot_v4.7.1-stable_linux.x86_64 --headless --path . --export-release "Windows Desktop" "export/Card Duel.exe"
+
+      - name: Zip Export
+        run: |
+          cd export
+          zip -r ../CardDuel_Windows.zip .
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CardDuel-Windows
+          path: CardDuel_Windows.zip
+          retention-days: 30

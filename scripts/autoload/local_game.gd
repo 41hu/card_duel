@@ -18,6 +18,14 @@ const MatchStateClass = preload("res://scripts/core/match_state.gd")
 
 var game: MatchStateClass
 var _player_names = ["自己(P1)", "自己(P2)"]
+var _timer_elapsed: float = 0.0
+
+func _process(delta):
+	if game == null: return
+	_timer_elapsed += delta
+	if _timer_elapsed >= 1.0:
+		_timer_elapsed = 0.0
+		game.check_timers()
 
 func start_local_game(p1_char: String, p2_char: String):
 	game = MatchStateClass.new()
@@ -27,10 +35,8 @@ func start_local_game(p1_char: String, p2_char: String):
 	game.game_ended.connect(_on_ended)
 	game.init_match(p1_char, p2_char)
 	game._start_game()
-	# 缓存初始状态供 battle_ui 读取
 	battle_state_cache = game.get_full_state()
 
-# 启动本地自我对战的 BP 流程
 func start_bp():
 	game = MatchStateClass.new()
 	game.bp.reset()
@@ -39,15 +45,6 @@ func start_bp():
 
 func _on_state(state: Dictionary):
 	state["t"] = "game_state"
-	# 追加日志到文件方便调试
-	var path = "user://local_game.log"
-	var mode = FileAccess.READ_WRITE if FileAccess.file_exists(path) else FileAccess.WRITE
-	var f = FileAccess.open(path, mode)
-	if f:
-		f.seek_end()
-		var ts = Time.get_datetime_string_from_system()
-		f.store_line("[%s] T%d P%d act=%s" % [ts, state.turn_number, state.current_player, _phase_name(state)])
-		f.close()
 	state_updated.emit(state)
 
 func _on_weapon(_player_idx: int, weapon: Dictionary):
@@ -61,7 +58,6 @@ func _on_ended(result: Dictionary):
 	result["t"] = "game_over"
 	game_ended.emit(result)
 
-# 模拟 Network 接口
 func create_room(_name: String = ""):
 	connected_to_server.emit()
 	room_created.emit("LOCAL")
@@ -70,7 +66,7 @@ func join_room(_rid: String, _name: String = ""):
 	connected_to_server.emit()
 	room_joined.emit("LOCAL", _player_names)
 
-func ready_up(): pass  # 本地模式自动开始
+func ready_up(): pass
 
 var bp_state_cache: Dictionary = {}
 var battle_state_cache: Dictionary = {}
@@ -78,7 +74,6 @@ var player_index: int = 0
 
 func send_bp_action(action: String, char_id: String):
 	if not game: return
-	# Determine who is acting based on phase
 	var phase = game.bp.bp_phase
 	var acting = -1
 	if "first" in phase: acting = game.bp._bp_first
@@ -87,7 +82,6 @@ func send_bp_action(action: String, char_id: String):
 	game.bp.execute_action(acting, action, char_id)
 	if game.bp.is_done():
 		var chars = game.bp.picked_chars
-		# Start game with BP selections
 		start_local_game(chars[0], chars[1])
 	else:
 		var bs = game.bp.get_bp_state()
@@ -147,6 +141,7 @@ func send_reveal_hand():
 
 func disconnect_from_server():
 	game = null
+	_timer_elapsed = 0.0
 	server_disconnected.emit()
 
 func get_connected() -> bool:

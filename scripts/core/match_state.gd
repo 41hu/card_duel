@@ -1,36 +1,5 @@
 # ============================================================
 # match_state.gd — 对局状态机（服务端权威，唯一真实数据源）
-#
-# 【架构】：服务端运行本文件实例，客户端只做UI渲染。
-# 每个对局一个 MatchState 实例，server_room.gd 创建并管理。
-# LocalGame autoload 创建 MatchState 实例用于本地自我对战。
-#
-# 【子系统】：
-#   card_systems[i]  — CardSystem 牌堆管理（双方共享牌堆）
-#   combat           — CombatSystem 伤害计算/响应/武器防具
-#   movement         — MovementSystem 11格棋盘/距离/陷阱
-#   equipment        — EquipmentSystem 武器幻化/防具管理
-#   status           — StatusSystem Buff/DoT/冻结
-#   bp               — BPSystem 禁选流程
-#   char_skills      — CharacterSkills 角色技能钩子
-#   card_effects     — CardEffects 卡牌效果注册表
-#
-# 【回合流程】（每回合4个阶段，严格顺序）：
-#   _judgment_phase → _draw_phase → _action_phase → _discard_phase
-#   判定(DoT/死亡)   摸牌(N张)    等待客户端操作   等待客户端弃牌
-#   ↓ 调用 char_skills.on_turn_start
-#   ↓ 调用 char_skills.on_opponent_turn_start
-#
-# 【消息协议】：客户端发送 JSON，服务端处理后广播状态
-#   play_card    → process_action → _do_play_card → card_effects.execute
-#   end_turn     → _discard_phase
-#   respond      → process_response
-#   weapon_choice→ confirm_weapon
-#   discard_one / confirm_discard → 弃牌阶段操作
-#   use_skill    → char_skills.use_skill
-#
-# 【状态广播】：get_full_state() 序列化所有可见状态为 Dictionary，
-#   通过 state_changed 信号发送。网络模式下 server_main 做隐私过滤。
 # ============================================================
 extends RefCounted
 
@@ -40,6 +9,9 @@ const EquipmentSys = preload("res://scripts/core/equipment_system.gd")
 const StatusSys = preload("res://scripts/core/status_system.gd")
 const BPSys = preload("res://scripts/core/bp_system.gd")
 const CardSys = preload("res://scripts/core/card_system.gd")
+
+const ACTION_TIME = 60
+const DISCARD_TIME = 30
 
 var card_systems: Array = []
 var combat
@@ -69,6 +41,9 @@ var char_skills
 var card_effects
 var waiting_for_discard: bool = false
 var discard_count: int = 0
+
+var _action_deadline: int = 0
+var _discard_deadline: int = 0
 
 signal state_changed(data: Dictionary)
 signal weapon_prompt(player_idx: int, weapon: Dictionary)
@@ -107,6 +82,8 @@ func init_match(p1_char_id: String, p2_char_id: String):
 	waiting_for_discard = false
 	discard_count = 0
 	game_result = {}
+	_action_deadline = 0
+	_discard_deadline = 0
 	first_player = randi() % 2
 	current_player = first_player
 	phase = Config.Phase.BP_PHASE
@@ -181,6 +158,7 @@ func _action_phase():
 		_discard_phase()
 		return
 	char_skills.on_turn_start(current_player)
+	_action_deadline = Time.get_ticks_msec() + ACTION_TIME * 1000
 	state_changed.emit(get_full_state())
 
 func process_action(player_idx: int, action_data: Dictionary) -> Dictionary:
@@ -203,7 +181,6 @@ func process_action(player_idx: int, action_data: Dictionary) -> Dictionary:
 func _do_play_card(player_idx: int, data: Dictionary) -> Dictionary:
 	var card_uid = data.get("card_uid", -1)
 	var extra = data.get("extra", {})
-	# 支持从对方手牌出牌（extra.from_opponent=true）
 	var from_idx = player_idx
 	if extra.has("from_opponent") and extra.from_opponent:
 		from_idx = 1 - player_idx
@@ -213,7 +190,6 @@ func _do_play_card(player_idx: int, data: Dictionary) -> Dictionary:
 	for c in card_sys.hand:
 		if c.uid == card_uid: card = c.duplicate(); break
 	for key in extra: card[key] = extra[key]
-	# 支持"当作某牌打出"：extra中as_type覆盖原始type_id（预留功能）
 	if extra.has("as_type"):
 		if not Config.CARD_DB.has(extra.as_type):
 			return {success=false, msg="无效卡牌类型"}
@@ -239,7 +215,6 @@ func _do_play_card(player_idx: int, data: Dictionary) -> Dictionary:
 			Config.APType.FUNCTION: player.ap_function -= cd.cost
 	var result = _execute_card_effect(player_idx, card)
 	if not result.get("success", false) and result.get("phase") != "choose":
-		# 效果失败，返还已扣除的 AP
 		if not free_archer and cd.ap != Config.APType.NONE:
 			match cd.ap:
 				Config.APType.ATTACK: player.ap_attack += cd.cost
@@ -252,6 +227,7 @@ func _do_play_card(player_idx: int, data: Dictionary) -> Dictionary:
 
 func _execute_card_effect(player_idx: int, card: Dictionary) -> Dictionary:
 	return card_effects.execute(player_idx, card)
+
 func _handle_skill(player_idx: int, skill: String, params: Dictionary = {}) -> Dictionary:
 	var r = char_skills.use_skill(player_idx, skill, params)
 	if r.get("success", false):
@@ -275,6 +251,7 @@ func _handle_swordsman_choice(player_idx: int, data: Dictionary) -> Dictionary:
 	p.pending_swordsman_skill = false
 	state_changed.emit(get_full_state())
 	return {success=true}
+
 func _use_card(player_idx: int, card: Dictionary):
 	card_systems[player_idx].play_card(card.uid)
 
@@ -329,7 +306,6 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		else:
 			if respond: add_log(defender_idx, "无法响应")
 	card_systems[attacker_idx].play_card(pending_attack_uid)
-	# 冻结卡：被闪避则失败，否则生效
 	if pending_attack_card == "freeze":
 		if final_damage == 0:
 			add_log(attacker_idx, "冻结被闪避")
@@ -339,7 +315,6 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		state_changed.emit(get_full_state())
 		return
 	if final_damage > 0:
-		# 技能减伤（圣骑士等）：在扣血前调用
 		final_damage = char_skills.on_taking_damage(defender_idx, attacker_idx, final_damage)
 		players[defender_idx].hp -= final_damage
 		add_log(attacker_idx, "造成%d伤害" % final_damage)
@@ -412,7 +387,14 @@ func confirm_weapon(player_idx: int, accept: bool):
 func _discard_phase():
 	if phase == Config.Phase.GAME_OVER: return
 	turn_phase = Config.TurnPhase.DISCARD
+	_action_deadline = 0
 	waiting_for_discard = true
+	var limit = movement.get_hand_limit(current_player)
+	if card_systems[current_player].hand.size() <= limit:
+		# 没超过上限，给较短时间
+		_discard_deadline = Time.get_ticks_msec() + DISCARD_TIME * 1000
+	else:
+		_discard_deadline = Time.get_ticks_msec() + DISCARD_TIME * 1000
 	state_changed.emit(get_full_state())
 
 func discard_one(player_idx: int, card_uid: int):
@@ -431,9 +413,11 @@ func confirm_discard(player_idx: int, card_uids: Array = []):
 	var limit = movement.get_hand_limit(current_player)
 	if card_systems[current_player].hand.size() > limit: return
 	waiting_for_discard = false
+	_discard_deadline = 0
 	_finish_discard()
 
 func _finish_discard():
+	_discard_deadline = 0
 	char_skills.on_turn_end(current_player)
 	status.on_turn_end(current_player)
 	_advance_to_next_player()
@@ -448,6 +432,8 @@ func _advance_to_next_player():
 func _handle_death(player_idx: int):
 	add_log(player_idx, "HP归零，复活...")
 	phase = Config.Phase.RESURRECTING
+	_action_deadline = 0
+	_discard_deadline = 0
 	card_systems[player_idx].discard_all()
 	var drawn = card_systems[player_idx].draw_cards(4)
 	if drawn.is_empty(): _check_permanent_death(player_idx); return
@@ -478,10 +464,39 @@ func _check_permanent_death(player_idx: int):
 		state_changed.emit(get_full_state())
 		game_ended.emit(game_result)
 
+# ---- 计时器系统 ----
+func check_timers():
+	var now = Time.get_ticks_msec()
+	# BP阶段计时
+	if phase == Config.Phase.BP_PHASE:
+		bp.check_bp_timer()
+		return
+	# 出牌阶段计时
+	if _action_deadline > 0 and now >= _action_deadline:
+		_action_deadline = 0
+		add_log(current_player, "回合超时")
+		_discard_phase()
+	# 弃牌阶段计时
+	if _discard_deadline > 0 and now >= _discard_deadline:
+		_discard_deadline = 0
+		_auto_discard()
+	# 响应窗口不计时
+
+func _auto_discard():
+	if not waiting_for_discard: return
+	var cs = card_systems[current_player]
+	var limit = movement.get_hand_limit(current_player)
+	var excess = cs.hand.size() - limit
+	if excess > 0:
+		cs.random_discard(excess)
+		add_log(current_player, "超时自动弃%d张" % excess)
+	waiting_for_discard = false
+	state_changed.emit(get_full_state())
+	_finish_discard()
+
 func add_log(player_idx: int, msg: String):
 	action_log.append({turn=turn_number, player=player_idx, player_name=Config.char_name(players[player_idx].char_id), msg=msg})
 
-# 偷对手一张牌到自己手牌（返回uid，-1表示失败）
 func steal_card(player_idx: int, target_uid: int) -> int:
 	var opp = 1 - player_idx
 	if not card_systems[opp].has_card(target_uid): return -1
@@ -491,7 +506,6 @@ func steal_card(player_idx: int, target_uid: int) -> int:
 	add_log(player_idx, "取走对方1张牌")
 	return card.uid
 
-# 归还一张牌给对手
 func return_card(player_idx: int, card_uid: int) -> bool:
 	var opp = 1 - player_idx
 	if not card_systems[player_idx].has_card(card_uid): return false
@@ -500,17 +514,24 @@ func return_card(player_idx: int, card_uid: int) -> bool:
 	card_systems[opp].add_to_hand(card)
 	return true
 
-# 查看对手手牌（返回 type_id 列表，不含 uid）
 func reveal_opponent_hand(asking_player_idx: int) -> Array:
 	var opp = 1 - asking_player_idx
 	return card_systems[opp].get_hand_type_ids()
 
 func get_full_state(full: bool = false) -> Dictionary:
+	var now = Time.get_ticks_msec()
+	var atl = -1
+	if _action_deadline > 0:
+		atl = max(0, int((_action_deadline - now) / 1000.0))
+	var dtl = -1
+	if _discard_deadline > 0:
+		dtl = max(0, int((_discard_deadline - now) / 1000.0))
 	var state = {
 		phase=phase, turn_phase=turn_phase, current_player=current_player,
 		turn_number=turn_number, first_player=first_player,
 		response_pending=response_pending, pending_attack_card=pending_attack_card,
 		waiting_for_discard=waiting_for_discard, discard_count=discard_count,
+		action_time_left=atl, discard_time_left=dtl,
 		players=[], traps=traps.duplicate(), action_log=action_log.duplicate(),
 		distance=movement.get_distance(),
 	}

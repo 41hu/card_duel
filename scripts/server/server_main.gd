@@ -8,6 +8,7 @@ var _tcp_server: TCPServer = null
 var _peers: Array = []
 var _rooms: Array = []
 var _next_room_id: int = 1000
+var _timer_acc: float = 0.0
 
 func log_msg(msg: String):
 	var ts = Time.get_datetime_string_from_system()
@@ -45,6 +46,12 @@ func _process(_delta):
 			WebSocketPeer.STATE_CLOSED:
 				log_msg("断开: %s" % peer.peer_name)
 				_on_peer_disconnected(i); _peers.remove_at(i)
+	_timer_acc += _delta
+	if _timer_acc >= 1.0:
+		_timer_acc = 0.0
+		for room in _rooms:
+			if room.match != null:
+				room.match.check_timers()
 
 func _handle_message(peer_idx: int, raw: String):
 	var data = JSON.parse_string(raw)

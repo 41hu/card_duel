@@ -1,12 +1,15 @@
 # bp_system.gd — BP禁选系统
 extends RefCounted
 
+const BP_TIME = 30
+
 var match_ref
 var bp_phase: String = ""
-var _bp_first: int = 0  # 0=P1先手, 1=P2先手
+var _bp_first: int = 0
 var banned_chars: Array = []
-var picked_chars: Array = []  # [first玩家的选择, second玩家的选择]
+var picked_chars: Array = []
 var available_chars: Array = []
+var bp_deadline: int = 0
 
 func _init(match):
 	match_ref = match
@@ -18,14 +21,18 @@ func reset():
 	banned_chars.clear()
 	picked_chars = ["", ""]
 	available_chars = Config.CHARACTER_IDS.duplicate()
+	bp_deadline = Time.get_ticks_msec() + BP_TIME * 1000
 
 func get_bp_state() -> Dictionary:
+	var now = Time.get_ticks_msec()
+	var left = max(0, int((bp_deadline - now) / 1000.0)) if bp_deadline > 0 else -1
 	return {
 		phase = bp_phase,
 		bp_first = _bp_first,
 		banned_chars = banned_chars.duplicate(),
 		picked_chars = picked_chars.duplicate(),
 		available_chars = available_chars.duplicate(),
+		bp_time_left = left,
 	}
 
 func execute_action(player_idx: int, action: String, char_id: String) -> bool:
@@ -50,6 +57,24 @@ func execute_action(player_idx: int, action: String, char_id: String) -> bool:
 			picked_chars[1] = char_id; available_chars.erase(char_id)
 			bp_phase = "done"; return true
 	return false
+
+func check_bp_timer():
+	if bp_phase == "done" or bp_deadline <= 0: return
+	var now = Time.get_ticks_msec()
+	if now < bp_deadline: return
+	# 超时自动随机操作
+	if available_chars.is_empty(): return
+	var random_char = available_chars[randi() % available_chars.size()]
+	match bp_phase:
+		"first_ban", "second_ban":
+			execute_action(_get_acting(), "ban", random_char)
+		"first_pick", "second_pick":
+			execute_action(_get_acting(), "pick", random_char)
+	bp_deadline = Time.get_ticks_msec() + BP_TIME * 1000
+
+func _get_acting() -> int:
+	if "first" in bp_phase: return _bp_first
+	return 1 - _bp_first
 
 func is_done() -> bool:
 	return bp_phase == "done"

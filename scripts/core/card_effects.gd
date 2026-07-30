@@ -46,10 +46,8 @@ func _atk_deter(player_idx: int, card: Dictionary):
 	return {success=true}
 
 func _atk_freeze(player_idx: int, card: Dictionary):
-	var ok = _m.status.freeze_player(1 - player_idx)
-	_m.card_systems[player_idx].play_card(card.uid)
-	_m.add_log(player_idx, "冻结" if ok else "冻结失败")
-	return {success=ok}
+	# 冻结可被魔法闪避响应
+	return _m._handle_respondable_card(player_idx, card, "freeze")
 
 func _atk_destroy(player_idx: int, card: Dictionary):
 	return _m._handle_destroy(player_idx, card)

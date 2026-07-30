@@ -67,6 +67,7 @@ func _push_opponent(player_idx: int):
 # 吸引：将对方拉向自己1格
 func attract(player_idx: int) -> bool:
 	var other = match_ref.get_player(1 - player_idx)
+	if match_ref.char_skills.is_immune(1 - player_idx, "force_move"): return false
 	var player = match_ref.get_player(player_idx)
 	var my_pos = player.position
 	var direction = 1 if other.position < my_pos else -1
@@ -86,6 +87,7 @@ func attract(player_idx: int) -> bool:
 # 威慑：将对方推远1格
 func deter(player_idx: int) -> bool:
 	var other = match_ref.get_player(1 - player_idx)
+	if match_ref.char_skills.is_immune(1 - player_idx, "force_move"): return false
 	var my_pos = match_ref.get_player(player_idx).position
 	var direction = 1 if other.position > my_pos else -1
 	var new_pos = Config.clamp_position(other.position + direction)

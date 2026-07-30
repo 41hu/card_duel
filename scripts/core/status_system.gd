@@ -13,6 +13,7 @@ func add_buff(player_idx: int, buff_type: String, value: int, duration: int):
 
 # 添加DoT {type, damage_per_turn, duration}
 func add_dot(player_idx: int, dot_type: String, damage: int, duration: int):
+	if match_ref.char_skills.is_immune(player_idx, "dot_" + dot_type): return
 	var player = match_ref.get_player(player_idx)
 	# 灼烧可叠加
 	player.dots.append({type=dot_type, damage=damage, duration=duration})
@@ -21,6 +22,7 @@ func add_dot(player_idx: int, dot_type: String, damage: int, duration: int):
 func freeze_player(player_idx: int) -> bool:
 	var player = match_ref.get_player(player_idx)
 	# 不能连续冻结
+	if match_ref.char_skills.is_immune(player_idx, "freeze"): return false
 	if player.frozen_lockout:
 		return false
 	player.frozen = true

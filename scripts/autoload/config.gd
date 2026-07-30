@@ -89,7 +89,33 @@ var CARD_COUNTS = {
 	"near_armor": 1, "range_armor": 1, "magic_armor": 1,
 }
 
-# ---------- 攻击类卡牌 ---------- (用于响应判断)
+# ---------- 响应规则 ----------
+var RESPONDABLE_CARDS = ["near", "range", "magic", "heavy", "pierce", "chant", "freeze"]
+var RESPONSE_BY = {
+	"near":   ["near"],           # 格挡
+	"heavy":  ["near"],           # 格挡
+	"range":  ["range"],          # 牵制
+	"pierce": ["range", "magic"], # 牵制或闪避
+	"magic":  ["range", "magic"], # 牵制或闪避
+	"chant":  ["range", "magic"], # 牵制或闪避
+	"freeze": ["magic"],          # 闪避
+}
+var RESPOND_AS = {
+	"near":  "block",
+	"range": "restrain",
+	"magic": "dodge",
+}
+
+func card_can_be_responded(type_id: String) -> bool:
+	return type_id in RESPONDABLE_CARDS
+
+func card_response_by(type_id: String) -> Array:
+	return RESPONSE_BY.get(type_id, [])
+
+func card_response_effect(card_id: String) -> String:
+	return RESPOND_AS.get(card_id, "")
+
+# ---------- 攻击类卡牌 ----------
 var ATTACK_CARD_TYPES = ["near", "range", "magic", "heavy", "pierce", "chant"]
 
 # 攻击卡对应的伤害类型

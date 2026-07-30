@@ -92,6 +92,7 @@ func _create_player(idx: int, char_id: String, char_data: Dictionary) -> Diction
 		damage_reduction_used=false, skill_used_this_turn=false, free_move_used=false,
 		mage_buffed=false,
 		combo_attacks_this_turn=[],
+		upgrades={},
 	}
 
 func get_player(idx: int): return players[idx]
@@ -125,6 +126,7 @@ func _judgment_phase():
 				_handle_death(current_player)
 				if phase == Config.Phase.GAME_OVER: return
 	status.on_turn_start(current_player)
+	char_skills.on_opponent_turn_start(current_player)
 	_draw_phase()
 
 func _draw_phase():
@@ -207,6 +209,16 @@ func _handle_skill(player_idx: int, skill: String, params: Dictionary = {}) -> D
 func _use_card(player_idx: int, card: Dictionary):
 	card_systems[player_idx].play_card(card.uid)
 
+func _handle_respondable_card(player_idx: int, card: Dictionary, kind: String) -> Dictionary:
+	var opp = 1 - player_idx
+	pending_attack_card = kind
+	pending_attack_uid = card.uid
+	attacker_last_damage = 1
+	phase = Config.Phase.RESPONSE_WINDOW
+	response_pending = true
+	response_needed.emit(opp, {attacker=player_idx, card=kind, damage=0, distance=0})
+	return {success=true, phase="response"}
+
 func _handle_attack_card(player_idx: int, card: Dictionary) -> Dictionary:
 	var type_id = card.type_id
 	var opp = 1 - player_idx
@@ -248,6 +260,15 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		else:
 			if respond: add_log(defender_idx, "无法响应")
 	card_systems[attacker_idx].play_card(pending_attack_uid)
+	# 冻结卡：被闪避则失败，否则生效
+	if pending_attack_card == "freeze":
+		if final_damage == 0:
+			add_log(attacker_idx, "冻结被闪避")
+		else:
+			status.freeze_player(defender_idx)
+			add_log(attacker_idx, "冻结")
+		state_changed.emit(get_full_state())
+		return
 	if final_damage > 0:
 		players[defender_idx].hp -= final_damage
 		add_log(attacker_idx, "造成%d伤害" % final_damage)

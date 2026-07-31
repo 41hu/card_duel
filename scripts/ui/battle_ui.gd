@@ -430,10 +430,46 @@ func _on_confirm_card():
 		_popup_trap(_selected_uid)
 		confirm_btn.visible = false
 	else:
-		_n().send_play_card(_selected_uid)
-		_selected_uid = -1
+		if _has_matching_armor(_selected_type):
+			_show_armor_confirm(_selected_uid, _selected_type)
+			_selected_uid = -1
+		else:
+			_n().send_play_card(_selected_uid)
+			_selected_uid = -1
 	confirm_btn.visible = false
 	cancel_btn.visible = false
+
+func _has_matching_armor(attack_type: String) -> bool:
+	var armor_needed = {"near": "physical", "heavy": "physical", "range": "ranged", "pierce": "ranged", "magic": "magical", "chant": "magical"}
+	var need = armor_needed.get(attack_type, "")
+	if need == "": return false
+	for p in _game_state.players:
+		if p.index != _player_index and not p.armor.is_empty():
+			return p.armor.data.type == need
+	return false
+
+func _show_armor_confirm(card_uid: int, attack_type: String):
+	var c = Control.new()
+	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
+	var vb = _popup_box(520, 260); c.add_child(vb)
+	var armor_name = ""
+	for p in _game_state.players:
+		if p.index != _player_index and not p.armor.is_empty():
+			armor_name = p.armor.data.name
+			break
+	vb.add_child(_lbl("对方装备了%s" % armor_name))
+	vb.add_child(_lbl("此次攻击将被完全免疫"))
+	vb.add_child(_lbl("确定要打出吗？"))
+	var hb = HBoxContainer.new(); vb.add_child(hb)
+	var ok = _mkbtn("确定")
+	ok.pressed.connect(func(): c.queue_free(); _n().send_play_card(card_uid))
+	hb.add_child(ok)
+	var no = _mkbtn("取消")
+	no.pressed.connect(func(): c.queue_free())
+	hb.add_child(no)
+	add_child(c)
 
 func _refresh_highlight():
 	for child in hand_area.get_children():

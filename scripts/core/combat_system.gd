@@ -63,7 +63,7 @@ func calculate_attack(attacker_idx: int, defender_idx: int, card_type_id: String
 
 	# 检查防具
 	var armor_result = _check_armor(defender, damage_type, base_damage)
-	if armor_result.completely_blocked:
+	if armor_result.blocked:
 		armor_result.formula = "=0(防具免疫)"
 		return armor_result
 
@@ -94,7 +94,7 @@ func _apply_weapon_damage_bonus(attacker, base_damage: int, damage_type: int) ->
 # ---------- 防具检查 ----------
 func _check_armor(defender, damage_type: int, damage: int) -> Dictionary:
 	if defender.armor.is_empty():
-		return {completely_blocked=false, damage=damage, msg=""}
+		return {blocked=false, damage=damage, msg=""}
 
 	var armor_id = defender.armor.id
 	var armor_type = Config.ARMOR_DB[armor_id].type
@@ -111,19 +111,19 @@ func _check_armor(defender, damage_type: int, damage: int) -> Dictionary:
 			matches = (damage_type == Config.DamageType.MAGICAL)
 
 	if not matches:
-		return {completely_blocked=false, damage=damage, msg=""}
+		return {blocked=false, damage=damage, msg=""}
 
 	# 第1次：完全免疫
 	if durability == defender.armor.get("max_durability", 3):
 		defender.armor.durability -= 1
-		return {completely_blocked=true, damage=0, msg="防具完全免疫了伤害！"}
+		return {blocked=true, damage=0, msg="防具完全免疫了伤害！"}
 
 	# 第2、3次：减半
 	defender.armor.durability -= 1
 	var reduced = floori(damage / 2.0)
 	if defender.armor.durability <= 0:
 		defender.armor = {}
-	return {completely_blocked=false, damage=reduced, msg="防具减免了一半伤害"}
+	return {blocked=false, damage=reduced, msg="防具减免了一半伤害"}
 
 # ---------- 响应处理 ----------
 func process_response(_attacker_idx: int, defender_idx: int, attack_card: String, response_card_uid: int) -> Dictionary:

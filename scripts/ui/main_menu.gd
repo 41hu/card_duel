@@ -99,25 +99,25 @@ func _show_update_popup():
 	c.add_child(bg)
 	var vb = VBoxContainer.new()
 	vb.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	vb.size = Vector2(400, 220)
-	vb.position = vb.position - Vector2(200, 110)
+	vb.size = Vector2(520, 320)
+	vb.position = vb.position - Vector2(260, 160)
 	c.add_child(vb)
 	var t = Label.new()
 	t.text = "发现新版本 v%s\n当前 v%s" % [_latest_version, _get_version()]
-	t.add_theme_font_size_override("font_size", 22)
+	t.add_theme_font_size_override("font_size", 30)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(t)
 	var dl_btn = Button.new()
 	dl_btn.text = "下载更新"
 	dl_btn.pressed.connect(func(): _download_update(c))
-	dl_btn.custom_minimum_size = Vector2(200, 50)
-	dl_btn.add_theme_font_size_override("font_size", 24)
+	dl_btn.custom_minimum_size = Vector2(260, 90)
+	dl_btn.add_theme_font_size_override("font_size", 30)
 	vb.add_child(dl_btn)
 	var later_btn = Button.new()
 	later_btn.text = "稍后"
 	later_btn.pressed.connect(func(): c.queue_free())
-	later_btn.custom_minimum_size = Vector2(200, 50)
-	later_btn.add_theme_font_size_override("font_size", 24)
+	later_btn.custom_minimum_size = Vector2(260, 90)
+	later_btn.add_theme_font_size_override("font_size", 30)
 	vb.add_child(later_btn)
 	add_child(c)
 
@@ -148,22 +148,22 @@ func _download_update(popup: Control):
 		child.queue_free()
 	var vb = VBoxContainer.new()
 	vb.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	vb.size = Vector2(420, 200)
-	vb.position = vb.position - Vector2(210, 100)
+	vb.size = Vector2(520, 320)
+	vb.position = vb.position - Vector2(260, 160)
 	popup.add_child(vb)
 	var t = Label.new()
 	t.text = "正在下载 v%s..." % _latest_version
-	t.add_theme_font_size_override("font_size", 22)
+	t.add_theme_font_size_override("font_size", 30)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(t)
 	_dl_bar = ProgressBar.new()
-	_dl_bar.custom_minimum_size = Vector2(360, 40)
+	_dl_bar.custom_minimum_size = Vector2(460, 60)
 	_dl_bar.show_percentage = true
-	_dl_bar.add_theme_font_size_override("font_size", 18)
+	_dl_bar.add_theme_font_size_override("font_size", 26)
 	vb.add_child(_dl_bar)
 	_dl_status = Label.new()
 	_dl_status.text = "准备下载..."
-	_dl_status.add_theme_font_size_override("font_size", 18)
+	_dl_status.add_theme_font_size_override("font_size", 26)
 	_dl_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(_dl_status)
 	_dl_started = false
@@ -192,17 +192,17 @@ func _show_install_prompt(popup: Control, path: String):
 		child.queue_free()
 	var vb = VBoxContainer.new()
 	vb.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	vb.size = Vector2(440, 200)
-	vb.position = vb.position - Vector2(220, 100)
+	vb.size = Vector2(520, 320)
+	vb.position = vb.position - Vector2(260, 160)
 	popup.add_child(vb)
 	var t = Label.new()
 	t.text = "安装包已就绪（v%s）" % _latest_version
-	t.add_theme_font_size_override("font_size", 22)
+	t.add_theme_font_size_override("font_size", 30)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(t)
 	var tip = Label.new()
 	tip.text = "如果自动安装失败，请在文件管理器中\n打开路径：%s" % path
-	tip.add_theme_font_size_override("font_size", 16)
+	tip.add_theme_font_size_override("font_size", 24)
 	tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(tip)
 	var hb = HBoxContainer.new(); vb.add_child(hb)
@@ -214,6 +214,13 @@ func _show_install_prompt(popup: Control, path: String):
 	var later = _mkbtn("稍后")
 	later.pressed.connect(func(): popup.queue_free())
 	hb.add_child(later)
+
+func _mkbtn(text: String) -> Button:
+	var btn = Button.new()
+	btn.text = text
+	btn.custom_minimum_size = Vector2(240, 90)
+	btn.add_theme_font_size_override("font_size", 30)
+	return btn
 
 func _get_file_size(path: String) -> int:
 	var f = FileAccess.open(path, FileAccess.READ)
@@ -247,11 +254,11 @@ func _process(_delta):
 func _add_server_shortcut(input: LineEdit, label: String):
 	var btn = Button.new()
 	btn.text = label
-	btn.size = Vector2(60, 35)
+	btn.size = Vector2(120, 70)
 	var offset = _shortcut_offsets.get(input, 0)
-	btn.position = Vector2(input.position.x + input.size.x + 5 + offset, input.position.y)
-	_shortcut_offsets[input] = offset + 65
-	btn.add_theme_font_size_override("font_size", 17)
+	btn.position = Vector2(input.position.x + input.size.x + 10 + offset, input.position.y)
+	_shortcut_offsets[input] = offset + 130
+	btn.add_theme_font_size_override("font_size", 26)
 	if label == "本地":
 		btn.pressed.connect(func(): input.text = "ws://127.0.0.1:17890")
 	else:
@@ -311,7 +318,8 @@ func _make_ready_btn(parent: Control, y: float) -> Button:
 	var btn = Button.new()
 	btn.text = "准备开始"
 	btn.position = Vector2(100, y)
-	btn.size = Vector2(200, 45)
+	btn.size = Vector2(320, 100)
+	btn.add_theme_font_size_override("font_size", 32)
 	btn.add_theme_color_override("font_color", Style.READY_YELLOW)
 	parent.add_child(btn)
 	return btn

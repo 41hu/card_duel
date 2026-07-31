@@ -31,11 +31,11 @@ anchor_right = 0.5
 anchor_bottom = 0.05
 offset_left = -300.0
 offset_right = 300.0
-offset_bottom = 30.0
+offset_bottom = 36.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
-theme_override_font_sizes/font_size = 30
+theme_override_font_sizes/font_size = 36
 horizontal_alignment = 1
 
 [node name="Board" type="Control" parent="." unique_id=1271654454]
@@ -44,10 +44,10 @@ anchor_left = 0.5
 anchor_top = 0.15
 anchor_right = 0.5
 anchor_bottom = 0.15
-offset_left = -488.0
+offset_left = -600.0
 offset_top = 6.0
-offset_right = 384.0
-offset_bottom = 110.0
+offset_right = 600.0
+offset_bottom = 116.0
 grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("2_brd")
@@ -59,13 +59,13 @@ anchor_left = 0.5
 anchor_top = 0.26
 anchor_right = 0.5
 anchor_bottom = 0.26
-offset_left = -200.0
-offset_right = 200.0
-offset_bottom = 24.0
+offset_left = -260.0
+offset_right = 260.0
+offset_bottom = 28.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_colors/font_color = Color(0.8, 0.8, 0.5, 1)
-theme_override_font_sizes/font_size = 26
+theme_override_font_sizes/font_size = 32
 horizontal_alignment = 1
 
 [node name="HandArea" type="HBoxContainer" parent="." unique_id=2085298927]
@@ -75,9 +75,9 @@ anchor_left = 0.5
 anchor_top = 0.55
 anchor_right = 0.5
 anchor_bottom = 0.55
-offset_left = -435.0
-offset_right = 421.0
-offset_bottom = 174.0
+offset_left = -900.0
+offset_right = 900.0
+offset_bottom = 190.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/separation = 4
@@ -94,7 +94,7 @@ offset_right = 590.0
 offset_bottom = -312.0
 grow_vertical = 0
 theme_override_colors/font_color = Color(0.5, 0.8, 1, 1)
-theme_override_font_sizes/font_size = 26
+theme_override_font_sizes/font_size = 32
 autowrap_mode = 3
 
 [node name="OppInfo" type="Label" parent="." unique_id=1324770960]
@@ -111,7 +111,7 @@ offset_bottom = -312.0
 grow_horizontal = 0
 grow_vertical = 0
 theme_override_colors/font_color = Color(1, 0.7, 0.5, 1)
-theme_override_font_sizes/font_size = 26
+theme_override_font_sizes/font_size = 32
 autowrap_mode = 3
 
 [node name="ActionLog" type="ScrollContainer" parent="." unique_id=1493559683]
@@ -140,12 +140,13 @@ anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = -60.0
-offset_top = -88.0
-offset_right = 64.0
-offset_bottom = -8.0
+offset_left = -110.0
+offset_top = -130.0
+offset_right = 110.0
+offset_bottom = -10.0
 grow_horizontal = 2
 grow_vertical = 0
+theme_override_font_sizes/font_size = 34
 text = "结束出牌"
 
 [node name="ConfirmBtn" type="Button" parent="." unique_id=1375809674]
@@ -155,12 +156,13 @@ anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = -176.0
-offset_top = -240.0
-offset_right = -24.0
-offset_bottom = -176.0
+offset_left = -230.0
+offset_top = -250.0
+offset_right = -10.0
+offset_bottom = -150.0
 grow_horizontal = 2
 grow_vertical = 0
+theme_override_font_sizes/font_size = 34
 text = "确认使用"
 
 [node name="CancelBtn" type="Button" parent="." unique_id=869812671]
@@ -170,12 +172,13 @@ anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = 32.0
-offset_top = -240.0
-offset_right = 168.0
-offset_bottom = -176.0
+offset_left = 10.0
+offset_top = -250.0
+offset_right = 230.0
+offset_bottom = -150.0
 grow_horizontal = 2
 grow_vertical = 0
+theme_override_font_sizes/font_size = 34
 text = "取消"
 
 [node name="StatusLabel" type="Label" parent="." unique_id=1350048436]
@@ -185,13 +188,14 @@ anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = -250.0
-offset_top = -280.0
-offset_right = 250.0
+offset_left = -300.0
+offset_top = -286.0
+offset_right = 300.0
 offset_bottom = -250.0
 grow_horizontal = 2
 grow_vertical = 0
 theme_override_colors/font_color = Color(0.6, 0.6, 0.6, 1)
+theme_override_font_sizes/font_size = 32
 horizontal_alignment = 1
 
 [node name="SkillBtn" type="Button" parent="." unique_id=2088021127]
@@ -199,11 +203,12 @@ layout_mode = 1
 anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
-offset_left = 152.0
-offset_top = -184.0
-offset_right = 296.0
-offset_bottom = -120.0
+offset_left = 150.0
+offset_top = -190.0
+offset_right = 310.0
+offset_bottom = -70.0
 grow_vertical = 0
+theme_override_font_sizes/font_size = 32
 text = "技能"
 
 [node name="SkillConfirm" type="Button" parent="." unique_id=1556571759]
@@ -212,11 +217,12 @@ layout_mode = 1
 anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
-offset_left = 320.0
-offset_top = -184.0
-offset_right = 472.0
-offset_bottom = -120.0
+offset_left = 330.0
+offset_top = -190.0
+offset_right = 490.0
+offset_bottom = -70.0
 grow_vertical = 0
+theme_override_font_sizes/font_size = 32
 text = "确认技能"
 
 [node name="SkillCancel" type="Button" parent="." unique_id=247751449]
@@ -225,9 +231,10 @@ layout_mode = 1
 anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
-offset_left = 504.0
-offset_top = -184.0
-offset_right = 616.0
-offset_bottom = -120.0
+offset_left = 510.0
+offset_top = -190.0
+offset_right = 630.0
+offset_bottom = -70.0
 grow_vertical = 0
+theme_override_font_sizes/font_size = 32
 text = "取消"

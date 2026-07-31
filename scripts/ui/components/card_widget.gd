@@ -18,7 +18,7 @@ var _respondable: bool = false
 var _is_discarded: bool = false
 
 func _init():
-	custom_minimum_size = Vector2(96, 120)
+	custom_minimum_size = Vector2(120, 150)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_panel = Panel.new()
 	_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -26,22 +26,22 @@ func _init():
 	add_child(_panel)
 
 	_ap_label = Label.new()
-	_ap_label.position = Vector2(4, 2)
-	_ap_label.size = Vector2(28, 20)
+	_ap_label.position = Vector2(6, 4)
+	_ap_label.size = Vector2(34, 26)
 	_ap_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_panel.add_child(_ap_label)
 
 	_name_label = Label.new()
-	_name_label.position = Vector2(2, 24)
-	_name_label.size = Vector2(92, 68)
+	_name_label.position = Vector2(4, 34)
+	_name_label.size = Vector2(112, 90)
 	_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_panel.add_child(_name_label)
 
 	_select_mark = Label.new()
-	_select_mark.position = Vector2(2, 94)
-	_select_mark.size = Vector2(92, 22)
+	_select_mark.position = Vector2(4, 126)
+	_select_mark.size = Vector2(112, 20)
 	_select_mark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_panel.add_child(_select_mark)
 
@@ -65,8 +65,8 @@ func setup(uid: int, tid: String, card_name: String, ap: int, is_discard: bool =
 	var bg_color = _card_bg_color(ap)
 	_apply_panel_style(bg_color, is_discard)
 
-	_name_label.add_theme_font_size_override("font_size", 18)
-	_ap_label.add_theme_font_size_override("font_size", 17)
+	_name_label.add_theme_font_size_override("font_size", 26)
+	_ap_label.add_theme_font_size_override("font_size", 24)
 	_select_mark.text = ""
 	_selected = false
 

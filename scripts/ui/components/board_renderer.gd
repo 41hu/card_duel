@@ -16,29 +16,29 @@ func _ready():
 
 # 创建一个格子及其标签
 func _create_cell(index: int) -> Panel:
-	var x = index * 84
+	var x = index * 108
 	var p = Panel.new()
 	p.position = Vector2(x, 0)
-	p.size = Vector2(80, 80)
+	p.size = Vector2(104, 104)
 	p.set_meta("index", index)
 	p.mouse_filter = Control.MOUSE_FILTER_STOP
 	p.gui_input.connect(func(event): _on_cell_input(event, index))
 
 	var s = StyleBoxFlat.new()
 	s.bg_color = Style.CELL_BG
-	s.border_width_left = 1
-	s.border_width_right = 1
-	s.border_width_top = 1
-	s.border_width_bottom = 1
+	s.border_width_left = 2
+	s.border_width_right = 2
+	s.border_width_top = 2
+	s.border_width_bottom = 2
 	s.border_color = Style.CELL_BORDER
 	p.add_theme_stylebox_override("panel", s)
 
 	var l = Label.new()
 	l.position = Vector2(0, 0)
-	l.size = Vector2(80, 80)
+	l.size = Vector2(104, 104)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	l.add_theme_font_size_override("font_size", 17)
+	l.add_theme_font_size_override("font_size", 26)
 	l.add_theme_color_override("font_color", Style.CELL_TEXT)
 	p.add_child(l)
 	return p

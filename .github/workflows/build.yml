@@ -101,12 +101,20 @@ jobs:
           files: dist/CardDuel.apk
           generate_release_notes: false
 
-      - name: Deploy APK to Server
+      - name: Deploy APK and Version File to Server
+        run: |
+          echo "{\"version\":\"${{ needs.version.outputs.version }}\"}" > version.json
+          mkdir -p deploy_dir
+          cp dist/CardDuel.apk deploy_dir/
+          cp version.json deploy_dir/
+          ls deploy_dir/
+
+      - name: SCP to Server
         uses: appleboy/scp-action@v0.1.7
         with:
           host: 47.107.47.251
           username: root
           key: ${{ secrets.SERVER_SSH_KEY }}
-          source: dist/CardDuel.apk
+          source: deploy_dir/*
           target: ~/card_duel_dist/
           strip_components: 1

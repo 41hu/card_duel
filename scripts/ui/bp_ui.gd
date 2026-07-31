@@ -38,6 +38,8 @@ func _create_char_buttons():
 		btn.text = txt
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		btn.custom_minimum_size = Vector2(240, 150)
+		btn.add_theme_font_size_override("font_size", 20)
 		btn.set_meta("char_id", char_id)
 		btn.pressed.connect(_on_char_clicked.bind(char_id))
 		char_grid.add_child(btn)

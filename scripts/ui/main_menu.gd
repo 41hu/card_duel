@@ -30,7 +30,7 @@ func _ready():
 	_check_update()
 	version_label = Label.new()
 	version_label.text = "v" + _get_version()
-	version_label.add_theme_font_size_override("font_size", 12)
+	version_label.add_theme_font_size_override("font_size", 20)
 	version_label.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
 	version_label.position = Vector2(12, 12)
 	add_child(version_label)
@@ -104,25 +104,25 @@ func _show_update_popup():
 	c.add_child(bg)
 	var vb = VBoxContainer.new()
 	vb.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	vb.size = Vector2(320, 160)
-	vb.position = vb.position - Vector2(160, 80)
+	vb.size = Vector2(400, 220)
+	vb.position = vb.position - Vector2(200, 110)
 	c.add_child(vb)
 	var t = Label.new()
 	t.text = "发现新版本 v%s\n当前 v%s" % [_latest_version, _get_version()]
-	t.add_theme_font_size_override("font_size", 18)
+	t.add_theme_font_size_override("font_size", 22)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(t)
 	var dl_btn = Button.new()
 	dl_btn.text = "下载更新"
 	dl_btn.pressed.connect(func(): _download_update(c))
 	dl_btn.custom_minimum_size = Vector2(200, 50)
-	dl_btn.add_theme_font_size_override("font_size", 20)
+	dl_btn.add_theme_font_size_override("font_size", 24)
 	vb.add_child(dl_btn)
 	var later_btn = Button.new()
 	later_btn.text = "稍后"
 	later_btn.pressed.connect(func(): c.queue_free())
 	later_btn.custom_minimum_size = Vector2(200, 50)
-	later_btn.add_theme_font_size_override("font_size", 20)
+	later_btn.add_theme_font_size_override("font_size", 24)
 	vb.add_child(later_btn)
 	add_child(c)
 
@@ -146,7 +146,7 @@ func _add_server_shortcut(input: LineEdit, label: String):
 	var offset = _shortcut_offsets.get(input, 0)
 	btn.position = Vector2(input.position.x + input.size.x + 5 + offset, input.position.y)
 	_shortcut_offsets[input] = offset + 65
-	btn.add_theme_font_size_override("font_size", 14)
+	btn.add_theme_font_size_override("font_size", 17)
 	if label == "本地":
 		btn.pressed.connect(func(): input.text = "ws://127.0.0.1:17890")
 	else:

@@ -56,7 +56,7 @@ func _ready():
 	skill_confirm.pressed.connect(_on_skill_use)
 	board.cell_clicked.connect(_on_board_cell_clicked)
 	_deck_label = Label.new()
-	_deck_label.add_theme_font_size_override("font_size", 12)
+	_deck_label.add_theme_font_size_override("font_size", 20)
 	_deck_label.add_theme_color_override("font_color", Style.HAND_TITLE)
 	add_child(_deck_label)
 	_build_popups()
@@ -110,10 +110,10 @@ func _show_resp_popup(atk_card: String):
 	for child in c.get_children():
 		if child is ColorRect: continue
 		c.remove_child(child); child.queue_free()
-	var box = _box(c, 180, 120, 440, 300)
+	var box = _box(c, 180, 120, 520, 360)
 	box.name = "RespBox"
 	var t = _lbl("对方使用 %s 攻击！选择响应卡：" % atk_card)
-	t.add_theme_font_size_override("font_size", 16)
+	t.add_theme_font_size_override("font_size", 20)
 	box.add_child(t)
 	var has_any = false
 	var defender_hand = []
@@ -146,7 +146,7 @@ func _make_wpn_popup() -> Control:
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	c.add_child(bg)
 	add_child(c)
-	var box = _box(c, 200, 180, 400, 170)
+	var box = _box(c, 200, 180, 480, 220)
 	var t = _lbl("获得武器！")
 	t.name = "WpnTitle"
 	box.add_child(t)
@@ -202,14 +202,14 @@ func _lbl(txt: String) -> Label:
 	var l = Label.new()
 	l.text = txt
 	l.add_theme_color_override("font_color", Style.LOG_TEXT)
-	l.add_theme_font_size_override("font_size", 18)
+	l.add_theme_font_size_override("font_size", 22)
 	return l
 
 func _mkbtn(txt: String) -> Button:
 	var b = Button.new()
 	b.text = txt
-	b.custom_minimum_size = Vector2(100, 50)
-	b.add_theme_font_size_override("font_size", 20)
+	b.custom_minimum_size = Vector2(130, 62)
+	b.add_theme_font_size_override("font_size", 24)
 	return b
 
 func _on_state_updated(state: Dictionary):
@@ -454,7 +454,7 @@ func _popup_move(card_uid: int):
 	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
-	var vb = _popup_box(360, 220); c.add_child(vb)
+	var vb = _popup_box(440, 280); c.add_child(vb)
 	vb.add_child(_lbl("移动方向"))
 	var hb = HBoxContainer.new()
 	vb.add_child(hb)
@@ -480,7 +480,7 @@ func _popup_destroy(card_uid: int):
 	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
-	var vb = _popup_box(420, 300); c.add_child(vb)
+	var vb = _popup_box(520, 380); c.add_child(vb)
 	vb.add_child(_lbl("摧毁: 选择目标"))
 	var hb = _mkbtn("盲丢对方1手牌")
 	hb.pressed.connect(func(): c.queue_free(); _n().send_play_card(card_uid, {"destroy_target": "hand"}))
@@ -544,7 +544,7 @@ func _show_skill_select(skills: Array):
 	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
-	var vb = _popup_box(300, skills.size() * 60 + 80); c.add_child(vb)
+	var vb = _popup_box(360, skills.size() * 70 + 100); c.add_child(vb)
 	vb.add_child(_lbl("选择技能："))
 	for sk in skills:
 		var b = _mkbtn(sk.name)
@@ -558,7 +558,7 @@ func _show_mage_pick():
 	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
-	var vb = _popup_box(440, 320); c.add_child(vb)
+	var vb = _popup_box(520, 400); c.add_child(vb)
 	vb.add_child(_lbl("选择一张要弃的牌："))
 	var mh = (_game_state.players[0] if _game_state.players[0].index == _player_index else _game_state.players[1]).get("hand", [])
 	for card in mh:
@@ -573,7 +573,7 @@ func _on_hand_revealed(cards: Array):
 	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
-	var vb = _popup_box(400, 340); c.add_child(vb)
+	var vb = _popup_box(480, 400); c.add_child(vb)
 	vb.add_child(_lbl("对方手牌："))
 	if cards.is_empty():
 		vb.add_child(_lbl("  (无手牌)"))
@@ -589,7 +589,7 @@ func _show_swordsman_popup():
 	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
-	var vb = _popup_box(380, 200); c.add_child(vb)
+	var vb = _popup_box(460, 260); c.add_child(vb)
 	vb.add_child(_lbl("剑士技能: 近战命中后"))
 	var hb = HBoxContainer.new(); vb.add_child(hb)
 	var hbtn = _mkbtn("回2HP")

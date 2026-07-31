@@ -27,7 +27,7 @@ offset_top = 109.0
 offset_right = 1138.0
 offset_bottom = 197.0
 theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
-theme_override_font_sizes/font_size = 64
+theme_override_font_sizes/font_size = 72
 text = "卡牌对决"
 horizontal_alignment = 1
 
@@ -44,7 +44,7 @@ offset_left = 518.0
 offset_top = 36.0
 offset_right = 842.0
 offset_bottom = 172.0
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 34
 text = "创建房间"
 
 [node name="JoinBtn" type="Button" parent="MainPanel" unique_id=354150312]
@@ -53,7 +53,7 @@ offset_left = 518.0
 offset_top = 244.0
 offset_right = 850.0
 offset_bottom = 375.0
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 34
 text = "加入房间"
 
 [node name="SelfBtn" type="Button" parent="MainPanel" unique_id=1625168154]
@@ -62,7 +62,7 @@ offset_left = 518.0
 offset_top = 444.0
 offset_right = 857.0
 offset_bottom = 580.0
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 34
 text = "自我对战"
 
 [node name="CreatePanel" type="Control" parent="." unique_id=535578410]
@@ -79,7 +79,7 @@ offset_left = 50.0
 offset_right = 350.0
 offset_bottom = 40.0
 theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
-theme_override_font_sizes/font_size = 28
+theme_override_font_sizes/font_size = 34
 text = "创建房间"
 horizontal_alignment = 1
 
@@ -140,7 +140,7 @@ offset_top = 305.0
 offset_right = 370.0
 offset_bottom = 340.0
 theme_override_colors/font_color = Color(0.3, 1, 0.3, 1)
-theme_override_font_sizes/font_size = 20
+theme_override_font_sizes/font_size = 26
 horizontal_alignment = 1
 
 [node name="JoinPanel" type="Control" parent="." unique_id=579832077]
@@ -157,7 +157,7 @@ offset_left = 50.0
 offset_right = 350.0
 offset_bottom = 40.0
 theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
-theme_override_font_sizes/font_size = 28
+theme_override_font_sizes/font_size = 34
 text = "加入房间"
 horizontal_alignment = 1
 

@@ -26,7 +26,7 @@ offset_left = 712.0
 offset_top = 79.0
 offset_right = 1212.0
 offset_bottom = 159.0
-theme_override_font_sizes/font_size = 48
+theme_override_font_sizes/font_size = 56
 horizontal_alignment = 1
 
 [node name="Detail" type="Label" parent="." unique_id=183571138]
@@ -36,7 +36,7 @@ offset_top = 360.0
 offset_right = 1137.0
 offset_bottom = 440.0
 theme_override_colors/font_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 34
 horizontal_alignment = 1
 
 [node name="BackBtn" type="Button" parent="." unique_id=1049546627]
@@ -45,5 +45,5 @@ offset_left = 862.0
 offset_top = 474.0
 offset_right = 1042.0
 offset_bottom = 524.0
-theme_override_font_sizes/font_size = 18
+theme_override_font_sizes/font_size = 24
 text = "返回主菜单"

@@ -165,24 +165,26 @@ func _make_wpn_popup() -> Control:
 	return c
 
 func _box(parent: Control, x: float, y: float, w: float, h: float) -> VBoxContainer:
-	var vb = VBoxContainer.new()
-	vb.layout_mode = 1
-	vb.anchor_left = 0.5; vb.anchor_right = 0.5
-	vb.anchor_top = 0.5; vb.anchor_bottom = 0.5
-	vb.offset_left = -(w - 20) / 2.0
-	vb.offset_top = -(h - 20) / 2.0
-	vb.offset_right = (w - 20) / 2.0
-	vb.offset_bottom = (h - 20) / 2.0
-	parent.add_child(vb)
-	return vb
+	# x/y 已废弃（原实现未使用），统一走滚动弹窗框架
+	return _popup_box(parent, w, h)
 
-func _popup_box(w: float, h: float) -> VBoxContainer:
+func _popup_box(parent: Control, w: float, h: float) -> VBoxContainer:
+	# 居中滚动弹窗：内容超出时滚动，最大占屏幕 92%，适配手机小屏
+	var vp = get_viewport_rect().size
+	w = min(w, vp.x * 0.92)
+	h = min(h, vp.y * 0.92)
+	var sc = ScrollContainer.new()
+	sc.layout_mode = 1
+	sc.anchor_left = 0.5; sc.anchor_right = 0.5
+	sc.anchor_top = 0.5; sc.anchor_bottom = 0.5
+	sc.offset_left = -w / 2.0; sc.offset_right = w / 2.0
+	sc.offset_top = -h / 2.0; sc.offset_bottom = h / 2.0
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	sc.get_v_scroll_bar().custom_minimum_size = Vector2(24, 0)
+	parent.add_child(sc)
 	var vb = VBoxContainer.new()
-	vb.layout_mode = 1
-	vb.anchor_left = 0.5; vb.anchor_right = 0.5
-	vb.anchor_top = 0.5; vb.anchor_bottom = 0.5
-	vb.offset_left = -w / 2.0; vb.offset_right = w / 2.0
-	vb.offset_top = -h / 2.0; vb.offset_bottom = h / 2.0
+	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(vb)
 	return vb
 
 func _flash(node: Control):
@@ -457,7 +459,7 @@ func _show_armor_confirm(card_uid: int, attack_type: String):
 	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
-	var vb = _popup_box(700, 340); c.add_child(vb)
+	var vb = _popup_box(c, 700, 340)
 	var armor_name = ""
 	for p in _game_state.players:
 		if p.index != _player_index and not p.armor.is_empty():
@@ -494,7 +496,7 @@ func _popup_move(card_uid: int):
 	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
-	var vb = _popup_box(620, 360); c.add_child(vb)
+	var vb = _popup_box(c, 620, 360)
 	vb.add_child(_lbl("移动方向"))
 	var hb = HBoxContainer.new()
 	vb.add_child(hb)
@@ -520,7 +522,7 @@ func _popup_destroy(card_uid: int):
 	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
-	var vb = _popup_box(700, 440); c.add_child(vb)
+	var vb = _popup_box(c, 700, 440)
 	vb.add_child(_lbl("摧毁: 选择目标"))
 	var hb = _mkbtn("盲丢对方1手牌")
 	hb.pressed.connect(func(): c.queue_free(); _n().send_play_card(card_uid, {"destroy_target": "hand"}))
@@ -584,7 +586,7 @@ func _show_skill_select(skills: Array):
 	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
-	var vb = _popup_box(480, skills.size() * 90 + 120); c.add_child(vb)
+	var vb = _popup_box(c, 480, skills.size() * 90 + 120)
 	vb.add_child(_lbl("选择技能："))
 	for sk in skills:
 		var b = _mkbtn(sk.name)
@@ -598,7 +600,7 @@ func _show_mage_pick():
 	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
-	var vb = _popup_box(700, 460); c.add_child(vb)
+	var vb = _popup_box(c, 700, 460)
 	vb.add_child(_lbl("选择一张要弃的牌："))
 	var mh = (_game_state.players[0] if _game_state.players[0].index == _player_index else _game_state.players[1]).get("hand", [])
 	for card in mh:
@@ -613,7 +615,7 @@ func _on_hand_revealed(cards: Array):
 	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
-	var vb = _popup_box(640, 460); c.add_child(vb)
+	var vb = _popup_box(c, 640, 460)
 	vb.add_child(_lbl("对方手牌："))
 	if cards.is_empty():
 		vb.add_child(_lbl("  (无手牌)"))
@@ -629,7 +631,7 @@ func _show_swordsman_popup():
 	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
-	var vb = _popup_box(620, 320); c.add_child(vb)
+	var vb = _popup_box(c, 620, 320)
 	vb.add_child(_lbl("剑士技能: 近战命中后"))
 	var hb = HBoxContainer.new(); vb.add_child(hb)
 	var hbtn = _mkbtn("回2HP")

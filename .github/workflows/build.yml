@@ -1,4 +1,4 @@
-name: Build and Export Windows
+name: Build and Export
 
 on:
   push:
@@ -6,12 +6,22 @@ on:
   workflow_dispatch:
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read_version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read_version
+        run: echo "version=$(cat version.txt)" >> "$GITHUB_OUTPUT"
+
   export-windows:
+    needs: version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download Godot 4.7.1 + Linux Headless
+      - name: Download Godot 4.7.1
         run: |
           wget -q https://github.com/godotengine/godot/releases/download/4.7.1-stable/Godot_v4.7.1-stable_linux.x86_64.zip
           unzip -q Godot_v4.7.1-stable_linux.x86_64.zip
@@ -29,9 +39,61 @@ jobs:
           mkdir -p dist
           ./Godot_v4.7.1-stable_linux.x86_64 --headless --path . --export-release "Windows Desktop" "dist/Card Duel.exe"
 
-      - name: Upload Artifact
+      - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CardDuel
+          name: CardDuel-Windows
           path: dist/
           retention-days: 30
+
+  export-android:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Godot 4.7.1
+        run: |
+          wget -q https://github.com/godotengine/godot/releases/download/4.7.1-stable/Godot_v4.7.1-stable_linux.x86_64.zip
+          unzip -q Godot_v4.7.1-stable_linux.x86_64.zip
+          chmod +x Godot_v4.7.1-stable_linux.x86_64
+
+      - name: Download Android Export Template
+        run: |
+          mkdir -p ~/.local/share/godot/export_templates/4.7.1.stable
+          wget -q https://github.com/godotengine/godot/releases/download/4.7.1-stable/Godot_v4.7.1-stable_export_templates.tpz
+          unzip -q -o Godot_v4.7.1-stable_export_templates.tpz -d ~/.local/share/godot/export_templates/4.7.1.stable/
+          mv ~/.local/share/godot/export_templates/4.7.1.stable/templates/* ~/.local/share/godot/export_templates/4.7.1.stable/ 2>/dev/null || true
+
+      - name: Download Android SDK Command Line Tools
+        run: |
+          mkdir -p ~/android-sdk/cmdline-tools
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q -o commandlinetools-linux-11076708_latest.zip -d ~/android-sdk/cmdline-tools
+          mv ~/android-sdk/cmdline-tools/cmdline-tools ~/android-sdk/cmdline-tools/latest
+
+      - name: Install Android SDK Components
+        run: |
+          yes | ~/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=~/android-sdk "platform-tools" "build-tools;34.0.0" "platforms;android-34"
+
+      - name: Export Android APK (Debug)
+        run: |
+          mkdir -p dist
+          export ANDROID_HOME=~/android-sdk
+          export ANDROID_SDK_ROOT=~/android-sdk
+          ./Godot_v4.7.1-stable_linux.x86_64 --headless --path . --export-debug "纸上谈兵内测" "dist/CardDuel.apk"
+
+      - name: Upload Android Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CardDuel-Android
+          path: dist/
+          retention-days: 30
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.version.outputs.version }}
+          name: v${{ needs.version.outputs.version }}
+          files: dist/CardDuel.apk
+          generate_release_notes: false

@@ -17,11 +17,22 @@ const Style = preload("res://scripts/theme/style_const.gd")
 @onready var j_join_btn = $JoinPanel/JJoinBtn
 @onready var j_back_btn = $JoinPanel/JBackBtn
 @onready var status_label = $StatusLabel
+@onready var version_label: Label
 
 func _ready():
 	$MainPanel/CreateBtn.pressed.connect(_show_create)
 	$MainPanel/JoinBtn.pressed.connect(_show_join)
 	$MainPanel/SelfBtn.pressed.connect(_on_self_play)
+	_add_server_shortcut(c_server, "本地")
+	_add_server_shortcut(c_server, "云端")
+	_add_server_shortcut(j_server, "本地")
+	_add_server_shortcut(j_server, "云端")
+	version_label = Label.new()
+	version_label.text = "v" + _get_version()
+	version_label.add_theme_font_size_override("font_size", 12)
+	version_label.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
+	version_label.position = Vector2(12, 12)
+	add_child(version_label)
 	c_back_btn.pressed.connect(_show_main)
 	j_back_btn.pressed.connect(_show_main)
 	c_create_btn.pressed.connect(_on_create)
@@ -32,6 +43,28 @@ func _ready():
 	Network.room_joined.connect(_on_room_joined)
 	Network.game_starting.connect(_on_game_starting)
 	Network.network_error.connect(_on_error)
+
+var _shortcut_offsets: Dictionary = {}
+
+func _get_version() -> String:
+	var f = FileAccess.open("res://version.txt", FileAccess.READ)
+	if f:
+		return f.get_line().strip_edges()
+	return "0.0.0"
+
+func _add_server_shortcut(input: LineEdit, label: String):
+	var btn = Button.new()
+	btn.text = label
+	btn.size = Vector2(60, 35)
+	var offset = _shortcut_offsets.get(input, 0)
+	btn.position = Vector2(input.position.x + input.size.x + 5 + offset, input.position.y)
+	_shortcut_offsets[input] = offset + 65
+	btn.add_theme_font_size_override("font_size", 14)
+	if label == "本地":
+		btn.pressed.connect(func(): input.text = "ws://127.0.0.1:17890")
+	else:
+		btn.pressed.connect(func(): input.text = "ws://47.107.47.251:17890")
+	input.get_parent().add_child(btn)
 
 func _show_create():
 	main_panel.visible = false

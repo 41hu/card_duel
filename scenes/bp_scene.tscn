@@ -25,9 +25,9 @@ layout_mode = 1
 anchor_left = 0.5
 anchor_right = 0.5
 offset_left = -200.0
-offset_top = 36.0
+offset_top = 30.0
 offset_right = 200.0
-offset_bottom = 116.0
+offset_bottom = 100.0
 grow_horizontal = 2
 theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
 theme_override_font_sizes/font_size = 56
@@ -39,9 +39,9 @@ layout_mode = 1
 anchor_left = 0.5
 anchor_right = 0.5
 offset_left = -320.0
-offset_top = 56.0
+offset_top = 112.0
 offset_right = 320.0
-offset_bottom = 100.0
+offset_bottom = 156.0
 grow_horizontal = 2
 theme_override_colors/font_color = Color(1, 0.5, 0.3, 1)
 theme_override_font_sizes/font_size = 36
@@ -52,23 +52,28 @@ layout_mode = 1
 anchor_left = 0.5
 anchor_right = 0.5
 offset_left = -320.0
-offset_top = 100.0
+offset_top = 170.0
 offset_right = 320.0
-offset_bottom = 134.0
+offset_bottom = 215.0
 grow_horizontal = 2
 theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
 theme_override_font_sizes/font_size = 32
 horizontal_alignment = 1
 
-[node name="CharGrid" type="GridContainer" parent="." unique_id=10912715]
+[node name="CharScroll" type="ScrollContainer" parent="." unique_id=10912715]
 layout_mode = 1
 anchor_left = 0.5
 anchor_right = 0.5
 offset_left = -540.0
-offset_top = 140.0
+offset_top = 240.0
 offset_right = 540.0
-offset_bottom = 580.0
+offset_bottom = 860.0
 grow_horizontal = 2
+horizontal_scroll_mode = 0
+
+[node name="CharGrid" type="GridContainer" parent="CharScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
 columns = 4
 
 [node name="StatusLabel" type="Label" parent="." unique_id=1678046552]
@@ -76,9 +81,9 @@ layout_mode = 1
 anchor_left = 0.5
 anchor_right = 0.5
 offset_left = -320.0
-offset_top = 600.0
+offset_top = 870.0
 offset_right = 320.0
-offset_bottom = 640.0
+offset_bottom = 910.0
 grow_horizontal = 2
 theme_override_colors/font_color = Color(1, 0.6, 0.3, 1)
 theme_override_font_sizes/font_size = 32

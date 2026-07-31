@@ -42,9 +42,20 @@ func start_local_game(p1_char: String, p2_char: String, bp_first: int = -1):
 
 func start_bp():
 	game = MatchStateClass.new()
+	game.bp_state_changed.connect(_on_bp_state_changed)
 	game.bp.reset()
 	bp_state_cache = game.bp.get_bp_state()
 	bp_state_cache["t"] = "bp_state"
+
+func _on_bp_state_changed(bs: Dictionary):
+	# BP 超时自动操作后：完成则开战，否则刷新 UI
+	if game.bp.is_done():
+		var chars = game.bp.picked_chars
+		var bf = game.bp._bp_first
+		start_local_game(chars[0], chars[1], bf)
+	else:
+		bs["t"] = "bp_state"
+		bp_state_updated.emit(bs)
 
 func _on_state(state: Dictionary):
 	state["t"] = "game_state"

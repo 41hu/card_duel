@@ -52,6 +52,7 @@ signal state_changed(data: Dictionary)
 signal weapon_prompt(player_idx: int, weapon: Dictionary)
 signal response_needed(defender_idx: int, attack_info: Dictionary)
 signal game_ended(result: Dictionary)
+signal bp_state_changed(bp_state: Dictionary)
 
 func _init():
 	combat = CombatSys.new(self)
@@ -510,7 +511,11 @@ func _check_permanent_death(player_idx: int):
 func check_timers():
 	var now = Time.get_ticks_msec()
 	if phase == Config.Phase.BP_PHASE:
+		var before = bp.bp_phase
 		bp.check_bp_timer()
+		if bp.bp_phase != before:
+			# 超时自动操作后广播，让客户端 UI 刷新并推进流程
+			bp_state_changed.emit(bp.get_bp_state())
 		return
 	if _action_deadline > 0 and now >= _action_deadline:
 		_action_deadline = 0

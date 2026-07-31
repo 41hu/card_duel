@@ -11,7 +11,8 @@ func _ready():
 func show_logs(action_log: Array, max_count: int = 8, my_index: int = -1):
 	for c in _vbox.get_children():
 		c.queue_free()
-	var r = action_log.slice(max(0, action_log.size() - 999))
+	# 只显示最近 max_count 条，防止日志无限增长
+	var r = action_log.slice(max(0, action_log.size() - max_count))
 	for e in r:
 		var lb = Label.new()
 		lb.text = "[T%d] %s: %s" % [e.get("turn", 0), e.get("player_name", "?"), e.get("msg", "")]

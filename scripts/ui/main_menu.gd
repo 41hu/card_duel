@@ -59,9 +59,7 @@ func _get_version() -> String:
 
 # ---- 版本更新检查 ----
 var _update_http: HTTPRequest
-var _download_http: HTTPRequest
 var _latest_version: String = ""
-var _download_url: String = ""
 
 const UPDATE_SERVER = "http://47.107.47.251:17891"
 
@@ -82,7 +80,6 @@ func _on_update_check_done(result: int, _code: int, _headers: PackedStringArray,
 	_latest_version = str(data.get("version", "")).trim_prefix("v")
 	var local_ver = _get_version()
 	if _version_greater(_latest_version, local_ver):
-		_download_url = UPDATE_SERVER + "/CardDuel.apk"
 		_show_update_popup()
 
 func _version_greater(a: String, b: String) -> bool:
@@ -115,7 +112,11 @@ func _show_update_popup():
 	vb.add_child(t)
 	var dl_btn = Button.new()
 	dl_btn.text = "下载更新"
-	dl_btn.pressed.connect(func(): _download_update(c))
+	# 打开浏览器下载 APK：下载到公共目录、系统自动弹安装提示（应用内下载在 Android 上无法安装）
+	dl_btn.pressed.connect(func():
+		OS.shell_open(UPDATE_SERVER + "/CardDuel.apk")
+		c.queue_free()
+	)
 	dl_btn.custom_minimum_size = Vector2(260, 90)
 	dl_btn.add_theme_font_size_override("font_size", 30)
 	vb.add_child(dl_btn)
@@ -126,136 +127,6 @@ func _show_update_popup():
 	later_btn.add_theme_font_size_override("font_size", 30)
 	vb.add_child(later_btn)
 	add_child(c)
-
-var _dl_bar: ProgressBar
-var _dl_status: Label
-var _dl_last_bytes: int = 0
-var _dl_last_time: float = 0.0
-var _dl_speed: float = 0.0
-var _dl_started: bool = false
-var _dl_path: String = ""
-
-func _get_apk_path() -> String:
-	return OS.get_user_data_dir() + "/CardDuel_update.apk"
-
-func _download_update(popup: Control):
-	_dl_path = _get_apk_path()
-	# 已存在下载好的安装包 → 直接提示安装
-	if FileAccess.file_exists(_dl_path):
-		var f = FileAccess.open(_dl_path, FileAccess.READ)
-		var size = f.get_length() if f else 0
-		if f: f.close()
-		if size > 1000000:
-			_show_install_prompt(popup, _dl_path)
-			return
-	# 重建弹窗内容为下载界面
-	for child in popup.get_children():
-		if child is ColorRect: continue
-		child.queue_free()
-	var vb = VBoxContainer.new()
-	vb.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	vb.size = Vector2(520, 320)
-	vb.position = vb.position - Vector2(260, 160)
-	popup.add_child(vb)
-	var t = Label.new()
-	t.text = "正在下载 v%s..." % _latest_version
-	t.add_theme_font_size_override("font_size", 30)
-	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vb.add_child(t)
-	_dl_bar = ProgressBar.new()
-	_dl_bar.custom_minimum_size = Vector2(460, 60)
-	_dl_bar.show_percentage = true
-	_dl_bar.add_theme_font_size_override("font_size", 26)
-	vb.add_child(_dl_bar)
-	_dl_status = Label.new()
-	_dl_status.text = "准备下载..."
-	_dl_status.add_theme_font_size_override("font_size", 26)
-	_dl_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vb.add_child(_dl_status)
-	_dl_started = false
-	_dl_last_bytes = 0
-	_dl_last_time = 0.0
-	_dl_speed = 0.0
-	_download_http = HTTPRequest.new()
-	add_child(_download_http)
-	_download_http.download_file = _dl_path
-	_download_http.request_completed.connect(func(res, _c, _h, _b):
-		_dl_started = false
-		if res == HTTPRequest.RESULT_SUCCESS:
-			_dl_status.text = "下载完成"
-			_show_install_prompt(popup, _dl_path)
-		else:
-			_dl_status.text = "下载失败(%d)" % res
-		_download_http.queue_free()
-		_download_http = null
-	)
-	_download_http.request(_download_url)
-	_dl_started = true
-
-func _show_install_prompt(popup: Control, path: String):
-	for child in popup.get_children():
-		if child is ColorRect: continue
-		child.queue_free()
-	var vb = VBoxContainer.new()
-	vb.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	vb.size = Vector2(520, 320)
-	vb.position = vb.position - Vector2(260, 160)
-	popup.add_child(vb)
-	var t = Label.new()
-	t.text = "安装包已就绪（v%s）" % _latest_version
-	t.add_theme_font_size_override("font_size", 30)
-	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vb.add_child(t)
-	var tip = Label.new()
-	tip.text = "如果自动安装失败，请在文件管理器中\n打开路径：%s" % path
-	tip.add_theme_font_size_override("font_size", 24)
-	tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vb.add_child(tip)
-	var hb = HBoxContainer.new(); vb.add_child(hb)
-	var install = _mkbtn("立即安装")
-	install.pressed.connect(func():
-		OS.shell_open(path)
-	)
-	hb.add_child(install)
-	var later = _mkbtn("稍后")
-	later.pressed.connect(func(): popup.queue_free())
-	hb.add_child(later)
-
-func _mkbtn(text: String) -> Button:
-	var btn = Button.new()
-	btn.text = text
-	btn.custom_minimum_size = Vector2(240, 90)
-	btn.add_theme_font_size_override("font_size", 30)
-	return btn
-
-func _get_file_size(path: String) -> int:
-	var f = FileAccess.open(path, FileAccess.READ)
-	if f == null: return 0
-	var size = f.get_length()
-	f.close()
-	return size
-
-func _process(_delta):
-	if _download_http == null or not _dl_started: return
-	var total = _download_http.body_size
-	var done = _get_file_size(_dl_path)
-	if total > 0 and done > 0:
-		_dl_bar.max_value = total
-		_dl_bar.value = done
-		var now = Time.get_ticks_msec() / 1000.0
-		if _dl_last_time > 0:
-			var dt = now - _dl_last_time
-			if dt > 0:
-				_dl_speed = (done - _dl_last_bytes) / dt
-		_dl_last_time = now
-		_dl_last_bytes = done
-		var speed_txt = "%.2f MB/s" % (_dl_speed / 1024.0 / 1024.0) if _dl_speed >= 1024 * 1024 else "%.1f KB/s" % (_dl_speed / 1024.0)
-		var pct = float(done) / total * 100.0
-		_dl_status.text = "%.1f%% | %s | %d/%d MB" % [pct, speed_txt, done / (1024*1024), total / (1024*1024)]
-	elif total > 0:
-		_dl_status.text = "已连接，等待数据... (%d MB)" % (total / (1024*1024))
-	else:
-		_dl_status.text = "连接中..."
 
 func _add_server_shortcut(input: LineEdit, label: String):
 	var btn = Button.new()

@@ -22,6 +22,8 @@ func reset():
 	picked_chars = ["", ""]
 	available_chars = Config.CHARACTER_IDS.duplicate()
 	bp_deadline = Time.get_ticks_msec() + BP_TIME * 1000
+	# 关键：BP 阶段必须处于 BP_PHASE，否则 check_timers 不会触发倒计时自动操作
+	match_ref.phase = Config.Phase.BP_PHASE
 
 func get_bp_state() -> Dictionary:
 	var now = Time.get_ticks_msec()

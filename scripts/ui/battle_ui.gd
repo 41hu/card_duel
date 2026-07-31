@@ -34,7 +34,6 @@ var _timer_left: int = -1
 var _skill_waiting: bool = false
 var _resp_popup: Control
 var _wpn_popup: Control
-var _skill_labels = {}
 
 func _n():
 	if LocalGame.game != null: return LocalGame
@@ -86,7 +85,7 @@ func _apply_safe_area():
 	var sy = win.y / vp.y
 	var left = sa.position.x / sx
 	var right = (win.x - sa.end.x) / sx
-	var top = sa.position.y / sy
+	var _top = sa.position.y / sy
 	var bottom = (win.y - sa.end.y) / sy
 	if left > 0:
 		me_info.offset_left = left + 12
@@ -198,8 +197,8 @@ func _make_wpn_popup() -> Control:
 	hb.add_child(db)
 	return c
 
-func _box(parent: Control, x: float, y: float, w: float, h: float) -> VBoxContainer:
-	# x/y 已废弃（原实现未使用），统一走滚动弹窗框架
+func _box(parent: Control, _x: float, _y: float, w: float, h: float) -> VBoxContainer:
+	# _x/_y 已废弃（原实现未使用），统一走滚动弹窗框架
 	return _popup_box(parent, w, h)
 
 func _popup_box(parent: Control, w: float, h: float) -> VBoxContainer:
@@ -489,7 +488,7 @@ func _has_matching_armor(attack_type: String) -> bool:
 			return p.armor.data.type == need
 	return false
 
-func _show_armor_confirm(card_uid: int, attack_type: String):
+func _show_armor_confirm(card_uid: int, _attack_type: String):
 	var c = Control.new()
 	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
@@ -617,7 +616,8 @@ func _on_skill_use():
 	var me = _game_state.players[0] if _game_state.players[0].index == _player_index else _game_state.players[1]
 	var skills = me.get("active_skills", [])
 	if skills.size() <= 1:
-		_exec_skill(skills[0].id) if skills.size() == 1 else null
+		if skills.size() == 1:
+			_exec_skill(skills[0].id)
 	else:
 		_show_skill_select(skills)
 	skill_confirm.visible = false

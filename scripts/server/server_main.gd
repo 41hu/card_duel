@@ -109,10 +109,22 @@ func _start_bp(room):
 	room.match.weapon_prompt.connect(_on_weapon_prompt.bind(room))
 	room.match.response_needed.connect(_on_response_needed.bind(room))
 	room.match.game_ended.connect(_on_game_ended.bind(room))
+	room.match.bp_state_changed.connect(_on_bp_timeout.bind(room))
 	var bp_state = room.match.bp.get_bp_state()
 	for p_idx in room.peer_indices:
 		_send_to(p_idx, {"t":"game_starting","bp_state":bp_state,"player_index":_peers[p_idx].player_index})
 	log_msg("BP开始 房间%s" % room.id)
+
+# BP 倒计时超时自动操作后：广播并推进流程
+func _on_bp_timeout(room, _bs: Dictionary):
+	_broadcast_bp_state(room)
+	if room.match.bp.is_done():
+		var chars = room.match.bp.picked_chars
+		var bf = room.match.bp._bp_first
+		room.match.init_match(chars[0], chars[1], bf)
+		room.match._start_game()
+		room.stage = "game"
+		log_msg("BP超时完成 P1=%s P2=%s" % [chars[0], chars[1]])
 
 func _on_bp_action(peer_idx: int, data: Dictionary):
 	var peer = _peers[peer_idx]; var room = _find_room(peer.room_id)

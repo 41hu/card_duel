@@ -127,9 +127,21 @@ var _dl_last_bytes: int = 0
 var _dl_last_time: float = 0.0
 var _dl_speed: float = 0.0
 var _dl_started: bool = false
+var _dl_path: String = ""
+
+func _get_apk_path() -> String:
+	return OS.get_user_data_dir() + "/CardDuel_update.apk"
 
 func _download_update(popup: Control):
-	var path = OS.get_user_data_dir() + "/CardDuel_update.apk"
+	_dl_path = _get_apk_path()
+	# 已存在下载好的安装包 → 直接提示安装
+	if FileAccess.file_exists(_dl_path):
+		var f = FileAccess.open(_dl_path, FileAccess.READ)
+		var size = f.get_length() if f else 0
+		if f: f.close()
+		if size > 1000000:
+			_show_install_prompt(popup, _dl_path)
+			return
 	# 重建弹窗内容为下载界面
 	for child in popup.get_children():
 		if child is ColorRect: continue
@@ -160,12 +172,12 @@ func _download_update(popup: Control):
 	_dl_speed = 0.0
 	_download_http = HTTPRequest.new()
 	add_child(_download_http)
-	_download_http.download_file = path
+	_download_http.download_file = _dl_path
 	_download_http.request_completed.connect(func(res, _c, _h, _b):
 		_dl_started = false
 		if res == HTTPRequest.RESULT_SUCCESS:
-			_dl_status.text = "下载完成，正在安装..."
-			OS.shell_open("file://" + path)
+			_dl_status.text = "下载完成"
+			_show_install_prompt(popup, _dl_path)
 		else:
 			_dl_status.text = "下载失败(%d)" % res
 		_download_http.queue_free()
@@ -174,10 +186,46 @@ func _download_update(popup: Control):
 	_download_http.request(_download_url)
 	_dl_started = true
 
+func _show_install_prompt(popup: Control, path: String):
+	for child in popup.get_children():
+		if child is ColorRect: continue
+		child.queue_free()
+	var vb = VBoxContainer.new()
+	vb.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	vb.size = Vector2(440, 200)
+	vb.position = vb.position - Vector2(220, 100)
+	popup.add_child(vb)
+	var t = Label.new()
+	t.text = "安装包已就绪（v%s）" % _latest_version
+	t.add_theme_font_size_override("font_size", 22)
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(t)
+	var tip = Label.new()
+	tip.text = "如果自动安装失败，请在文件管理器中\n打开路径：%s" % path
+	tip.add_theme_font_size_override("font_size", 16)
+	tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(tip)
+	var hb = HBoxContainer.new(); vb.add_child(hb)
+	var install = _mkbtn("立即安装")
+	install.pressed.connect(func():
+		OS.shell_open(path)
+	)
+	hb.add_child(install)
+	var later = _mkbtn("稍后")
+	later.pressed.connect(func(): popup.queue_free())
+	hb.add_child(later)
+
+func _get_file_size(path: String) -> int:
+	var f = FileAccess.open(path, FileAccess.READ)
+	if f == null: return 0
+	var size = f.get_length()
+	f.close()
+	return size
+
 func _process(_delta):
 	if _download_http == null or not _dl_started: return
 	var total = _download_http.body_size
-	var done = _download_http.get_downloaded_bytes()
+	var done = _get_file_size(_dl_path)
 	if total > 0 and done > 0:
 		_dl_bar.max_value = total
 		_dl_bar.value = done

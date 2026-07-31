@@ -27,10 +27,12 @@ func calculate_attack(attacker_idx: int, defender_idx: int, card_type_id: String
 			formula = str(base_damage)
 		"range":
 			var eff_dist = distance
+			var lb_bonus = 0
 			if not attacker.weapon.is_empty() and attacker.weapon.id == "longbow":
 				eff_dist = max(0, distance - 1)
-			base_damage = max(0, attacker.range_power - eff_dist)
-			formula = "%d-%d" % [attacker.range_power, eff_dist]
+				lb_bonus = 1  # 长弓：远程+1
+			base_damage = max(0, attacker.range_power - eff_dist) + lb_bonus
+			formula = "%d-%d+%d" % [attacker.range_power, eff_dist, lb_bonus]
 		"magic":
 			base_damage = attacker.magic_power
 			formula = str(base_damage)
@@ -41,10 +43,15 @@ func calculate_attack(attacker_idx: int, defender_idx: int, card_type_id: String
 			formula = "%d+3" % attacker.near_power
 		"pierce":
 			var eff_dist2 = distance
+			var lb_bonus2 = 0
 			if not attacker.weapon.is_empty() and attacker.weapon.id == "longbow":
 				eff_dist2 = max(0, distance - 1)
-			base_damage = max(0, attacker.range_power - eff_dist2) + 3
-			formula = "%d-%d+3" % [attacker.range_power, eff_dist2]
+				lb_bonus2 = 1  # 长弓：远程+1
+			# 规则：面板-距离≤0 时无法打出（穿心是唯一有此限制的攻击卡）
+			if attacker.range_power - eff_dist2 <= 0:
+				return {damage=0, blocked=true, msg="距离太远，穿心无法打出", reason="distance"}
+			base_damage = max(0, attacker.range_power - eff_dist2) + 3 + lb_bonus2
+			formula = "%d-%d+3+%d" % [attacker.range_power, eff_dist2, lb_bonus2]
 		"chant":
 			base_damage = attacker.magic_power + 3
 			formula = "%d+3" % attacker.magic_power
@@ -61,8 +68,8 @@ func calculate_attack(attacker_idx: int, defender_idx: int, card_type_id: String
 		base_damage += buff_mod
 		formula += ("+%d" if buff_mod > 0 else "%d") % buff_mod
 
-	# 检查防具
-	var armor_result = _check_armor(defender, damage_type, base_damage)
+	# 计算防具减伤（耐久消耗延迟到实际造成伤害时，闪避/免疫不消耗）
+	var armor_result = _calc_armor(defender, damage_type, base_damage)
 	if armor_result.blocked:
 		armor_result.formula = "=0(防具免疫)"
 		return armor_result
@@ -72,7 +79,7 @@ func calculate_attack(attacker_idx: int, defender_idx: int, card_type_id: String
 		formula += "/2"
 	base_damage = armor_dmg
 
-	return {damage=base_damage, blocked=false, msg="", damage_type=damage_type, formula=formula}
+	return {damage=base_damage, blocked=false, msg="", damage_type=damage_type, formula=formula, armor_hit=armor_result.armor_hit}
 
 # ---------- 武器伤害加成 ----------
 func _apply_weapon_damage_bonus(attacker, base_damage: int, damage_type: int) -> int:
@@ -84,17 +91,21 @@ func _apply_weapon_damage_bonus(attacker, base_damage: int, damage_type: int) ->
 	var dmg = base_damage
 	match attacker.weapon.id:
 		"flame_sword": dmg += 2
-		"lunge": dmg += 1
+		"lunge":
+			dmg += 1  # 突刺：近战+1
+			if match_ref._moved_to_adjacent_this_turn:
+				dmg += 3  # 通过移动牌位移到贴脸：额外+3
 		"sage_book": dmg += 2
 		"resonance":
 			if attacker.combo_attacks_this_turn.size() > 1:
 				dmg += 2
 	return dmg
 
-# ---------- 防具检查 ----------
-func _check_armor(defender, damage_type: int, damage: int) -> Dictionary:
-	if defender.armor.is_empty():
-		return {blocked=false, damage=damage, msg=""}
+# ---------- 防具计算（只算减伤，不消耗耐久；耐久由 consume_armor 在实际伤害时扣） ----------
+# 返回 {blocked, damage, armor_hit, msg}；armor_hit=true 表示防具本次生效（应消耗耐久）
+func _calc_armor(defender, damage_type: int, damage: int) -> Dictionary:
+	if defender.armor.is_empty() or damage <= 0:
+		return {blocked=false, damage=damage, armor_hit=false, msg=""}
 
 	var armor_id = defender.armor.id
 	var armor_type = Config.ARMOR_DB[armor_id].type
@@ -111,19 +122,22 @@ func _check_armor(defender, damage_type: int, damage: int) -> Dictionary:
 			matches = (damage_type == Config.DamageType.MAGICAL)
 
 	if not matches:
-		return {blocked=false, damage=damage, msg=""}
+		return {blocked=false, damage=damage, armor_hit=false, msg=""}
 
-	# 第1次：完全免疫
+	# 第1次（满耐久）：完全免疫
 	if durability == defender.armor.get("max_durability", 3):
-		defender.armor.durability -= 1
-		return {blocked=true, damage=0, msg="防具完全免疫了伤害！"}
+		return {blocked=true, damage=0, armor_hit=true, msg="防具完全免疫了伤害！"}
 
 	# 第2、3次：减半
+	return {blocked=false, damage=floori(damage / 2.0), armor_hit=true, msg="防具减免了一半伤害"}
+
+# 防具耐久消耗（实际受到伤害或免疫生效时调用；被闪避/0伤害攻击不消耗）
+func consume_armor(defender_idx: int):
+	var defender = match_ref.get_player(defender_idx)
+	if defender.armor.is_empty(): return
 	defender.armor.durability -= 1
-	var reduced = floori(damage / 2.0)
 	if defender.armor.durability <= 0:
-		defender.armor = {}
-	return {blocked=false, damage=reduced, msg="防具减免了一半伤害"}
+		defender.armor = {}  # 碎裂
 
 # ---------- 响应处理 ----------
 func process_response(_attacker_idx: int, defender_idx: int, attack_card: String, response_card_uid: int) -> Dictionary:
@@ -157,6 +171,8 @@ func process_response(_attacker_idx: int, defender_idx: int, attack_card: String
 		if attack_card in ["range", "pierce", "magic", "chant"]:
 			effect = "restrain"
 			value = max(0, defender.range_power - match_ref.movement.get_distance())
+			if not defender.weapon.is_empty() and defender.weapon.id == "repeater":
+				value += 2  # 连弩：牵制额外扣除2点
 		else:
 			return {success=false, msg="远程卡不能响应该攻击"}
 	elif card_id in ["magic"]:
@@ -173,14 +189,6 @@ func process_response(_attacker_idx: int, defender_idx: int, attack_card: String
 		"restrain": return {success=true, effect="restrain", value=value, response_card=card_id}
 		"dodge": return {success=true, effect="dodge", response_card=card_id}
 	return {success=false}
-
-# ---------- 计算长弓的距离衰减修正 ----------
-func get_longbow_distance_penalty(attacker) -> int:
-	if attacker.weapon.is_empty():
-		return 0
-	if attacker.weapon.id == "longbow":
-		return 1  # 距离衰减-1 → 实际 - (distance - 1)
-	return 0
 
 # ---------- 造成伤害后的武器特效 ----------
 func apply_on_hit_effects(attacker_idx: int, defender_idx: int, damage: int, damage_type: int):

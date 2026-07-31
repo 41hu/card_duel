@@ -22,9 +22,13 @@ func show_logs(action_log: Array, max_count: int = 8, my_index: int = -1):
 		else:
 			lb.add_theme_color_override("font_color", Style.LOG_TEXT)
 		_vbox.add_child(lb)
-	# 强制 VBox 按内容撑高
+	# 强制 VBox 按内容撑高（节点可能已离开场景树（切场景时），await 前必须检查）
+	if not is_inside_tree():
+		return
 	_vbox.size = Vector2(size.x, 0)
 	await get_tree().process_frame
+	if not is_inside_tree():
+		return
 	_vbox.size = Vector2(size.x, _vbox.get_minimum_size().y)
 	call_deferred("_scroll_bottom")
 

@@ -8,10 +8,10 @@ var match_ref
 # handler 签名：func(buff: Dictionary, aspect: String, damage_type: int) -> int
 var _modifier_handlers: Dictionary = {
 	# 通用攻击加成（所有伤害类型）
-	"attack_up": func(buff, aspect, damage_type):
+	"attack_up": func(buff, aspect, _damage_type):
 		return buff.value if aspect == "attack" else 0,
 	# 通用攻击弱化（value 为负）
-	"attack_down": func(buff, aspect, damage_type):
+	"attack_down": func(buff, aspect, _damage_type):
 		return buff.value if aspect == "attack" else 0,
 	# 近战限定加成（狂战士）：仅物理类伤害（近战/重击）生效
 	"near_up": func(buff, aspect, damage_type):

@@ -39,6 +39,10 @@ var pending_attack_uid: int = -1
 var game_result: Dictionary = {}
 # 对战统计（结算页展示 + 称号判定）：每玩家一个字典
 var stats: Array = []
+# 本回合是否通过移动牌位移到贴脸（突刺武器额外+3 的判定标记）
+var _moved_to_adjacent_this_turn: bool = false
+# 本次攻击防具是否生效（实际造成伤害时消耗耐久，闪避/0伤害不消耗）
+var _armor_hit: bool = false
 var char_skills
 var card_effects
 var waiting_for_discard: bool = false
@@ -49,6 +53,7 @@ var _pending_formula: String = ""
 
 var _action_deadline: int = 0
 var _discard_deadline: int = 0
+const RESPONSE_TIME = 20  # 响应窗口超时秒数（超时默认不响应）
 
 signal state_changed(data: Dictionary)
 signal weapon_prompt(player_idx: int, weapon: Dictionary)
@@ -94,6 +99,7 @@ func init_match(p1_char_id: String, p2_char_id: String, bp_first: int = -1):
 	]
 	_action_deadline = 0
 	_discard_deadline = 0
+	_moved_to_adjacent_this_turn = false
 	first_player = bp_first if bp_first >= 0 else randi() % 2
 	current_player = first_player
 	phase = Config.Phase.BP_PHASE
@@ -164,6 +170,7 @@ func _draw_phase():
 func _action_phase():
 	if phase == Config.Phase.GAME_OVER: return
 	turn_phase = Config.TurnPhase.ACTION
+	_moved_to_adjacent_this_turn = false  # 每回合重置突刺贴脸标记
 	var player = players[current_player]
 	if player.frozen:
 		add_log(current_player, "被冻结，跳过出牌阶段")
@@ -316,7 +323,6 @@ func _handle_attack_card(player_idx: int, card: Dictionary) -> Dictionary:
 	if type_id in ["near", "heavy"] and distance != 0:
 		return {success=false, msg="必须贴脸"}
 	var player = players[player_idx]
-	player.combo_attacks_this_turn.append(type_id)
 	pending_attack_card = type_id
 	pending_attack_uid = card.uid
 	attacker_last_damage = 0
@@ -325,17 +331,26 @@ func _handle_attack_card(player_idx: int, card: Dictionary) -> Dictionary:
 	attacker_last_damage = calc.damage
 	attacker_last_damage += char_skills.on_attack_cast(player_idx, type_id)
 	_pending_formula = calc.get("formula", "")
+	_armor_hit = calc.get("armor_hit", false)
+	# 防具完全免疫优先于伤害加成判定（技能加成不能穿透满耐久防具）
+	if calc.get("blocked", false):
+		if calc.get("reason", "") == "distance":
+			# 距离不够（穿心）：攻击无效，不消耗卡
+			return {success=false, msg=calc.get("msg", "距离不够")}
+		combat.consume_armor(opp)  # 防具生效消耗耐久（免疫也算一次命中）
+		_use_card(player_idx, card)
+		add_log(player_idx, "被防具挡下")
+		state_changed.emit(get_full_state())
+		return {success=true, msg="被防具挡下"}
 	if attacker_last_damage <= 0:
-		if calc.get("blocked", false):
-			_use_card(player_idx, card)
-			add_log(player_idx, "被防具挡下")
-			state_changed.emit(get_full_state())
-			return {success=true, msg="被防具挡下"}
 		return {success=false, msg="无法造成伤害"}
+	# 有效攻击才计入连击（失败的穿心不算）
+	player.combo_attacks_this_turn.append(type_id)
 	# 记录攻击声明（谁打出了什么），便于复盘验证
 	add_log(player_idx, "%s打出%s" % [Config.char_name(players[player_idx].char_id), Config.card_name(type_id)])
 	phase = Config.Phase.RESPONSE_WINDOW
 	response_pending = true
+	_action_deadline = Time.get_ticks_msec() + RESPONSE_TIME * 1000  # 响应窗口独立计时
 	response_needed.emit(opp, {attacker=player_idx, card=type_id, damage=calc.damage, distance=distance})
 	return {success=true, phase="response", damage=calc.damage}
 
@@ -368,6 +383,9 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		state_changed.emit(get_full_state())
 		return
 	if final_damage > 0:
+		if _armor_hit:
+			combat.consume_armor(defender_idx)  # 防具耐久在实际伤害时消耗（被闪避后为0不消耗）
+		_armor_hit = false
 		var before_skill = final_damage
 		final_damage = char_skills.on_taking_damage(defender_idx, attacker_idx, final_damage)
 		if final_damage != before_skill:
@@ -404,16 +422,18 @@ func _handle_move_card(player_idx: int, card: Dictionary) -> Dictionary:
 	if not char_skills.move_distances(player_idx).has(steps):
 		return {success=false, msg="不支持%d步移动" % steps}
 	if status.get_move_modifier(player_idx) < 0:
+		# 流程检查：禁移动时移动卡不消耗（movement.move_player 另有兜底检查）
 		return {success=false, msg="本回合无法移动"}
 	for _s in range(steps):
 		if not movement.move_player(player_idx, direction): break
 		stats[player_idx]["moves"] += 1  # 对战统计：移动步数
 	_use_card(player_idx, card)
 	add_log(player_idx, "移动到%d" % players[player_idx].position)
+	if movement.get_distance() == 0:
+		_moved_to_adjacent_this_turn = true  # 突刺武器：移动贴脸后额外+3
 	var td = movement.check_trap_trigger(player_idx)
 	if td > 0:
-		# check_trap_trigger 内部已扣血并记日志，这里只做死亡判定
-		if players[player_idx].hp <= 0: _handle_death(player_idx)
+		_check_any_death()  # 移动者或被推的对方都可能踩陷阱致死（内部已扣血）
 	return {success=true}
 
 func _handle_destroy(player_idx: int, card: Dictionary) -> Dictionary:
@@ -571,6 +591,12 @@ func check_timers():
 		return
 	if _action_deadline > 0 and now >= _action_deadline:
 		_action_deadline = 0
+		if response_pending:
+			# 响应窗口超时：默认不响应，结算后攻击者继续出牌（避免软锁）
+			skip_response(1 - current_player)
+			if phase == Config.Phase.PLAYER_TURN and turn_phase == Config.TurnPhase.ACTION:
+				_action_deadline = Time.get_ticks_msec() + ACTION_TIME * 1000
+			return
 		add_log(current_player, "回合超时")
 		if waiting_for_weapon_choice >= 0:
 			confirm_weapon(waiting_for_weapon_choice, false)  # 武器选择超时默认放弃

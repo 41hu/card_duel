@@ -23,6 +23,7 @@ func _ready():
 	$MainPanel/CreateBtn.pressed.connect(_show_create)
 	$MainPanel/JoinBtn.pressed.connect(_show_join)
 	$MainPanel/SelfBtn.pressed.connect(_on_self_play)
+	$MainPanel/AiBtn.pressed.connect(_on_ai_battle)
 	$MainPanel/QuitBtn.pressed.connect(func(): get_tree().quit())
 	_add_server_shortcut(c_server, "本地")
 	_add_server_shortcut(c_server, "云端")
@@ -218,6 +219,76 @@ func _on_game_starting(data: Dictionary):
 func _on_self_play():
 	LocalGame.start_bp()
 	get_tree().change_scene_to_file("res://scenes/bp_scene.tscn")
+
+# ---- 人机对战 ----
+func _on_ai_battle():
+	_show_ai_difficulty()
+
+func _show_ai_difficulty():
+	var c = _make_popup("选择 AI 难度")
+	var vb = c.get_child(1)
+	var easy = _popup_btn("简单")
+	easy.pressed.connect(func(): c.queue_free(); _show_ai_char(0))
+	vb.add_child(easy)
+	var normal = _popup_btn("普通")
+	normal.pressed.connect(func(): c.queue_free(); _show_ai_char(1))
+	vb.add_child(normal)
+	var hard = _popup_btn("困难")
+	hard.pressed.connect(func(): c.queue_free(); _show_ai_char(2))
+	vb.add_child(hard)
+	var back = _popup_btn("返回")
+	back.pressed.connect(func(): c.queue_free())
+	vb.add_child(back)
+	add_child(c)
+
+func _show_ai_char(diff: int):
+	var c = _make_popup("选择你的角色")
+	var vb = c.get_child(1)
+	for char_id in Config.CHARACTER_IDS:
+		var b = _popup_btn(Config.char_name(char_id))
+		b.pressed.connect(func(cid=char_id): c.queue_free(); _start_ai_battle(diff, cid))
+		vb.add_child(b)
+	var back = _popup_btn("返回")
+	back.pressed.connect(func(): c.queue_free())
+	vb.add_child(back)
+	add_child(c)
+
+func _start_ai_battle(diff: int, my_char: String):
+	var pool = Config.CHARACTER_IDS.duplicate()
+	pool.erase(my_char)
+	var ai_char = pool[randi() % pool.size()]
+	LocalGame.start_ai_game(my_char, ai_char, diff)
+	get_tree().change_scene_to_file("res://scenes/battle_scene.tscn")
+
+# 弹窗辅助：半透明遮罩 + 居中滚动容器，返回 Control（第 2 个子节点是内容 VBox）
+func _make_popup(title_text: String) -> Control:
+	var c = Control.new()
+	c.name = "AiPopup"
+	c.z_index = 20
+	c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var bg = ColorRect.new()
+	bg.color = Color(0, 0, 0, 0.7)
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	c.add_child(bg)
+	var vb = VBoxContainer.new()
+	vb.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	vb.size = Vector2(560, 480)
+	vb.position = vb.position - Vector2(280, 240)
+	vb.add_theme_constant_override("separation", 10)
+	c.add_child(vb)
+	var t = Label.new()
+	t.text = title_text
+	t.add_theme_font_size_override("font_size", 32)
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(t)
+	return c
+
+func _popup_btn(text: String) -> Button:
+	var b = Button.new()
+	b.text = text
+	b.custom_minimum_size = Vector2(280, 80)
+	b.add_theme_font_size_override("font_size", 28)
+	return b
 
 func _on_error(msg: String):
 	status_label.text = "错误: " + msg

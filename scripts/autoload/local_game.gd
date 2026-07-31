@@ -16,6 +16,7 @@ signal hand_revealed(cards: Array)
 signal network_error(msg: String)
 
 const MatchStateClass = preload("res://scripts/core/match_state.gd")
+const AIPlayerClass = preload("res://scripts/core/ai_player.gd")
 
 var game: MatchStateClass
 var _player_names = ["自己(P1)", "自己(P2)"]
@@ -23,12 +24,28 @@ var _timer_elapsed: float = 0.0
 # 最近一局结果缓存（结算界面从缓存读取，避免信号时序问题）
 var last_game_result: Dictionary = {}
 
+# ---- 人机对战模式 ----
+var ai_mode: bool = false
+var ai_difficulty: int = 1
+var ai_idx: int = 1
+var _ai = null
+var _ai_busy: bool = false
+# AI 每步间隔（让玩家看清 AI 的出牌过程）
+const AI_STEP_DELAY_MS = 700
+var _ai_next_act_time: int = 0
+
 func _process(delta):
 	if game == null: return
 	_timer_elapsed += delta
 	if _timer_elapsed >= 1.0:
 		_timer_elapsed = 0.0
 		game.check_timers()
+	# AI 帧驱动：轮到 AI 时按间隔逐步决策（玩家能看到出牌过程）
+	if ai_mode and not _ai_busy and game != null and _ai != null:
+		if game.phase == Config.Phase.PLAYER_TURN and game.current_player == ai_idx:
+			if Time.get_ticks_msec() >= _ai_next_act_time:
+				_ai_act_frame()
+				_ai_next_act_time = Time.get_ticks_msec() + AI_STEP_DELAY_MS
 
 func start_local_game(p1_char: String, p2_char: String, bp_first: int = -1):
 	game = MatchStateClass.new()
@@ -39,6 +56,53 @@ func start_local_game(p1_char: String, p2_char: String, bp_first: int = -1):
 	game.init_match(p1_char, p2_char, bp_first)
 	game._start_game()
 	battle_state_cache = game.get_full_state()
+
+# 人机对战：不走 BP，直接开战（AI 随机先手，角色由入口传入）
+func start_ai_game(p1_char: String, p2_char: String, difficulty: int):
+	ai_mode = true
+	ai_difficulty = difficulty
+	ai_idx = 1  # 人类永远 P0，AI 是 P1
+	game = MatchStateClass.new()
+	game.state_changed.connect(_on_state)
+	game.weapon_prompt.connect(_on_weapon)
+	game.response_needed.connect(_on_response)
+	game.game_ended.connect(_on_ended)
+	game.init_match(p1_char, p2_char, randi() % 2)
+	_ai = AIPlayerClass.new(game, difficulty)
+	game._start_game()
+	battle_state_cache = game.get_full_state()
+	if game.current_player == ai_idx:
+		_ai_act_frame()  # AI 先手：立即走第一步，后续由 _process 驱动
+
+# AI 单步决策（由 _process 每帧驱动，一次只做一步，busy 标志防重入）
+func _ai_act_frame():
+	_ai_busy = true
+	if game.waiting_for_discard:
+		_ai_do_discard()
+	else:
+		var act = _ai.decide_action(ai_idx)
+		var r = game.process_action(ai_idx, act)
+		if not r.get("success", false):
+			game.process_action(ai_idx, {"action": "end_turn"})
+	_ai_busy = false
+
+func _ai_do_discard():
+	var need = 0
+	var cs = game.card_systems[ai_idx]
+	var limit = game.movement.get_hand_limit(ai_idx)
+	need = max(0, cs.hand.size() - limit)
+	if need == 0: need = 1  # 超上限0张也主动弃1张（简化）
+	var uids = _ai.decide_discard(ai_idx, need)
+	game.confirm_discard(ai_idx, uids)
+
+# AI 防守响应（人类攻击 AI 时自动响应；后续回合流转由 _process 帧驱动接管）
+func _ai_respond(attack_info: Dictionary):
+	if not ai_mode or game == null or _ai == null: return
+	var dec = _ai.decide_response(ai_idx, attack_info.get("card", ""))
+	if dec.respond:
+		game.process_response(ai_idx, true, dec.card_uid)
+	else:
+		game.skip_response(ai_idx)
 
 func start_bp():
 	game = MatchStateClass.new()
@@ -61,11 +125,17 @@ func _on_state(state: Dictionary):
 	state["t"] = "game_state"
 	state_updated.emit(state)
 
-func _on_weapon(_player_idx: int, weapon: Dictionary):
+func _on_weapon(player_idx: int, weapon: Dictionary):
+	if ai_mode and player_idx == ai_idx:
+		game.confirm_weapon(player_idx, true)  # AI 获得武器直接装备
+		return
 	weapon_prompt.emit(weapon)
 
-func _on_response(_defender_idx: int, attack_info: Dictionary):
+func _on_response(defender_idx: int, attack_info: Dictionary):
 	attack_info["t"] = "response_needed"
+	if ai_mode and defender_idx == ai_idx:
+		_ai_respond(attack_info)  # AI 被攻击：自动响应
+		return
 	response_needed.emit(attack_info)
 
 func _on_ended(result: Dictionary):

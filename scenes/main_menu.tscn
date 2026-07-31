@@ -49,36 +49,46 @@ layout_mode = 0
 offset_left = 285.0
 offset_top = 15.0
 offset_right = 665.0
-offset_bottom = 165.0
-theme_override_font_sizes/font_size = 44
+offset_bottom = 145.0
+theme_override_font_sizes/font_size = 40
 text = "创建房间"
 
 [node name="JoinBtn" type="Button" parent="MainPanel" unique_id=354150312]
 layout_mode = 0
 offset_left = 285.0
-offset_top = 189.0
+offset_top = 161.0
 offset_right = 665.0
-offset_bottom = 339.0
-theme_override_font_sizes/font_size = 44
+offset_bottom = 291.0
+theme_override_font_sizes/font_size = 40
 text = "加入房间"
 
 [node name="SelfBtn" type="Button" parent="MainPanel" unique_id=1625168154]
 layout_mode = 0
 offset_left = 285.0
-offset_top = 363.0
+offset_top = 307.0
 offset_right = 665.0
-offset_bottom = 513.0
-theme_override_font_sizes/font_size = 44
+offset_bottom = 437.0
+theme_override_font_sizes/font_size = 40
 text = "自我对战"
+
+[node name="AiBtn" type="Button" parent="MainPanel" unique_id=1144228867]
+layout_mode = 0
+offset_left = 285.0
+offset_top = 453.0
+offset_right = 665.0
+offset_bottom = 583.0
+theme_override_colors/font_color = Color(0.55, 0.9, 1, 1)
+theme_override_font_sizes/font_size = 40
+text = "人机对战"
 
 [node name="QuitBtn" type="Button" parent="MainPanel" unique_id=1144228866]
 layout_mode = 0
 offset_left = 285.0
-offset_top = 537.0
+offset_top = 599.0
 offset_right = 665.0
-offset_bottom = 687.0
+offset_bottom = 729.0
 theme_override_colors/font_color = Color(1, 0.55, 0.55, 1)
-theme_override_font_sizes/font_size = 44
+theme_override_font_sizes/font_size = 40
 text = "退出游戏"
 
 [node name="CreatePanel" type="Control" parent="." unique_id=535578410]
@@ -271,9 +281,9 @@ layout_mode = 1
 anchor_left = 0.5
 anchor_right = 0.5
 offset_left = -400.0
-offset_top = 955.0
+offset_top = 1010.0
 offset_right = 400.0
-offset_bottom = 1005.0
+offset_bottom = 1050.0
 grow_horizontal = 2
 theme_override_colors/font_color = Color(0.6, 0.6, 0.6, 1)
 theme_override_font_sizes/font_size = 34

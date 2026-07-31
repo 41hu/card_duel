@@ -61,8 +61,8 @@
 3 类武器各 4 把，全局不重复：
 ```
 近战：烈焰剑(近战+2)、霜咬(命中后对方下回合位移=0)、嗜血(近战≥3伤害回2HP)、突刺(近战+1，移动牌位移到贴脸额外+3)
-远程：长弓(远程+1，距离衰减-1)、连弩(牵制额外-2)、鹰眼(命中后查看对方手牌)、毒牙(中毒-2×2回合)
-法术：贤者之书(魔法+2)、灼烧(可叠加-1/回合)、时滞(命中后对方下回合攻击-1)、共鸣(本回合已出过其他攻击则本次+2)
+远程：长弓(远程+1，距离衰减-1)、连弩(牵制额外-2)、鹰眼(命中后查看对方手牌)、毒牙(中毒-1×2层可叠加)
+法术：贤者之书(魔法+2)、灼烧(-2×2回合，再次命中刷新)、时滞(命中后对方下回合攻击-1)、共鸣(本回合已出过其他攻击则本次+2，失败攻击不算)
 ```
 
 ---
@@ -150,43 +150,35 @@ HP ≤ 0 时 → 弃光手牌 → 抽 4 张 → 自动使用回复卡 → HP > 0
 - GDScript 2.0
 - WebSocket（联网对战）
 
-### 8.2 项目结构
+### 8.2 项目结构（以 WORKFLOW.md 为准）
 ```
 card_duel/
-├── project.godot
-├── scenes/
-│   ├── main_menu.tscn        # 主菜单（带真实节点树）
-│   ├── battle.tscn            # 本地热座战斗（带真实节点树）
-│   ├── network_battle.tscn    # 网络对战客户端
-│   └── server.tscn            # 服务端
+├── project.godot              # autoload: Config, Network, LocalGame, BackHandler, McpInteractionServer
+├── scenes/                    # main_menu / bp_scene / battle_scene / settlement / server
 ├── scripts/
-│   ├── autoload/
-│   │   ├── config.gd          # 数据定义（78卡、8角色、12武器）
-│   │   ├── game_state.gd      # 核心状态机
-│   │   └── network.gd         # WebSocket 通信层
-│   ├── server/
-│   │   ├── server_main.gd     # 房间管理
-│   │   └── server_room.gd     # 单局对战管理
-│   └── ui/
-│       ├── main_menu.gd       # 主菜单逻辑
-│       ├── battle_ui.gd       # 本地战斗 UI
-│       └── network_battle.gd  # 网络战斗 UI
+│   ├── autoload/              # config(数据) network(WebSocket) local_game(本地/人机) back_handler(返回键) mcp_interaction_server(调试桥)
+│   ├── core/                  # match_state(服务端权威状态机) + 7个系统组件 + ai_player(人机AI)
+│   ├── data/                  # card_data / character_data / equip_data（纯数据表）
+│   ├── server/                # server_main（TCPServer+房间管理）
+│   └── ui/                    # main_menu / bp_ui / battle_ui / settlement_ui / components/
 ```
 
 ### 8.3 Autoload 顺序
 1. Config — 静态数据
-2. GameState — 游戏逻辑
-3. Network — 通信层
+2. Network — WebSocket 客户端
+3. LocalGame — 本地自我对战/人机对战（模拟 Network 接口）
+4. BackHandler — 返回键双击退出
+5. McpInteractionServer — 调试桥（仅开发用）
 
 ### 8.4 联网架构
 ```
-ECS 云服务器 (Godot headless, 权威服务端)
+ECS 云服务器 (Godot headless, 权威服务端, 17890)
     ↕ WebSocket (JSON)
 电脑客户端 ── 手机客户端 (Android 导出)
 ```
-- 服务端跑完整 `game_state.gd`
-- 客户端纯 UI，操作转发至服务端
-- JSON 协议：`{"t":"play","c":card_uid,"d":{target}}`
+- 服务端跑完整 `match_state.gd`；客户端纯 UI，操作转发至服务端
+- 本地/人机模式：`LocalGame` 直接驱动同一套 MatchState，行为与联机一致
+- 完整协议见 WORKFLOW.md / API_REFERENCE.md
 
 ---
 

@@ -16,8 +16,11 @@ func get_distance() -> int:
 func is_adjacent() -> bool:
 	return get_distance() == 0
 
-# 移动玩家
+# 移动玩家（统一位移入口：移动卡/暗影步都走这里）
 func move_player(player_idx: int, direction: int) -> bool:
+	# 禁移动（霜咬 frozen_move 等）统一在此兜底，所有位移路径自动受限
+	if match_ref.status.get_move_modifier(player_idx) < 0:
+		return false
 	var player = match_ref.get_player(player_idx)
 	var other_player = match_ref.get_player(1 - player_idx)
 	var new_pos = Config.clamp_position(player.position + direction)

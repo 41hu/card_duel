@@ -15,6 +15,7 @@ var type_id: String = ""
 var ap_type: int = -1
 var _selected: bool = false
 var _respondable: bool = false
+var _is_discarded: bool = false
 
 func _init():
 	custom_minimum_size = Vector2(96, 120)
@@ -105,17 +106,20 @@ func set_selected(v: bool):
 		s.border_width_left = 3; s.border_width_right = 3
 		s.border_width_top = 3; s.border_width_bottom = 3
 		_panel.add_theme_stylebox_override("panel", s)
-	else:
+	elif not _is_discarded:
 		_select_mark.text = "◈" if _respondable else ""
-		var is_discard = (_select_mark.text == "✕")
-		_apply_panel_style(_card_bg_color(ap_type), is_discard)
+		_apply_panel_style(_card_bg_color(ap_type), false)
 
 func set_discard_mark(active: bool):
+	_is_discarded = active
 	if active:
 		_selected = false
 		_select_mark.text = "✕"
 		_select_mark.add_theme_color_override("font_color", Style.DISCARD_RED)
 		_apply_panel_style(_card_bg_color(ap_type), true)
+	else:
+		_select_mark.text = ""
+		_apply_panel_style(_card_bg_color(ap_type), false)
 
 func _on_gui_input(event: InputEvent):
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
@@ -127,8 +131,10 @@ func _on_hover():
 	_panel.add_theme_stylebox_override("panel", s)
 
 func _on_unhover():
-	var is_discard = (_select_mark.text == "✕")
-	_apply_panel_style(_card_bg_color(ap_type), is_discard)
+	if _is_discarded:
+		_apply_panel_style(_card_bg_color(ap_type), true)
+		return
+	_apply_panel_style(_card_bg_color(ap_type), false)
 	if _selected:
 		set_selected(true)
 	elif _respondable:

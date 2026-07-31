@@ -43,6 +43,7 @@ var waiting_for_discard: bool = false
 var discard_count: int = 0
 var _reveal_to: int = -1
 var _reveal_from: int = -1
+var _pending_formula: String = ""
 
 var _action_deadline: int = 0
 var _discard_deadline: int = 0
@@ -107,6 +108,7 @@ func _create_player(idx: int, char_id: String, char_data: Dictionary) -> Diction
 		upgrades={},
 		skill_counts={},
 		skills_used=[],
+		used_function_card=false,
 		pending_swordsman_skill=false,
 	}
 
@@ -227,6 +229,7 @@ func _do_play_card(player_idx: int, data: Dictionary) -> Dictionary:
 				Config.APType.FUNCTION: player.ap_function += cd.cost
 		return result
 	if free_archer: player.skill_used_this_turn = true
+	if cd.ap == Config.APType.FUNCTION: player.used_function_card = true
 	state_changed.emit(get_full_state())
 	return result
 
@@ -299,6 +302,7 @@ func _handle_attack_card(player_idx: int, card: Dictionary) -> Dictionary:
 	var calc = combat.calculate_attack(player_idx, opp, type_id)
 	attacker_last_damage = calc.damage
 	attacker_last_damage += char_skills.on_attack_cast(player_idx, type_id)
+	_pending_formula = calc.get("formula", "")
 	if attacker_last_damage <= 0:
 		if calc.get("blocked", false):
 			_use_card(player_idx, card)
@@ -317,13 +321,15 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 	response_pending = false
 	phase = Config.Phase.PLAYER_TURN
 	var final_damage = attacker_last_damage
+	var formula = _pending_formula
+	_pending_formula = ""
 	if respond and card_uid >= 0:
 		var rr = combat.process_response(attacker_idx, defender_idx, pending_attack_card, card_uid)
 		if rr.success:
 			var rname = Config.card_name(rr.get("response_card", ""))
 			match rr.effect:
-				"block": final_damage = floori(final_damage / 2.0); add_log(defender_idx, "用%s格挡→%d" % [rname, final_damage])
-				"restrain": final_damage = max(0, final_damage - rr.value); add_log(defender_idx, "用%s牵制(-%d)" % [rname, rr.value])
+				"block": final_damage = floori(final_damage / 2.0); formula += "/2"; add_log(defender_idx, "用%s格挡" % rname)
+				"restrain": final_damage = max(0, final_damage - rr.value); formula += "-%d" % rr.value; add_log(defender_idx, "用%s牵制(-%d)" % [rname, rr.value])
 				"dodge": final_damage = 0; add_log(defender_idx, "用%s闪避" % rname)
 		else:
 			if respond: add_log(defender_idx, "无法响应")
@@ -337,9 +343,15 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		state_changed.emit(get_full_state())
 		return
 	if final_damage > 0:
+		var before_skill = final_damage
 		final_damage = char_skills.on_taking_damage(defender_idx, attacker_idx, final_damage)
+		if final_damage != before_skill:
+			formula += "-%d" % (before_skill - final_damage)
 		players[defender_idx].hp -= final_damage
-		add_log(attacker_idx, "造成%d伤害" % final_damage)
+		var attacker_name = Config.char_name(players[attacker_idx].char_id)
+		var defender_name = Config.char_name(players[defender_idx].char_id)
+		var card_name = Config.card_name(pending_attack_card)
+		add_log(attacker_idx, "%s使用%s对%s造成：%s=%d点伤害" % [attacker_name, card_name, defender_name, formula, final_damage])
 		combat.apply_on_hit_effects(attacker_idx, defender_idx, final_damage, attacker_last_type)
 		char_skills.on_attack_hit(attacker_idx, defender_idx, final_damage, attacker_last_type)
 	if players[defender_idx].hp <= 0: _handle_death(defender_idx)

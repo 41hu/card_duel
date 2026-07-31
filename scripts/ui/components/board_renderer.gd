@@ -38,7 +38,7 @@ func _create_cell(index: int) -> Panel:
 	l.size = Vector2(68, 70)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	l.add_theme_font_size_override("font_size", 10)
+	l.add_theme_font_size_override("font_size", 14)
 	l.add_theme_color_override("font_color", Style.CELL_TEXT)
 	p.add_child(l)
 	return p

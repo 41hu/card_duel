@@ -45,6 +45,7 @@ func on_turn_start(player_idx: int):
 	p.damage_reduction_used = false
 	p.pending_swordsman_skill = false
 	p.skills_used = []
+	p.used_function_card = false
 	p.combo_attacks_this_turn = []
 	match p.char_id:
 		"warlock": p.ap_function = 2
@@ -54,7 +55,7 @@ func on_turn_start(player_idx: int):
 
 func on_turn_end(player_idx: int):
 	var p = _ms.players[player_idx]
-	if p.char_id == "warlock" and p.ap_function >= 1:
+	if p.char_id == "warlock" and not p.used_function_card:
 		_ms.card_systems[player_idx].draw_cards(1)
 		_ms.add_log(player_idx, "术士+1抽")
 

@@ -11,51 +11,68 @@ func _init(match):
 	match_ref = match
 
 # ---------- 主入口：计算攻击伤害 ----------
-# 返回 {damage, blocked, msg}
+# 返回 {damage, blocked, msg, formula}
 func calculate_attack(attacker_idx: int, defender_idx: int, card_type_id: String) -> Dictionary:
 	var attacker = match_ref.get_player(attacker_idx)
 	var defender = match_ref.get_player(defender_idx)
 	var distance = match_ref.movement.get_distance()
 	var base_damage = 0
 	var damage_type = Config.get_damage_type(card_type_id)
+	var formula = ""
 
 	# 计算基础伤害
 	match card_type_id:
 		"near":
 			base_damage = attacker.near_power
+			formula = str(base_damage)
 		"range":
 			var eff_dist = distance
 			if not attacker.weapon.is_empty() and attacker.weapon.id == "longbow":
 				eff_dist = max(0, distance - 1)
 			base_damage = max(0, attacker.range_power - eff_dist)
+			formula = "%d-%d" % [attacker.range_power, eff_dist]
 		"magic":
 			base_damage = attacker.magic_power
+			formula = str(base_damage)
 		"heavy":
-			# 必须贴脸
 			if distance != 0:
 				return {damage=0, blocked=true, msg="重击必须贴脸！"}
 			base_damage = attacker.near_power + 3
+			formula = "%d+3" % attacker.near_power
 		"pierce":
 			var eff_dist2 = distance
 			if not attacker.weapon.is_empty() and attacker.weapon.id == "longbow":
 				eff_dist2 = max(0, distance - 1)
 			base_damage = max(0, attacker.range_power - eff_dist2) + 3
+			formula = "%d-%d+3" % [attacker.range_power, eff_dist2]
 		"chant":
 			base_damage = attacker.magic_power + 3
+			formula = "%d+3" % attacker.magic_power
 
 	# 应用武器效果（伤害加成）
+	var before_weapon = base_damage
 	base_damage = _apply_weapon_damage_bonus(attacker, base_damage, damage_type)
+	if base_damage != before_weapon and not attacker.weapon.is_empty():
+		formula += "+%d" % (base_damage - before_weapon)
+
 	# 应用Buff修正（狂战士等）
-	base_damage += match_ref.status.get_attack_modifier(attacker_idx)
+	var buff_mod = match_ref.status.get_attack_modifier(attacker_idx)
+	if buff_mod != 0:
+		base_damage += buff_mod
+		formula += ("+%d" if buff_mod > 0 else "%d") % buff_mod
 
 	# 检查防具
 	var armor_result = _check_armor(defender, damage_type, base_damage)
 	if armor_result.completely_blocked:
+		armor_result.formula = "=0(防具免疫)"
 		return armor_result
 
-	base_damage = armor_result.damage
+	var armor_dmg = armor_result.damage
+	if armor_dmg != base_damage:
+		formula += "/2"
+	base_damage = armor_dmg
 
-	return {damage=base_damage, blocked=false, msg="", damage_type=damage_type}
+	return {damage=base_damage, blocked=false, msg="", damage_type=damage_type, formula=formula}
 
 # ---------- 武器伤害加成 ----------
 func _apply_weapon_damage_bonus(attacker, base_damage: int, damage_type: int) -> int:

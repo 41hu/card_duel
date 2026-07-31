@@ -81,7 +81,7 @@ jobs:
           mkdir -p dist
           export ANDROID_HOME=~/android-sdk
           export ANDROID_SDK_ROOT=~/android-sdk
-          ./Godot_v4.7.1-stable_linux.x86_64 --headless --path . --export-debug "纸上谈兵内测" "dist/CardDuel.apk"
+          ./Godot_v4.7.1-stable_linux.x86_64 --headless --path . --export-debug "Android" "dist/CardDuel.apk"
 
       - name: Upload Android Artifact
         uses: actions/upload-artifact@v4

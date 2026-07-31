@@ -73,6 +73,39 @@ func _ready():
 	if not cached.is_empty():
 		_on_state_updated(cached)
 		_n().battle_state_cache = {}
+	_apply_safe_area()
+
+# 全面屏/刘海屏安全区适配：横屏时刘海在左右两侧，给角落信息留出边距
+func _apply_safe_area():
+	var sa = DisplayServer.get_display_safe_area()
+	var win = DisplayServer.window_get_size()
+	var vp = get_viewport_rect().size
+	if vp.x <= 0 or vp.y <= 0: return
+	var sx = win.x / vp.x
+	var sy = win.y / vp.y
+	var left = sa.position.x / sx
+	var right = (win.x - sa.end.x) / sx
+	var top = sa.position.y / sy
+	var bottom = (win.y - sa.end.y) / sy
+	if left > 0:
+		me_info.offset_left = left + 12
+		skill_btn.offset_left += left
+		skill_btn.offset_right += left
+		skill_confirm.offset_left += left
+		skill_confirm.offset_right += left
+		skill_cancel.offset_left += left
+		skill_cancel.offset_right += left
+	if right > 0:
+		opp_info.offset_right = -(right + 12)
+	if bottom > 0:
+		end_turn_btn.offset_top -= bottom
+		end_turn_btn.offset_bottom -= bottom
+		skill_btn.offset_top -= bottom
+		skill_btn.offset_bottom -= bottom
+		skill_confirm.offset_top -= bottom
+		skill_confirm.offset_bottom -= bottom
+		skill_cancel.offset_top -= bottom
+		skill_cancel.offset_bottom -= bottom
 
 func _input(event):
 	if not OS.is_debug_build(): return
@@ -379,9 +412,10 @@ func _fmt_player(p, tag: String) -> String:
 				extra += " [DoT] %s -%dHP %s" % [dname, d.damage, suffix]
 		if buffs.size() > 0:
 			for b in buffs:
+				var bname = {"attack_up": "攻击强化", "attack_down": "攻击弱化", "near_up": "近战强化"}.get(b.type, b.type)
 				var sgn = "+" if b.value > 0 else ""
 				var dur = ("%d回" % b.duration) if b.duration > 0 else ("回合" if b.duration == -1 else "")
-				extra += " [Buff] %s %s%d %s" % [b.type, sgn, b.value, dur]
+				extra += " [Buff] %s %s%d %s" % [bname, sgn, b.value, dur]
 		if skill != "?":
 			if extra != "": extra += " |"
 			extra += " 技能:%s" % skill

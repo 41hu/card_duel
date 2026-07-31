@@ -212,7 +212,7 @@ func _paladin_reduce(player_idx: int, base: int) -> int:
 	return base
 
 func _berserker_rage(player_idx: int):
-	_ms.status.add_buff(player_idx, "attack_up", 1, 2)
+	_ms.status.add_buff(player_idx, "near_up", 1, 2)
 	_ms.add_log(player_idx, "狂战士+1近战")
 
 func _mage_discard(player_idx: int, params: Dictionary) -> Dictionary:

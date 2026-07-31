@@ -77,8 +77,8 @@ func on_turn_end(player_idx: int):
 	# 清除技能使用标记
 	player.skill_used_this_turn = false
 
-# 获取攻击力修正
-func get_attack_modifier(player_idx: int) -> int:
+# 获取攻击力修正（damage_type: Config.DamageType，用于区分近战限定加成）
+func get_attack_modifier(player_idx: int, damage_type: int) -> int:
 	var player = match_ref.get_player(player_idx)
 	var mod = 0
 	for buff in player.buffs:
@@ -86,6 +86,8 @@ func get_attack_modifier(player_idx: int) -> int:
 			mod += buff.value
 		elif buff.type == "attack_down":
 			mod += buff.value  # value为负
+		elif buff.type == "near_up" and damage_type == Config.DamageType.PHYSICAL:
+			mod += buff.value  # 狂战士：仅近战类伤害（近战/重击）生效
 	return mod
 
 # 获取移动修正（霜咬效果等）

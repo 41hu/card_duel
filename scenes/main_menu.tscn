@@ -21,57 +21,66 @@ grow_vertical = 2
 color = Color(0.1, 0.12, 0.18, 1)
 
 [node name="Title" type="Label" parent="." unique_id=269105965]
-layout_mode = 0
-offset_left = 710.0
+layout_mode = 1
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -250.0
 offset_top = 90.0
-offset_right = 1210.0
+offset_right = 250.0
 offset_bottom = 190.0
+grow_horizontal = 2
 theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
 theme_override_font_sizes/font_size = 96
 text = "卡牌对决"
 horizontal_alignment = 1
 
 [node name="MainPanel" type="Control" parent="." unique_id=382630785]
-anchors_preset = 0
-offset_left = 250.0
+layout_mode = 1
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -475.0
 offset_top = 240.0
-offset_right = 550.0
+offset_right = 475.0
 offset_bottom = 450.0
+grow_horizontal = 2
 
 [node name="CreateBtn" type="Button" parent="MainPanel" unique_id=945651176]
 layout_mode = 0
-offset_left = 520.0
+offset_left = 285.0
 offset_top = 15.0
-offset_right = 900.0
+offset_right = 665.0
 offset_bottom = 185.0
 theme_override_font_sizes/font_size = 44
 text = "创建房间"
 
 [node name="JoinBtn" type="Button" parent="MainPanel" unique_id=354150312]
 layout_mode = 0
-offset_left = 520.0
+offset_left = 285.0
 offset_top = 205.0
-offset_right = 900.0
+offset_right = 665.0
 offset_bottom = 375.0
 theme_override_font_sizes/font_size = 44
 text = "加入房间"
 
 [node name="SelfBtn" type="Button" parent="MainPanel" unique_id=1625168154]
 layout_mode = 0
-offset_left = 520.0
+offset_left = 285.0
 offset_top = 395.0
-offset_right = 900.0
+offset_right = 665.0
 offset_bottom = 565.0
 theme_override_font_sizes/font_size = 44
 text = "自我对战"
 
 [node name="CreatePanel" type="Control" parent="." unique_id=535578410]
 visible = false
-anchors_preset = 0
-offset_left = 510.0
+layout_mode = 1
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -450.0
 offset_top = 220.0
-offset_right = 1410.0
+offset_right = 450.0
 offset_bottom = 860.0
+grow_horizontal = 2
 
 [node name="CreateTitle" type="Label" parent="CreatePanel" unique_id=1535493356]
 layout_mode = 0
@@ -152,11 +161,14 @@ horizontal_alignment = 1
 
 [node name="JoinPanel" type="Control" parent="." unique_id=579832077]
 visible = false
-anchors_preset = 0
-offset_left = 510.0
+layout_mode = 1
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -450.0
 offset_top = 210.0
-offset_right = 1410.0
+offset_right = 450.0
 offset_bottom = 870.0
+grow_horizontal = 2
 
 [node name="JoinTitle" type="Label" parent="JoinPanel" unique_id=1562938152]
 layout_mode = 0
@@ -245,11 +257,14 @@ theme_override_font_sizes/font_size = 36
 text = "返回"
 
 [node name="StatusLabel" type="Label" parent="." unique_id=1194138405]
-layout_mode = 0
-offset_left = 560.0
+layout_mode = 1
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -400.0
 offset_top = 955.0
-offset_right = 1360.0
+offset_right = 400.0
 offset_bottom = 1005.0
+grow_horizontal = 2
 theme_override_colors/font_color = Color(0.6, 0.6, 0.6, 1)
 theme_override_font_sizes/font_size = 34
 horizontal_alignment = 1

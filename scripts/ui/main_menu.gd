@@ -32,7 +32,13 @@ func _ready():
 	version_label.text = "v" + _get_version()
 	version_label.add_theme_font_size_override("font_size", 20)
 	version_label.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
-	version_label.position = Vector2(12, 12)
+	# 安全区适配：全面屏/刘海屏上避免被裁切
+	var sa = DisplayServer.get_display_safe_area()
+	var win = DisplayServer.window_get_size()
+	var vp = get_viewport_rect().size
+	var sx = (win.x / vp.x) if vp.x > 0 else 1.0
+	var sy = (win.y / vp.y) if vp.y > 0 else 1.0
+	version_label.position = Vector2(sa.position.x / sx + 12, sa.position.y / sy + 12)
 	add_child(version_label)
 	c_back_btn.pressed.connect(_show_main)
 	j_back_btn.pressed.connect(_show_main)

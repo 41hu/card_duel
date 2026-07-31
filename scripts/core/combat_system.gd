@@ -56,7 +56,7 @@ func calculate_attack(attacker_idx: int, defender_idx: int, card_type_id: String
 		formula += "+%d" % (base_damage - before_weapon)
 
 	# 应用Buff修正（狂战士等）
-	var buff_mod = match_ref.status.get_attack_modifier(attacker_idx)
+	var buff_mod = match_ref.status.get_attack_modifier(attacker_idx, damage_type)
 	if buff_mod != 0:
 		base_damage += buff_mod
 		formula += ("+%d" if buff_mod > 0 else "%d") % buff_mod

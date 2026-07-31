@@ -92,3 +92,13 @@ jobs:
           name: v${{ needs.version.outputs.version }}
           files: dist/CardDuel.apk
           generate_release_notes: false
+
+      - name: Deploy APK to Server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: 47.107.47.251
+          username: root
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          source: dist/CardDuel.apk
+          target: ~/card_duel_dist/
+          strip_components: 1

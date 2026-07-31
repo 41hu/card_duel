@@ -65,22 +65,15 @@ jobs:
           unzip -q -o Godot_v4.7.1-stable_export_templates.tpz -d ~/.local/share/godot/export_templates/4.7.1.stable/
           mv ~/.local/share/godot/export_templates/4.7.1.stable/templates/* ~/.local/share/godot/export_templates/4.7.1.stable/ 2>/dev/null || true
 
-      - name: Download Android SDK Command Line Tools
-        run: |
-          mkdir -p ~/android-sdk/cmdline-tools
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-          unzip -q -o commandlinetools-linux-11076708_latest.zip -d ~/android-sdk/cmdline-tools
-          mv ~/android-sdk/cmdline-tools/cmdline-tools ~/android-sdk/cmdline-tools/latest
-
-      - name: Install Android SDK Components
-        run: |
-          yes | ~/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=~/android-sdk "platform-tools" "build-tools;34.0.0" "platforms;android-34"
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
 
       - name: Export Android APK (Debug)
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
         run: |
           mkdir -p dist
-          export ANDROID_HOME=~/android-sdk
-          export ANDROID_SDK_ROOT=~/android-sdk
           ./Godot_v4.7.1-stable_linux.x86_64 --headless --path . --export-debug "Android" "dist/CardDuel.apk"
 
       - name: Upload Android Artifact

@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: read_version
-        run: echo "version=$(cat version.txt)" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(grep -oP 'VERSION = \"\K[^\"]+' scripts/version.gd)" >> "$GITHUB_OUTPUT"
 
   export-windows:
     needs: version

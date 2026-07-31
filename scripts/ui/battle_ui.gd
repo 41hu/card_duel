@@ -283,9 +283,9 @@ func _refresh_all(state: Dictionary):
 
 	_deck_label.text = "牌堆:%d  弃牌:%d" % [state.get("deck_size", 0), state.get("discard_size", 0)]
 	_deck_label.anchor_left = 0.5; _deck_label.anchor_right = 0.5
-	_deck_label.anchor_top = 0.0; _deck_label.anchor_bottom = 0.0
+	_deck_label.anchor_top = 0.05; _deck_label.anchor_bottom = 0.05
 	_deck_label.offset_left = -80; _deck_label.offset_right = 80
-	_deck_label.offset_top = 42; _deck_label.offset_bottom = 62
+	_deck_label.offset_top = 34; _deck_label.offset_bottom = 54
 	_deck_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	board.update(pls, state.get("traps", []), _player_index)

@@ -17,6 +17,9 @@ mcp_interaction_server.gd.uid
 # Logs
 *.log
 
+# Debug artifacts
+error.png
+
 # OS
 .DS_Store
 Thumbs.db

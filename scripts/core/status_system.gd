@@ -11,12 +11,25 @@ func add_buff(player_idx: int, buff_type: String, value: int, duration: int):
 	var player = match_ref.get_player(player_idx)
 	player.buffs.append({type=buff_type, value=value, duration=duration})
 
-# 添加DoT {type, damage_per_turn, duration}
-func add_dot(player_idx: int, dot_type: String, damage: int, duration: int):
-	if match_ref.char_skills.is_immune(player_idx, "dot_" + dot_type): return
+# 添加灼烧：持续2回合，每回合-2HP，再次命中刷新持续时间为2回合（不叠加层数）
+func add_burn(player_idx: int):
+	if match_ref.char_skills.is_immune(player_idx, "dot_burn"): return
 	var player = match_ref.get_player(player_idx)
-	# 灼烧可叠加
-	player.dots.append({type=dot_type, damage=damage, duration=duration})
+	for dot in player.dots:
+		if dot.type == "burn":
+			dot.duration = 2  # 刷新持续时间
+			return
+	player.dots.append({type="burn", damage=2, duration=2})
+
+# 添加中毒：每回合-1HP，再次命中+2层，层数每回合-1，可无限叠加
+func add_poison(player_idx: int, stacks: int = 2):
+	if match_ref.char_skills.is_immune(player_idx, "dot_poison"): return
+	var player = match_ref.get_player(player_idx)
+	for dot in player.dots:
+		if dot.type == "poison":
+			dot.duration += stacks  # 叠加层数
+			return
+	player.dots.append({type="poison", damage=1, duration=stacks})
 
 # 冻结玩家
 func freeze_player(player_idx: int) -> bool:

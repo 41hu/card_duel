@@ -208,13 +208,13 @@ func apply_on_hit_effects(attacker_idx: int, defender_idx: int, damage: int, dam
 		match_ref._reveal_to = attacker_idx
 		match_ref._reveal_from = defender_idx
 
-	# 毒牙：远程命中后中毒-2×2回合
+	# 毒牙：远程命中后给予2层中毒（每回合-1HP，层数每回合-1，可叠加）
 	if weapon_id == "toxic_fang":
-		match_ref.status.add_dot(defender_idx, "poison", 2, 2)
+		match_ref.status.add_poison(defender_idx, 2)
 
-	# 灼烧：魔法命中后灼烧可叠加-1HP/回合
+	# 灼烧：魔法命中后灼烧2回合每回合-2HP，再次命中刷新时长
 	if weapon_id == "scorch":
-		match_ref.status.add_dot(defender_idx, "burn", 1, -1)
+		match_ref.status.add_burn(defender_idx)
 
 	# 时滞：魔法命中后对方下回合攻击-1
 	if weapon_id == "time_lag":
@@ -223,15 +223,23 @@ func apply_on_hit_effects(attacker_idx: int, defender_idx: int, damage: int, dam
 	# 共鸣：在 _apply_weapon_damage_bonus 中处理（本回合已出过其他攻击则+2）
 
 # ---------- 处置DoT伤害 ----------
-func apply_dot_damage(player_idx: int) -> int:
+# 灼烧: 每回合-2HP，duration-1，到0移除
+# 中毒: 每回合-1HP，duration-1，到0移除
+func apply_dot_damage(player_idx: int) -> Dictionary:
 	var player = match_ref.get_player(player_idx)
 	var total_damage = 0
+	var details = []
 
-	for dot in player.dots:
-		total_damage += dot.damage
-		if dot.duration > 0:
-			dot.duration -= 1
+	for i in range(player.dots.size() - 1, -1, -1):
+		var dot = player.dots[i]
+		if dot.type == "burn":
+			total_damage += dot.damage
+			details.append("灼烧-%d" % dot.damage)
+		elif dot.type == "poison":
+			total_damage += dot.damage
+			details.append("中毒-%d" % dot.damage)
+		dot.duration -= 1
+		if dot.duration <= 0:
+			player.dots.remove_at(i)
 
-	# 清理过期DoT
-	player.dots = player.dots.filter(func(d): return d.duration != 0)
-	return total_damage
+	return {damage=total_damage, details=details}

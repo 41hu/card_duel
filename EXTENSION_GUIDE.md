@@ -1,0 +1,153 @@
+# 卡牌对决 — 扩展开发手册
+
+> **加任何新东西之前先读本文件**。每个扩展点都列出"必改清单 / 不用动 / 自检清单"，照做即可，无需重读项目结构。
+> 涉及 `scripts/core/` 的改动 = 服务端逻辑变化 = **必须通知主维护者部署服务器**。
+
+---
+
+## 1. 加一张新卡
+
+### 必改
+1. `scripts/data/card_data.gd` → `CARD_DB` 加一行：`"type_id": {name="卡名", ap=Config.APType.X, cost=行动点, desc="描述"}`
+   - ap 枚举：`ATTACK`（攻击）/ `MOVE`（移动）/ `FUNCTION`（功能）/ `NONE`（免费）
+2. `scripts/data/card_data.gd` → `CARD_COUNTS` 加数量（决定牌堆张数）
+3. `scripts/core/card_effects.gd` → `_handlers` 注册：`"type_id": _handler函数`
+   - handler 签名：`func(player_idx: int, card: Dictionary) -> Dictionary`，返回 `{success=true/false, msg=...}`
+   - 内部实现：调 `_m._handle_*`（攻击/移动/摧毁等已有入口）或直接操作 `_m.players`/`_m.card_systems`
+   - **必须**：`_m._use_card(player_idx, card)` 消耗卡 + `_m.add_log(player_idx, "...")` 记日志
+
+### 攻击卡额外必改（4 处）
+4. `scripts/autoload/config.gd` → `get_damage_type()` 加 type_id → 伤害类型映射；`get_response_type()` 加响应类型
+5. `scripts/core/combat_system.gd` → `calculate_attack()` 的 `match card_type_id:` 加伤害公式
+6. `scripts/data/equip_data.gd` → `RESPONSE_BY` 加"谁能响应它"
+7. `scripts/core/combat_system.gd` → `process_response()` 的响应分支（如果可被响应）
+
+### 不用动
+- 场景、UI、网络协议、结算统计（出牌统计自动走 `_use_card`）
+
+### 自检清单
+- `CARD_COUNTS` 总和仍为 78？武器牌数量与武器池匹配？
+- 自我对战打出一张：能出、能消耗、日志有记录
+
+---
+
+## 2. 加一个新角色
+
+### 必改
+1. `scripts/data/character_data.gd` → `CHARACTER_DB` 加 `"char_id": {name, hp, near, range, magic, skill, skill_desc}`；`CHARACTER_IDS` 加 char_id
+2. `scripts/core/character_skills.gd` → 在需要的钩子里加 `"char_id": 逻辑` 分支（`match p.char_id:` 模式）：
+   - 被动：`on_turn_start`（设 AP 等）、`on_taking_damage`、`on_attack_hit`、`on_heal`
+   - 查询：`draw_count`、`move_distances`、`hand_limit_bonus`、`can_equip`、`armor_durability_bonus`、`is_immune`
+
+### 主动技能额外必改（3 步）
+3. `character_skills.gd` → `has_active_skills()` 加条件、`skill_button_name()` 加名字
+4. `character_skills.gd` → `use_skill()` 加 `match skill:` 分支（参数从 params 取）
+5. 带参数技能（选卡/选方向）→ `scripts/ui/battle_ui.gd` 的 `_exec_skill()` 加对应弹窗（参考 `mage_discard`/`assassin_move`）
+
+### 不用动
+- 场景、BP 网格（自动渲染）、网络协议
+
+### 自检清单
+- BP 界面能选到新角色；被动/主动技能各测一次；技能显示在"技能"按钮
+
+---
+
+## 3. 加武器 / 防具效果
+
+### 必改
+1. `scripts/data/equip_data.gd` → `WEAPON_DB` 加 `"wid": {name, type, effect, value, desc}`（type: "near"/"range"/"magic" 决定匹配的伤害类型）；防具加 `ARMOR_DB`（type: physical/ranged/magical）
+2. 武器效果在 `scripts/core/combat_system.gd` 的消费点加 `weapon.id` 分支：
+   - 伤害加成 → `_apply_weapon_damage_bonus()`
+   - 命中特效 → `apply_on_hit_effects()`（可调 `status.add_buff/add_burn/add_poison`）
+   - 距离修正 → `calculate_attack()` 特判（参考 longbow）
+
+### 不用动
+- 防具：走 `_check_armor` 通用逻辑（type 匹配 + 3 耐久），**无需**逐件分支
+
+### 自检清单
+- 装备后打对应类型攻击验证效果；被摧毁后武器回池可再生成
+
+---
+
+## 4. 加一个状态 Buff（注册表模式）
+
+### 必改（2 处，无需改消费点）
+1. 需要时 `status.add_buff(player_idx, "type_id", value, duration)`（duration=-1 回合结束清，on_turn_end 自动衰减）
+2. `scripts/core/status_system.gd` → `_modifier_handlers` 注册表加一行：
+   ```gdscript
+   "type_id": func(buff, aspect, damage_type):
+       return buff.value if (aspect == "attack" and ...) else 0,
+   ```
+   - 影响攻击伤害：判断 `aspect == "attack"`，需要时按 `damage_type`（`Config.DamageType.PHYSICAL/RANGED/MAGICAL`）区分
+   - 影响移动：判断 `aspect == "move"`
+
+### 不用动
+- `get_attack_modifier` / `get_move_modifier`（自动走 `query_modifier` 统一入口）
+
+### 注意
+- 近战限定加成用 `near_up`（仅 PHYSICAL 生效），通用用 `attack_up`——不要用错（狂战士 bug 教训）
+- DoT（灼烧/中毒）走独立的 `dots` 数组 + `add_burn/add_poison`，不走 buffs
+
+---
+
+## 5. 加技能钩子 / 新触发时机
+
+- 钩子 = `character_skills.gd` 的公开函数 + `match_state.gd` 对应流程点调用（on_* 系列已有固定时机）
+- 新钩子：在 character_skills 加公开函数（`match p.char_id:` 分支 + `_:` 兜底），在 match_state 需要的位置调用它
+- 常用调用点：`_handle_attack_card`（攻击声明）、`process_response`（伤害结算）、`_action_phase`（回合开始）、`_handle_death`（死亡/复活）
+
+---
+
+## 6. 加网络消息（客户端↔服务端新指令）
+
+### 必改（3 处）
+1. `scripts/autoload/network.gd` + `scripts/autoload/local_game.gd`：加同名 `send_xxx()` 方法（本地模式直调 match_state，网络模式发 `{"t":"xxx"}`）
+2. `scripts/server/server_main.gd` → `_handle_message()` 的 `match data.t:` 加分发分支
+3. `scripts/core/match_state.gd` → 对应处理函数（如 `process_action` 的 action 分支）
+
+### 注意
+- 本地与联机必须行为一致（共用同一 MatchState）
+- 消息类型名：客户端小写（`play_card`），服务端广播带 `"t"` 字段
+
+---
+
+## 7. 加新场景
+
+1. 创建 `scenes/xxx.tscn`（参考 main_menu：Control 根节点 + 锚点居中 + 触摸尺寸 ≥120px 按钮）
+2. 场景切换：`get_tree().change_scene_to_file("res://scenes/xxx.tscn")`
+3. 跨场景数据传递：**不要用全局变量**，用 autoload 缓存字段（`Network.bp_state_cache` / `LocalGame.last_game_result` 模式）——场景 `_ready` 读缓存
+4. 场景脚本用 `_n()` 统一访问 LocalGame/Network
+
+---
+
+## 8. 加结算统计项
+
+1. `scripts/core/match_state.gd` → `stats` 初始化字典加字段（init_match 处），在对应结算点累加（参考 damage_dealt/heal_total 埋点）
+2. `scripts/core/match_state.gd` → `_check_permanent_death` 的 `game_result` 已自动带 stats（无需改）
+3. `scripts/ui/settlement_ui.gd` → `_fmt_stats()` 加一行展示
+
+---
+
+## 9. 加获胜称号
+
+- 只改一处：`scripts/core/match_state.gd` → `_calc_title(winner_idx)` 按 `stats` 条件加 `if ...: return "称号名"`
+- 顺序即优先级（第一个命中的生效），默认兜底 `return "征服者"`
+
+---
+
+## 10. 加调试功能（debug 构建专用）
+
+- 服务端处理：`match_state.gd` → `process_action` 的 `use_skill` 分支加 `if skill == "_debug_xxx": return _debug_xxx(...)`（参考 `_debug_end`）
+- 调试按钮：`battle_ui._show_debug_menu()` 加一个按钮，调 `_n().send_use_skill("_debug_xxx", {...})`
+- 所有调试技能走 `use_skill` 通道 = 服务端权威，本地/联机都能用；release 构建无调试按钮（`OS.is_debug_build()` 控制）
+
+---
+
+## 通用规则（所有扩展适用）
+
+1. **服务端权威**：逻辑判定只在 `scripts/core/`，UI 只转发
+2. **状态广播**：改完状态必须 `state_changed.emit(get_full_state())`（MatchState 内）或等信号自动触发
+3. **本地/联机一致**：`LocalGame` 和 `Network` 走同一 MatchState
+4. **改 core/ 后**：自我对战验证 + 通知主维护者部署服务器
+5. **数值一致性**：改数据表注意总数（78 卡 / 8 角色 / 12 武器）与 GAME_RULES.md 同步
+6. **文档同步**：改完在 GAME_RULES.md / RESPONSE_RULES.md / API_REFERENCE.md 同步相关规则

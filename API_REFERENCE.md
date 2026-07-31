@@ -140,8 +140,11 @@ func _n():
 
 ### 加一个状态 Buff
 1. `status.add_buff(idx, type, value, duration)` 写入 player.buffs（-1=回合结束清，on_turn_end 自动衰减）
-2. 消费点：攻击类 → `combat.calculate_attack` 调 `status.get_attack_modifier(idx, damage_type)`，在 `get_attack_modifier` 加 type 分支；移动类 → `get_move_modifier`
-3. **注意伤害类型**：近战限定加成用 `near_up`（仅 `DamageType.PHYSICAL` 生效），通用用 `attack_up`——不要用错（参考狂战士 bug 教训）
+2. **在 `status_system._modifier_handlers` 注册表加一行 handler**（签名 `func(buff, aspect, damage_type) -> int`，返回修正值）：
+   - 影响攻击伤害：handler 里判断 `aspect == "attack"`（需要时再按 `damage_type` 区分伤害类型）
+   - 影响移动：判断 `aspect == "move"`
+3. **不需要改任何消费点**——`get_attack_modifier`/`get_move_modifier` 自动走注册表（`query_modifier` 统一入口）
+4. **注意伤害类型**：近战限定加成用 `near_up`（仅 `DamageType.PHYSICAL` 生效），通用用 `attack_up`——不要用错（参考狂战士 bug 教训）
 
 ### 加技能钩子
 钩子 = `character_skills.gd` 新公开函数 + `match_state.gd` 对应流程点调用。匹配一律 `match p.char_id:` 分支 + `_:` 兜底。

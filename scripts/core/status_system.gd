@@ -3,6 +3,21 @@ extends RefCounted
 
 var match_ref
 
+# Buff 修正注册表：新增影响攻击/移动的 buff 只需在这里注册一个 handler，
+# 无需改 get_attack_modifier / get_move_modifier 等消费点（开闭原则）
+# handler 签名：func(buff: Dictionary, aspect: String, damage_type: int) -> int
+var _modifier_handlers: Dictionary = {
+	# 通用攻击加成（所有伤害类型）
+	"attack_up": func(buff, aspect, damage_type):
+		return buff.value if aspect == "attack" else 0,
+	# 通用攻击弱化（value 为负）
+	"attack_down": func(buff, aspect, damage_type):
+		return buff.value if aspect == "attack" else 0,
+	# 近战限定加成（狂战士）：仅物理类伤害（近战/重击）生效
+	"near_up": func(buff, aspect, damage_type):
+		return buff.value if (aspect == "attack" and damage_type == Config.DamageType.PHYSICAL) else 0,
+}
+
 func _init(match):
 	match_ref = match
 
@@ -77,22 +92,23 @@ func on_turn_end(player_idx: int):
 	# 清除技能使用标记
 	player.skill_used_this_turn = false
 
-# 获取攻击力修正（damage_type: Config.DamageType，用于区分近战限定加成）
-func get_attack_modifier(player_idx: int, damage_type: int) -> int:
+# 统一 buff 修正查询入口（注册表模式）
+# aspect: "attack"(攻击伤害) / "move"(移动)；damage_type: Config.DamageType（-1=不区分）
+func query_modifier(player_idx: int, aspect: String, damage_type: int = -1) -> int:
 	var player = match_ref.get_player(player_idx)
 	var mod = 0
 	for buff in player.buffs:
-		if buff.type == "attack_up":
-			mod += buff.value
-		elif buff.type == "attack_down":
-			mod += buff.value  # value为负
-		elif buff.type == "near_up" and damage_type == Config.DamageType.PHYSICAL:
-			mod += buff.value  # 狂战士：仅近战类伤害（近战/重击）生效
+		var handler = _modifier_handlers.get(buff.type)
+		if handler != null:
+			mod += handler.call(buff, aspect, damage_type)
 	return mod
+
+# 获取攻击力修正（damage_type: Config.DamageType，用于区分近战限定加成）
+func get_attack_modifier(player_idx: int, damage_type: int) -> int:
+	return query_modifier(player_idx, "attack", damage_type)
 
 # 获取移动修正（霜咬效果等）
 func get_move_modifier(player_idx: int) -> int:
-	var player = match_ref.get_player(player_idx)
-	if player.frozen_move:
+	if match_ref.get_player(player_idx).frozen_move:
 		return -999  # 位移=0
-	return 0
+	return query_modifier(player_idx, "move")

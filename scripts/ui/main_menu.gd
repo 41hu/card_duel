@@ -126,18 +126,76 @@ func _show_update_popup():
 	vb.add_child(later_btn)
 	add_child(c)
 
+var _dl_bar: ProgressBar
+var _dl_status: Label
+var _dl_last_bytes: int = 0
+var _dl_last_time: float = 0.0
+var _dl_speed: float = 0.0
+var _dl_started: bool = false
+
 func _download_update(popup: Control):
 	var path = OS.get_user_data_dir() + "/CardDuel_update.apk"
+	# 重建弹窗内容为下载界面
+	for child in popup.get_children():
+		if child is ColorRect: continue
+		child.queue_free()
+	var vb = VBoxContainer.new()
+	vb.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	vb.size = Vector2(420, 200)
+	vb.position = vb.position - Vector2(210, 100)
+	popup.add_child(vb)
+	var t = Label.new()
+	t.text = "正在下载 v%s..." % _latest_version
+	t.add_theme_font_size_override("font_size", 22)
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(t)
+	_dl_bar = ProgressBar.new()
+	_dl_bar.custom_minimum_size = Vector2(360, 40)
+	_dl_bar.show_percentage = true
+	_dl_bar.add_theme_font_size_override("font_size", 18)
+	vb.add_child(_dl_bar)
+	_dl_status = Label.new()
+	_dl_status.text = "准备下载..."
+	_dl_status.add_theme_font_size_override("font_size", 18)
+	_dl_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(_dl_status)
+	_dl_started = false
+	_dl_last_bytes = 0
+	_dl_last_time = 0.0
+	_dl_speed = 0.0
 	_download_http = HTTPRequest.new()
 	add_child(_download_http)
 	_download_http.download_file = path
 	_download_http.request_completed.connect(func(res, _c, _h, _b):
+		_dl_started = false
 		if res == HTTPRequest.RESULT_SUCCESS:
+			_dl_status.text = "下载完成，正在安装..."
 			OS.shell_open("file://" + path)
+		else:
+			_dl_status.text = "下载失败(%d)" % res
 		_download_http.queue_free()
-		popup.queue_free()
+		_download_http = null
 	)
 	_download_http.request(_download_url)
+	_dl_started = true
+
+func _process(_delta):
+	if _download_http == null or not _dl_started: return
+	var total = _download_http.body_size
+	var done = _download_http.get_downloaded_bytes()
+	if total > 0:
+		_dl_bar.max_value = total
+		_dl_bar.value = done
+		var now = Time.get_ticks_msec() / 1000.0
+		if _dl_last_time > 0:
+			var dt = now - _dl_last_time
+			if dt > 0:
+				_dl_speed = (done - _dl_last_bytes) / dt
+		_dl_last_time = now
+		_dl_last_bytes = done
+		var speed_txt = "%.2f MB/s" % (_dl_speed / 1024.0 / 1024.0) if _dl_speed >= 1024 * 1024 else "%.1f KB/s" % (_dl_speed / 1024.0)
+		var pct = float(done) / total * 100.0
+		_dl_status.text = "%.1f%% | %s | %d/%d MB" % [pct, speed_txt, done / (1024*1024), total / (1024*1024)]
 
 func _add_server_shortcut(input: LineEdit, label: String):
 	var btn = Button.new()

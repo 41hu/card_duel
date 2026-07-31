@@ -23,12 +23,14 @@ func _ready():
 	$MainPanel/CreateBtn.pressed.connect(_show_create)
 	$MainPanel/JoinBtn.pressed.connect(_show_join)
 	$MainPanel/SelfBtn.pressed.connect(_on_self_play)
+	$MainPanel/QuitBtn.pressed.connect(func(): get_tree().quit())
 	_add_server_shortcut(c_server, "本地")
 	_add_server_shortcut(c_server, "云端")
 	_add_server_shortcut(j_server, "本地")
 	_add_server_shortcut(j_server, "云端")
 	_check_update()
 	version_label = Label.new()
+	version_label.name = "VersionLabel"
 	version_label.text = "v" + _get_version()
 	version_label.add_theme_font_size_override("font_size", 20)
 	version_label.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
@@ -94,23 +96,28 @@ func _version_greater(a: String, b: String) -> bool:
 
 func _show_update_popup():
 	var c = Control.new()
+	c.name = "UpdatePopup"
 	c.z_index = 20
 	c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var bg = ColorRect.new()
+	bg.name = "UpdateBg"
 	bg.color = Color(0, 0, 0, 0.7)
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	c.add_child(bg)
 	var vb = VBoxContainer.new()
+	vb.name = "UpdateBox"
 	vb.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	vb.size = Vector2(520, 320)
 	vb.position = vb.position - Vector2(260, 160)
 	c.add_child(vb)
 	var t = Label.new()
+	t.name = "UpdateTitle"
 	t.text = "发现新版本 v%s\n当前 v%s" % [_latest_version, _get_version()]
 	t.add_theme_font_size_override("font_size", 30)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(t)
 	var dl_btn = Button.new()
+	dl_btn.name = "DownloadBtn"
 	dl_btn.text = "下载更新"
 	# 打开浏览器下载 APK：下载到公共目录、系统自动弹安装提示（应用内下载在 Android 上无法安装）
 	dl_btn.pressed.connect(func():
@@ -121,6 +128,7 @@ func _show_update_popup():
 	dl_btn.add_theme_font_size_override("font_size", 30)
 	vb.add_child(dl_btn)
 	var later_btn = Button.new()
+	later_btn.name = "LaterBtn"
 	later_btn.text = "稍后"
 	later_btn.pressed.connect(func(): c.queue_free())
 	later_btn.custom_minimum_size = Vector2(260, 90)
@@ -130,6 +138,7 @@ func _show_update_popup():
 
 func _add_server_shortcut(input: LineEdit, label: String):
 	var btn = Button.new()
+	btn.name = "Shortcut_%s" % label
 	btn.text = label
 	btn.size = Vector2(120, 70)
 	var offset = _shortcut_offsets.get(input, 0)

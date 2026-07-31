@@ -24,6 +24,7 @@ config/icon="res://assets/icon.svg"
 Config="*res://scripts/autoload/config.gd"
 Network="*res://scripts/autoload/network.gd"
 LocalGame="*res://scripts/autoload/local_game.gd"
+BackHandler="*res://scripts/autoload/back_handler.gd"
 McpInteractionServer="*res://scripts/autoload/mcp_interaction_server.gd"
 
 [display]

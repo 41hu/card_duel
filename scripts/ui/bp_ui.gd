@@ -35,6 +35,7 @@ func _create_char_buttons():
 		var char_id = ids[i]
 		var cd = Config.CHARACTER_DB[char_id]
 		var btn = Button.new()
+		btn.name = "CharBtn_%s" % char_id
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		# 滚动容器内垂直方向不拉伸，高度由 custom_minimum_size 决定
 		btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -43,6 +44,7 @@ func _create_char_buttons():
 		btn.pressed.connect(_on_char_clicked.bind(char_id))
 		# 内部用 Label 布局（Label 自动换行，避免 Button 文本撑宽列）
 		var vb = VBoxContainer.new()
+		vb.name = "CardLayout"
 		vb.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		vb.add_theme_constant_override("separation", 4)
 		for l in vb.get_children(): l.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -50,21 +52,25 @@ func _create_char_buttons():
 		btn.add_child(vb)
 		# 状态标签放在顶部：明确属于本卡片，避免与下一行卡片混淆
 		var st = Label.new()
+		st.name = "StateLabel"
 		st.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		st.add_theme_font_size_override("font_size", 24)
 		st.visible = false
 		vb.add_child(st)
 		var n = Label.new()
+		n.name = "NameLabel"
 		n.text = cd.name
 		n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		n.add_theme_font_size_override("font_size", 26)
 		vb.add_child(n)
 		var s = Label.new()
+		s.name = "AttrLabel"
 		s.text = "HP%d 近%d 远%d 魔%d" % [cd.hp, cd.near, cd.range, cd.magic]
 		s.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		s.add_theme_font_size_override("font_size", 20)
 		vb.add_child(s)
 		var d = Label.new()
+		d.name = "DescLabel"
 		d.text = cd.skill_desc
 		d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

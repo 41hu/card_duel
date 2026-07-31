@@ -53,7 +53,7 @@ func play_card(card_uid: int) -> Dictionary:
 			return card
 	return {}
 
-# 弃牌（不进入弃牌堆，直接放回牌堆底）
+# 弃牌（进入弃牌堆，牌堆耗尽时整体回炉重洗）
 func discard_card(card_uid: int) -> Dictionary:
 	for i in range(hand.size()):
 		if hand[i].uid == card_uid:

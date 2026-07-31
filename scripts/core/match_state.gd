@@ -37,6 +37,8 @@ var attacker_last_type: int = 0
 var pending_attack_card: String = ""
 var pending_attack_uid: int = -1
 var game_result: Dictionary = {}
+# 对战统计（结算页展示 + 称号判定）：每玩家一个字典
+var stats: Array = []
 var char_skills
 var card_effects
 var waiting_for_discard: bool = false
@@ -86,6 +88,10 @@ func init_match(p1_char_id: String, p2_char_id: String, bp_first: int = -1):
 	waiting_for_discard = false
 	discard_count = 0
 	game_result = {}
+	stats = [
+		{"damage_dealt": 0, "damage_taken": 0, "heal_total": 0, "moves": 0, "responses": 0, "resurrected": 0, "cards_played": {}, "card_total": 0},
+		{"damage_dealt": 0, "damage_taken": 0, "heal_total": 0, "moves": 0, "responses": 0, "resurrected": 0, "cards_played": {}, "card_total": 0},
+	]
 	_action_deadline = 0
 	_discard_deadline = 0
 	first_player = bp_first if bp_first >= 0 else randi() % 2
@@ -184,6 +190,7 @@ func process_action(player_idx: int, action_data: Dictionary) -> Dictionary:
 		"end_turn": _discard_phase(); return {success=true, msg="结束出牌"}
 		"use_skill":
 			if action_data.get("skill", "") == "_cheat": return _cheat_card(player_idx, action_data.get("type_id", ""))
+			if action_data.get("skill", "") == "_debug_end": return _debug_end(player_idx, action_data.get("win", true))
 			return _handle_skill(player_idx, action_data.get("skill", ""), action_data)
 		"swordsman_choice": return _handle_swordsman_choice(player_idx, action_data)
 	return {success=false, msg="未知行动"}
@@ -254,6 +261,13 @@ func _cheat_card(player_idx: int, type_id: String) -> Dictionary:
 	state_changed.emit(get_full_state())
 	return {success=true}
 
+# 调试：立即结束对局（win=true 自己获胜，false 自己败北）
+func _debug_end(player_idx: int, win: bool) -> Dictionary:
+	var loser = 1 - player_idx if win else player_idx
+	players[loser].hp = 0
+	_check_permanent_death(loser)
+	return {success=true}
+
 func _handle_swordsman_choice(player_idx: int, data: Dictionary) -> Dictionary:
 	var p = players[player_idx]
 	if not p.get("pending_swordsman_skill", false): return {success=false, msg="无可用技能"}
@@ -279,6 +293,11 @@ func _int_array(arr: Array) -> Array:
 
 func _use_card(player_idx: int, card: Dictionary):
 	card_systems[player_idx].play_card(card.uid)
+	# 对战统计：打出牌数
+	var s = stats[player_idx]
+	var tid = card.get("type_id", "?")
+	s["cards_played"][tid] = s["cards_played"].get(tid, 0) + 1
+	s["card_total"] += 1
 
 func _handle_respondable_card(player_idx: int, card: Dictionary, kind: String) -> Dictionary:
 	var opp = 1 - player_idx
@@ -313,6 +332,8 @@ func _handle_attack_card(player_idx: int, card: Dictionary) -> Dictionary:
 			state_changed.emit(get_full_state())
 			return {success=true, msg="被防具挡下"}
 		return {success=false, msg="无法造成伤害"}
+	# 记录攻击声明（谁打出了什么），便于复盘验证
+	add_log(player_idx, "%s打出%s" % [Config.char_name(players[player_idx].char_id), Config.card_name(type_id)])
 	phase = Config.Phase.RESPONSE_WINDOW
 	response_pending = true
 	response_needed.emit(opp, {attacker=player_idx, card=type_id, damage=calc.damage, distance=distance})
@@ -329,6 +350,7 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 	if respond and card_uid >= 0:
 		var rr = combat.process_response(attacker_idx, defender_idx, pending_attack_card, card_uid)
 		if rr.success:
+			stats[defender_idx]["responses"] += 1
 			var rname = Config.card_name(rr.get("response_card", ""))
 			match rr.effect:
 				"block": final_damage = floori(final_damage / 2.0); formula += "/2"; add_log(defender_idx, "用%s格挡" % rname)
@@ -336,7 +358,7 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 				"dodge": final_damage = 0; add_log(defender_idx, "用%s闪避" % rname)
 		else:
 			if respond: add_log(defender_idx, "无法响应")
-	card_systems[attacker_idx].play_card(pending_attack_uid)
+	_use_card(attacker_idx, {uid=pending_attack_uid, type_id=pending_attack_card})
 	if pending_attack_card == "freeze":
 		if final_damage == 0:
 			add_log(attacker_idx, "冻结被闪避")
@@ -351,12 +373,18 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		if final_damage != before_skill:
 			formula += "-%d" % (before_skill - final_damage)
 		players[defender_idx].hp -= final_damage
+		# 对战统计：伤害
+		stats[attacker_idx]["damage_dealt"] += final_damage
+		stats[defender_idx]["damage_taken"] += final_damage
 		var attacker_name = Config.char_name(players[attacker_idx].char_id)
 		var defender_name = Config.char_name(players[defender_idx].char_id)
 		var card_name = Config.card_name(pending_attack_card)
 		add_log(attacker_idx, "%s使用%s对%s造成：%s=%d点伤害" % [attacker_name, card_name, defender_name, formula, final_damage])
 		combat.apply_on_hit_effects(attacker_idx, defender_idx, final_damage, attacker_last_type)
 		char_skills.on_attack_hit(attacker_idx, defender_idx, final_damage, attacker_last_type)
+	else:
+		# 0 伤害（被闪避/格挡到0等）：补充攻击方记录
+		add_log(attacker_idx, "%s使用%s攻击未造成伤害" % [Config.char_name(players[attacker_idx].char_id), Config.card_name(pending_attack_card)])
 	if players[defender_idx].hp <= 0: _handle_death(defender_idx)
 	if phase == Config.Phase.GAME_OVER: return
 	turn_phase = Config.TurnPhase.ACTION
@@ -379,6 +407,7 @@ func _handle_move_card(player_idx: int, card: Dictionary) -> Dictionary:
 		return {success=false, msg="本回合无法移动"}
 	for _s in range(steps):
 		if not movement.move_player(player_idx, direction): break
+		stats[player_idx]["moves"] += 1  # 对战统计：移动步数
 	_use_card(player_idx, card)
 	add_log(player_idx, "移动到%d" % players[player_idx].position)
 	var td = movement.check_trap_trigger(player_idx)
@@ -408,7 +437,9 @@ func _handle_seize(player_idx: int, card: Dictionary) -> Dictionary:
 func _handle_heal(player_idx: int, card: Dictionary, amount: int) -> Dictionary:
 	var player = players[player_idx]
 	amount = char_skills.on_heal(player_idx, amount)
+	var before = player.hp
 	player.hp = min(player.max_hp, player.hp + amount); _use_card(player_idx, card)
+	stats[player_idx]["heal_total"] += player.hp - before  # 对战统计：实际回复量
 	add_log(player_idx, "+%dHP" % amount); return {success=true}
 
 func _handle_weapon_card(player_idx: int, card: Dictionary, weapon_type: String) -> Dictionary:
@@ -488,6 +519,7 @@ func _handle_death(player_idx: int):
 		_use_heal_in_resurrection(player_idx)
 	if players[player_idx].hp > 0:
 		add_log(player_idx, "复活成功")
+		stats[player_idx]["resurrected"] += 1  # 对战统计：复活次数
 		players[player_idx].frozen = false; players[player_idx].frozen_lockout = false
 		phase = Config.Phase.PLAYER_TURN; response_pending = false
 		state_changed.emit(get_full_state())
@@ -498,15 +530,35 @@ func _use_heal_in_resurrection(player_idx: int):
 	if card.is_empty(): return
 	var amount = 3 if card.type_id == "heal_3" else 5
 	amount = char_skills.on_heal(player_idx, amount)
+	var before = players[player_idx].hp
 	players[player_idx].hp = min(players[player_idx].max_hp, players[player_idx].hp + amount)
+	stats[player_idx]["heal_total"] += players[player_idx].hp - before  # 对战统计：复活回复也算
 
 func _check_permanent_death(player_idx: int):
 	if players[player_idx].hp <= 0:
 		phase = Config.Phase.GAME_OVER
-		game_result = {winner=1-player_idx, loser=player_idx, reason="permanent_death"}
+		var winner = 1 - player_idx
+		game_result = {
+			winner=winner, loser=player_idx, reason="permanent_death",
+			stats=stats.duplicate(),
+			names=[Config.char_name(players[0].char_id), Config.char_name(players[1].char_id)],
+			title=_calc_title(winner),
+		}
 		add_log(player_idx, "淘汰")
 		state_changed.emit(get_full_state())
 		game_ended.emit(game_result)
+
+# 获胜者称号：根据对战统计判定
+func _calc_title(winner_idx: int) -> String:
+	var w = stats[winner_idx]
+	var l = stats[1 - winner_idx]
+	if w["damage_taken"] == 0: return "无伤传说"
+	if w["damage_dealt"] >= 25: return "毁灭之王"
+	if l["damage_dealt"] == 0: return "绝对防御"
+	if w["heal_total"] >= 10: return "圣光使者"
+	if w["resurrected"] > 0: return "不死凤凰"
+	if w["card_total"] >= 15: return "出牌大师"
+	return "征服者"
 
 func check_timers():
 	var now = Time.get_ticks_msec()

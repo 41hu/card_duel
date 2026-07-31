@@ -74,6 +74,61 @@ func _ready():
 		_on_state_updated(cached)
 		_n().battle_state_cache = {}
 	_apply_safe_area()
+	_setup_debug_button()
+
+# 调试菜单按钮（仅 debug 构建显示）：快速结束对局/发牌，方便验证结算等功能
+func _setup_debug_button():
+	if not OS.is_debug_build(): return
+	var dbg = Button.new()
+	dbg.name = "DebugBtn"
+	dbg.text = "调试"
+	dbg.position = Vector2(12, 12)
+	dbg.size = Vector2(140, 70)
+	dbg.add_theme_font_size_override("font_size", 26)
+	dbg.pressed.connect(_show_debug_menu)
+	add_child(dbg)
+
+func _show_debug_menu():
+	var c = Control.new()
+	c.name = "DebugMenu"
+	c.z_index = 15
+	c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var bg = ColorRect.new()
+	bg.name = "DebugBg"
+	bg.color = Style.POPUP_BG
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	c.add_child(bg)
+	var vb = _popup_box(c, 480, 420)
+	vb.name = "DebugBox"
+	vb.add_child(_lbl("调试菜单"))
+	var win = _mkbtn("立即胜利")
+	win.name = "DebugWinBtn"
+	win.pressed.connect(func():
+		c.queue_free()
+		_n().send_use_skill("_debug_end", {"win": true})
+	)
+	vb.add_child(win)
+	var lose = _mkbtn("立即失败")
+	lose.name = "DebugLoseBtn"
+	lose.pressed.connect(func():
+		c.queue_free()
+		_n().send_use_skill("_debug_end", {"win": false})
+	)
+	vb.add_child(lose)
+	var deal = _mkbtn("随机发5张牌")
+	deal.name = "DebugDealBtn"
+	deal.pressed.connect(func():
+		c.queue_free()
+		var keys = Config.CARD_DB.keys()
+		for i in range(5):
+			_n().send_use_skill("_cheat", {"type_id": keys[randi() % keys.size()]})
+	)
+	vb.add_child(deal)
+	var close = _mkbtn("关闭")
+	close.name = "DebugCloseBtn"
+	close.pressed.connect(func(): c.queue_free())
+	vb.add_child(close)
+	add_child(c)
 
 # 全面屏/刘海屏安全区适配：横屏时刘海在左右两侧，给角落信息留出边距
 func _apply_safe_area():
@@ -207,6 +262,7 @@ func _popup_box(parent: Control, w: float, h: float) -> VBoxContainer:
 	w = min(w, vp.x * 0.92)
 	h = min(h, vp.y * 0.92)
 	var sc = ScrollContainer.new()
+	sc.name = "PopupScroll"
 	sc.layout_mode = 1
 	sc.anchor_left = 0.5; sc.anchor_right = 0.5
 	sc.anchor_top = 0.5; sc.anchor_bottom = 0.5

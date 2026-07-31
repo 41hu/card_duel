@@ -4,6 +4,8 @@ extends Control
 const Style = preload("res://scripts/theme/style_const.gd")
 
 @onready var title_label = $Title
+@onready var title2_label = $Title2
+@onready var stats_label = $StatsLabel
 @onready var detail_label = $Detail
 @onready var back_btn = $BackBtn
 
@@ -27,6 +29,8 @@ func _on_game_ended(result: Dictionary):
 	if winner == -1:
 		title_label.text = "对手断线"
 		title_label.add_theme_color_override("font_color", Style.WIN_GOLD)
+		title2_label.text = ""
+		stats_label.text = ""
 		detail_label.text = "对方已断开连接"
 	else:
 		var is_winner = (winner == _n().player_index)
@@ -36,4 +40,30 @@ func _on_game_ended(result: Dictionary):
 		else:
 			title_label.text = "败北"
 			title_label.add_theme_color_override("font_color", Style.LOSE_RED)
+		var title = result.get("title", "")
+		title2_label.text = "称号：%s" % title if title != "" else ""
+		stats_label.text = _fmt_stats(result.get("stats", []), result.get("names", ["P1", "P2"]))
 		detail_label.text = "玩家 %d 获胜" % (winner + 1)
+
+# 组装对战统计文本（结算页展示）
+func _fmt_stats(stats: Array, names: Array) -> String:
+	if stats.size() < 2: return ""
+	var d0 = stats[0]; var d1 = stats[1]
+	var m0 = _max_card(d0.get("cards_played", {}))
+	var m1 = _max_card(d1.get("cards_played", {}))
+	var out = "── 对战统计 ──\n"
+	out += "造成伤害：%s %d  |  %s %d\n" % [names[0], d0.get("damage_dealt", 0), names[1], d1.get("damage_dealt", 0)]
+	out += "受到伤害：%s %d  |  %s %d\n" % [names[0], d0.get("damage_taken", 0), names[1], d1.get("damage_taken", 0)]
+	out += "回复血量：%s %d  |  %s %d\n" % [names[0], d0.get("heal_total", 0), names[1], d1.get("heal_total", 0)]
+	out += "移动步数：%s %d  |  %s %d\n" % [names[0], d0.get("moves", 0), names[1], d1.get("moves", 0)]
+	out += "打出最多：%s %s×%d  |  %s %s×%d\n" % [names[0], m0[0], m0[1], names[1], m1[0], m1[1]]
+	out += "复活次数：%s %d  |  %s %d" % [names[0], d0.get("resurrected", 0), names[1], d1.get("resurrected", 0)]
+	return out
+
+# 从出牌统计字典里找出打出最多的牌，返回 [卡名, 次数]
+func _max_card(cards: Dictionary) -> Array:
+	var best = ["-", 0]
+	for tid in cards:
+		if cards[tid] > best[1]:
+			best = [Config.card_name(tid), cards[tid]]
+	return best

@@ -136,9 +136,10 @@ func _judgment_phase():
 	var player = players[current_player]
 	if player.dots.size() > 0:
 		var dd = combat.apply_dot_damage(current_player)
-		if dd > 0:
-			player.hp -= dd
-			add_log(current_player, "DoT造成%d点伤害" % dd)
+		if dd.damage > 0:
+			player.hp -= dd.damage
+			var detail_str = "、".join(dd.details)
+			add_log(current_player, "%s共%d点伤害" % [detail_str, dd.damage])
 			if player.hp <= 0:
 				_handle_death(current_player)
 				if phase == Config.Phase.GAME_OVER: return

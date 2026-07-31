@@ -48,10 +48,8 @@ func _ready():
 var _shortcut_offsets: Dictionary = {}
 
 func _get_version() -> String:
-	var f = FileAccess.open("res://version.txt", FileAccess.READ)
-	if f:
-		return f.get_line().strip_edges()
-	return "0.0.0"
+	var v = preload("res://scripts/version.gd")
+	return v.VERSION
 
 # ---- 版本更新检查 ----
 var _update_http: HTTPRequest

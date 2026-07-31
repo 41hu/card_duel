@@ -368,7 +368,7 @@ func _fmt_player(p, tag: String) -> String:
 		extra += "\n"
 		if dots.size() > 0:
 			for d in dots:
-				var dur = ("%d回" % d.duration) if d.duration > 0 else ("" if d.duration == -1 else "")
+				var dur = ("%d回" % d.duration) if d.duration > 0 else ("持续" if d.duration == -1 else "")
 				extra += " [DoT] %s -%dHP %s" % [d.type, d.damage, dur]
 		if buffs.size() > 0:
 			for b in buffs:

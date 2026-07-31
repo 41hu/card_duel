@@ -73,14 +73,9 @@ func _on_update_check_done(result: int, _code: int, _headers: PackedStringArray,
 	_latest_version = str(data.get("tag_name", "")).trim_prefix("v")
 	var local_ver = _get_version()
 	if _version_greater(_latest_version, local_ver):
-		# 找 apk 下载地址
-		var assets = data.get("assets", [])
-		for a in assets:
-			if str(a.get("name", "")).ends_with(".apk"):
-				_download_url = a.get("browser_download_url", "")
-				break
-		if _download_url != "":
-			_show_update_popup()
+		# 从自建服务器下载（GitHub CDN 国内不可达）
+		_download_url = "http://47.107.47.251:17891/CardDuel.apk"
+		_show_update_popup()
 
 func _version_greater(a: String, b: String) -> bool:
 	var av = a.split(".")

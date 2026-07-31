@@ -6,7 +6,29 @@
 
 ## 给 AI 协作开发者的说明（请先完整阅读本文件）
 
-你被邀请参与此项目的开发。你的职责是：**修复游戏逻辑 bug、实现新功能**，只改 GDScript 代码和 `.tscn` 场景文件。
+你被邀请参与此项目的开发。**先确认你的身份**：
+- 如果你是**主维护者的 AI**（负责推送更新、UI、手机适配、修复 bug）：阅读下面的完整说明，按"文件职责划分"工作
+- 如果你是**平衡性开发者的 AI**（负责游戏平衡性调整）：跳到"给平衡性开发者的专属指引"小节，其余部分只需了解"文件职责划分"和"开发铁律"
+
+### 给平衡性开发者的专属指引
+
+你的唯一职责：**游戏平衡性调整**——调整角色数值、卡牌强度、技能效果。不修 UI bug、不做新功能系统、不动推送更新相关代码。
+
+**你可以改的**：
+- `scripts/autoload/config.gd` — 卡牌数据（`CARD_DB`/`CARD_COUNTS`）、角色属性、武器效果数值
+- `scripts/core/character_skills.gd` — 角色技能逻辑
+- `scripts/core/card_effects.gd` — 卡牌效果逻辑
+- `scripts/core/combat_system.gd`、`movement_system.gd`、`status_system.gd`、`equipment_system.gd`、`bp_system.gd`、`card_system.gd`、`match_state.gd` — 相关规则逻辑
+- `GAME_RULES.md`、`RESPONSE_RULES.md` — 同步更新你改动的规则文档
+
+**你绝对不能改的**：`scripts/ui/`、`scenes/`、`scripts/version.gd`、`scripts/theme/`、`.github/`、`export_presets.cfg`、`deploy.sh`、`start_server.sh`、`project.godot`
+
+**平衡性改动自检清单**（改完逐项确认）：
+1. 数值一致性：`CARD_COUNTS` 各卡数量总和仍为 78？角色仍为 8 名？武器/防具池数量与文档一致？
+2. 改 `scripts/core/` 后**必须通知主维护者部署服务器**（服务端跑的是同一套逻辑，不部署则联机对战不生效）
+3. 提交前用**自我对战**跑一局验证：主菜单 → 自我对战 → 随机选两个角色 → 完整走完一局
+
+**提交规范**：提交信息以 `balance:` 开头（如 `balance: 剑士HP 28→26`），push 前先 `git pull --rebase`。
 
 ### 第一步：按优先级阅读这些文档
 
@@ -18,7 +40,7 @@
 
 ### 第二步：明白当前阶段要做什么
 
-**当前阶段：架构和功能基本完成，重点是修复运行时逻辑错误。** WORKFLOW.md 第六节列了按优先级排序的 6 个已知 bug（响应卡消耗、弃牌连点、魔法距离、冻结跳过、圣骑士减伤显示、DoT 无伤害）。开始工作前先读该清单，选一个修。
+**当前阶段：架构和功能基本完成，重点是修复运行时逻辑错误（主维护者的任务）。** WORKFLOW.md 第六节是完整的已知 bug 清单（含严重度与归属）。平衡性开发者不需要处理此清单，除非改动恰好涉及对应代码。
 
 ### 代码地图（改哪类东西去哪个文件）
 
@@ -34,6 +56,23 @@
 | 对战界面 UI | `scripts/ui/battle_ui.gd` + `scenes/battle_scene.tscn` |
 | 菜单/房间 UI | `scripts/ui/main_menu.gd` + `scenes/main_menu.tscn` |
 | 静态数据（卡/角色/武器/枚举） | `scripts/autoload/config.gd` |
+
+### 文件职责划分（多人协作防冲突，重要）
+
+本项目有两位维护者，分工不同。**只改自己区域的代码，公共区改动前先看是否影响对方**：
+
+| 区域 | 文件 | 归属 |
+|---|---|---|
+| **平衡性**（另一位开发者） | `scripts/autoload/config.gd`、`scripts/core/` 全部（`match_state`/`character_skills`/`card_effects`/`combat_system`/`movement_system`/`equipment_system`/`status_system`/`bp_system`/`card_system`）、`GAME_RULES.md`、`RESPONSE_RULES.md` | 另一位开发者 |
+| **推送更新 + UI/手机适配**（主维护者） | `scripts/version.gd`、`scripts/ui/` 全部（含 `main_menu.gd`）、`scenes/` 全部、`scripts/theme/`、`.github/workflows/build.yml`、`deploy.sh`、`start_server.sh`、`export_presets.cfg` | 主维护者 |
+| **公共区** | `project.godot`、`README.md`、`WORKFLOW.md` | 谁改谁负责，改完通知对方 |
+
+两条铁律：
+1. **`scripts/version.gd` 只有主维护者能改**（版本号与 CI 发布、游戏内更新提示联动，乱改会导致发布错乱）
+2. **改完 `scripts/core/` 的代码必须通知主维护者部署服务器**（服务端跑的是同一套权威逻辑，不部署则联机对战的规则不变）
+3. **不要修改 `scripts/ui/` 和 `scenes/` 下的任何文件**（UI 及手机端适配由主维护者负责）。如果在 UI 层发现 bug（如按钮连点、显示错误），**只报告不修改**，交给主维护者处理
+
+协作流程：改自己区域 → 提交 → **`git pull --rebase`**（冲突在此步本地解决）→ `git push`。不要在没拉取远端的情况下直接 push。
 
 ### 开发铁律（每改一处代码必问三件事）
 

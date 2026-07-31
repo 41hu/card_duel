@@ -124,8 +124,7 @@ func _on_bp_action(peer_idx: int, data: Dictionary):
 	if room.match.bp.is_done():
 		var chars = room.match.bp.picked_chars
 		var bf = room.match.bp._bp_first
-		if bf == 0: room.match.init_match(chars[0], chars[1])
-		else: room.match.init_match(chars[1], chars[0])
+		room.match.init_match(chars[0], chars[1], bf)
 		room.match._start_game()
 		room.stage = "game"
 		log_msg("BP完成 P1=%s P2=%s" % [chars[0], chars[1]])

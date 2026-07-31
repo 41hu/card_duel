@@ -69,6 +69,7 @@ func _ready():
 	_n().weapon_prompt.connect(_on_weapon_prompt)
 	_n().game_ended.connect(_on_game_ended)
 	_n().network_error.connect(_on_error)
+	Network.server_disconnected.connect(_on_server_disconnected)
 	var cached = _n().battle_state_cache
 	if not cached.is_empty():
 		_on_state_updated(cached)
@@ -594,11 +595,18 @@ func _on_weapon_prompt(weapon: Dictionary):
 	_wpn_popup.find_child("WpnDesc", true, false).text = wd.get("desc", "")
 	_wpn_popup.visible = true
 
-func _on_game_ended(_r: Dictionary):
+func _on_game_ended(r: Dictionary):
+	_n().last_game_result = r
 	get_tree().change_scene_to_file("res://scenes/settlement.tscn")
 
 func _on_error(msg: String):
 	status_label.text = "错误: " + msg
+
+func _on_server_disconnected():
+	status_label.text = "连接断开，1秒后返回主菜单..."
+	await get_tree().create_timer(1.0).timeout
+	if is_instance_valid(self):
+		get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
 
 func _exec_skill(sk_id: String):
 	if sk_id == "mage_discard": _show_mage_pick()

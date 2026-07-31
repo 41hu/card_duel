@@ -62,7 +62,7 @@ func _init():
 	char_skills = preload("res://scripts/core/character_skills.gd").new(self)
 	card_effects = preload("res://scripts/core/card_effects.gd").new(self)
 
-func init_match(p1_char_id: String, p2_char_id: String):
+func init_match(p1_char_id: String, p2_char_id: String, bp_first: int = -1):
 	var p1_char = Config.CHARACTER_DB[p1_char_id]
 	var p2_char = Config.CHARACTER_DB[p2_char_id]
 	players = [
@@ -87,7 +87,7 @@ func init_match(p1_char_id: String, p2_char_id: String):
 	game_result = {}
 	_action_deadline = 0
 	_discard_deadline = 0
-	first_player = randi() % 2
+	first_player = bp_first if bp_first >= 0 else randi() % 2
 	current_player = first_player
 	phase = Config.Phase.BP_PHASE
 	bp.reset()
@@ -119,7 +119,7 @@ func do_bp_action(player_idx: int, action: String, char_id: String) -> bool:
 	var ok = bp.execute_action(player_idx, action, char_id)
 	if ok and bp.is_done():
 		var chars = bp.picked_chars
-		init_match(chars[0], chars[1])
+		init_match(chars[0], chars[1], bp._bp_first)
 		_start_game()
 	return ok
 
@@ -161,6 +161,7 @@ func _action_phase():
 	if player.frozen:
 		add_log(current_player, "被冻结，跳过出牌阶段")
 		status.clear_freeze(current_player)
+		player.frozen_lockout = false  # 冻结已生效一次，解锁允许之后再次被冻结
 		_discard_phase()
 		return
 	char_skills.on_turn_start(current_player)
@@ -381,7 +382,7 @@ func _handle_move_card(player_idx: int, card: Dictionary) -> Dictionary:
 	add_log(player_idx, "移动到%d" % players[player_idx].position)
 	var td = movement.check_trap_trigger(player_idx)
 	if td > 0:
-		players[player_idx].hp -= td; add_log(player_idx, "陷阱-%d" % td)
+		# check_trap_trigger 内部已扣血并记日志，这里只做死亡判定
 		if players[player_idx].hp <= 0: _handle_death(player_idx)
 	return {success=true}
 
@@ -464,6 +465,13 @@ func _advance_to_next_player():
 	_judgment_phase()
 	state_changed.emit(get_full_state())
 
+# 位移/陷阱类效果后检查双方死亡（吸引/威慑可能让任一方踩陷阱）
+func _check_any_death():
+	for i in range(2):
+		if players[i].hp <= 0:
+			_handle_death(i)
+			return
+
 func _handle_death(player_idx: int):
 	add_log(player_idx, "HP归零，复活...")
 	phase = Config.Phase.RESURRECTING
@@ -507,6 +515,8 @@ func check_timers():
 	if _action_deadline > 0 and now >= _action_deadline:
 		_action_deadline = 0
 		add_log(current_player, "回合超时")
+		if waiting_for_weapon_choice >= 0:
+			confirm_weapon(waiting_for_weapon_choice, false)  # 武器选择超时默认放弃
 		_discard_phase()
 	if _discard_deadline > 0 and now >= _discard_deadline:
 		_discard_deadline = 0

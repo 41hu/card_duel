@@ -21,6 +21,8 @@ var room_id: String = ""
 var player_index: int = -1
 var bp_state_cache: Dictionary = {}
 var battle_state_cache: Dictionary = {}
+# 最近一局结果缓存（结算界面从缓存读取，避免信号时序问题）
+var last_game_result: Dictionary = {}
 
 func _ready():
 	print("[Network] Autoload 已加载")

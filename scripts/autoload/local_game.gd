@@ -20,6 +20,8 @@ const MatchStateClass = preload("res://scripts/core/match_state.gd")
 var game: MatchStateClass
 var _player_names = ["自己(P1)", "自己(P2)"]
 var _timer_elapsed: float = 0.0
+# 最近一局结果缓存（结算界面从缓存读取，避免信号时序问题）
+var last_game_result: Dictionary = {}
 
 func _process(delta):
 	if game == null: return
@@ -28,13 +30,13 @@ func _process(delta):
 		_timer_elapsed = 0.0
 		game.check_timers()
 
-func start_local_game(p1_char: String, p2_char: String):
+func start_local_game(p1_char: String, p2_char: String, bp_first: int = -1):
 	game = MatchStateClass.new()
 	game.state_changed.connect(_on_state)
 	game.weapon_prompt.connect(_on_weapon)
 	game.response_needed.connect(_on_response)
 	game.game_ended.connect(_on_ended)
-	game.init_match(p1_char, p2_char)
+	game.init_match(p1_char, p2_char, bp_first)
 	game._start_game()
 	battle_state_cache = game.get_full_state()
 
@@ -83,7 +85,8 @@ func send_bp_action(action: String, char_id: String):
 	game.bp.execute_action(acting, action, char_id)
 	if game.bp.is_done():
 		var chars = game.bp.picked_chars
-		start_local_game(chars[0], chars[1])
+		var bf = game.bp._bp_first
+		start_local_game(chars[0], chars[1], bf)
 	else:
 		var bs = game.bp.get_bp_state()
 		bs["t"] = "bp_state"

@@ -46,12 +46,14 @@ func _atk_attract(player_idx: int, card: Dictionary):
 	_m.movement.attract(player_idx)
 	_m.card_systems[player_idx].play_card(card.uid)
 	_m.add_log(player_idx, "吸引")
+	_m._check_any_death()
 	return {success=true}
 
 func _atk_deter(player_idx: int, card: Dictionary):
 	_m.movement.deter(player_idx)
 	_m.card_systems[player_idx].play_card(card.uid)
 	_m.add_log(player_idx, "威慑")
+	_m._check_any_death()
 	return {success=true}
 
 func _atk_freeze(player_idx: int, card: Dictionary):

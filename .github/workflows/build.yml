@@ -70,6 +70,14 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Set Android App Version from version.gd
+        run: |
+          VERSION=$(grep -oP 'VERSION = "\K[^"]+' scripts/version.gd)
+          CODE=$(echo $VERSION | awk -F. '{printf "%d%02d%02d", $1, $2, $3}')
+          sed -i "s/version\/code=.*/version\/code=$CODE/" export_presets.cfg
+          sed -i "s/version\/name=\"\"/version\/name=\"$VERSION\"/" export_presets.cfg
+          echo "Set Android version to $VERSION (code $CODE)"
+
       - name: Export Android APK (Debug)
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}

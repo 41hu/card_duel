@@ -181,7 +181,7 @@ func _process(_delta):
 	if _download_http == null or not _dl_started: return
 	var total = _download_http.body_size
 	var done = _download_http.get_downloaded_bytes()
-	if total > 0:
+	if total > 0 and done > 0:
 		_dl_bar.max_value = total
 		_dl_bar.value = done
 		var now = Time.get_ticks_msec() / 1000.0
@@ -194,6 +194,10 @@ func _process(_delta):
 		var speed_txt = "%.2f MB/s" % (_dl_speed / 1024.0 / 1024.0) if _dl_speed >= 1024 * 1024 else "%.1f KB/s" % (_dl_speed / 1024.0)
 		var pct = float(done) / total * 100.0
 		_dl_status.text = "%.1f%% | %s | %d/%d MB" % [pct, speed_txt, done / (1024*1024), total / (1024*1024)]
+	elif total > 0:
+		_dl_status.text = "已连接，等待数据... (%d MB)" % (total / (1024*1024))
+	else:
+		_dl_status.text = "连接中..."
 
 func _add_server_shortcut(input: LineEdit, label: String):
 	var btn = Button.new()

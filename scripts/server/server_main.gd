@@ -220,5 +220,5 @@ func _on_peer_disconnected(peer_idx: int):
 	var peer = _peers[peer_idx]; var room = _find_room(peer.room_id)
 	if room != null:
 		for p_idx in room.peer_indices:
-			if p_idx != peer_idx: _send_to(p_idx, {"t":"error","msg":"对手断开"})
+			if p_idx != peer_idx: _send_to(p_idx, {"t":"game_over","winner":-1,"reason":"opponent_disconnected"})
 		_rooms.erase(room)

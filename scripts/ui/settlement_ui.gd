@@ -16,11 +16,16 @@ func _ready():
 
 func _on_game_ended(result: Dictionary):
 	var winner = result.get("winner", -1)
-	var is_winner = (winner == Network.player_index)
-	if is_winner:
-		title_label.text = "胜利！"
+	if winner == -1:
+		title_label.text = "对手断线"
 		title_label.add_theme_color_override("font_color", Style.WIN_GOLD)
+		detail_label.text = "对方已断开连接"
 	else:
-		title_label.text = "败北"
-		title_label.add_theme_color_override("font_color", Style.LOSE_RED)
-	detail_label.text = "玩家 %d 获胜" % (winner + 1)
+		var is_winner = (winner == Network.player_index)
+		if is_winner:
+			title_label.text = "胜利！"
+			title_label.add_theme_color_override("font_color", Style.WIN_GOLD)
+		else:
+			title_label.text = "败北"
+			title_label.add_theme_color_override("font_color", Style.LOSE_RED)
+		detail_label.text = "玩家 %d 获胜" % (winner + 1)

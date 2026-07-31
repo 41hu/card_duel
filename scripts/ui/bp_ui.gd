@@ -13,16 +13,6 @@ var _bp_state: Dictionary = {}
 var _is_local: bool = false
 var _bp_timer: int = -1
 var _bp_timer_acc: float = 0.0
-var _char_data = {
-	"swordsman":  {"name":"剑士","hp":28,"s":"近7远3魔2","sk":"近战命中后: 抽1牌或回2HP (每回合限一)"},
-	"archer":     {"name":"弓手","hp":24,"s":"近2远8魔2","sk":"每回合首次普通远程不消耗攻击点"},
-	"mage":       {"name":"法师","hp":22,"s":"近2远2魔8","sk":"弃1手牌, 本次魔法+2 (每回合限一)"},
-	"paladin":    {"name":"圣骑士","hp":36,"s":"近5远2魔2","sk":"每回合首次受伤-2 (最低0)"},
-	"assassin":   {"name":"刺客","hp":22,"s":"近7远5魔1","sk":"每回合免费移动1格"},
-	"priest":     {"name":"牧师","hp":28,"s":"近2远4魔6","sk":"使用回复卡额外+2"},
-	"berserker":  {"name":"狂战士","hp":28,"s":"近8远2魔2","sk":"受直接攻击后近战+1 (2回合可叠加)"},
-	"warlock":    {"name":"术士","hp":24,"s":"近2远3魔7","sk":"功能点+1; 未用功能牌回合结束抽1张"},
-}
 
 func _n():
 	if LocalGame.game != null: return LocalGame
@@ -39,13 +29,15 @@ func _ready():
 
 func _create_char_buttons():
 	var ids = Config.CHARACTER_IDS
-	for i in range(8):
-		var char_id = ids[i]; var cd = _char_data[char_id]
+	char_grid.columns = ceil(sqrt(ids.size()))
+	for i in range(ids.size()):
+		var char_id = ids[i]
+		var cd = Config.CHARACTER_DB[char_id]
 		var btn = Button.new()
-		btn.text = "%s\nHP:%d | %s\n%s" % [cd.name, cd.hp, cd.s, cd.sk]
+		var txt = "%s\nHP:%d | 近%d 远%d 魔%d\n%s" % [cd.name, cd.hp, cd.near, cd.range, cd.magic, cd.skill_desc]
+		btn.text = txt
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		btn.custom_minimum_size = Vector2(200, 120)
 		btn.set_meta("char_id", char_id)
 		btn.pressed.connect(_on_char_clicked.bind(char_id))
 		char_grid.add_child(btn)

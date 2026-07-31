@@ -16,10 +16,10 @@ func _ready():
 
 # 创建一个格子及其标签
 func _create_cell(index: int) -> Panel:
-	var x = index * 72
+	var x = index * 84
 	var p = Panel.new()
 	p.position = Vector2(x, 0)
-	p.size = Vector2(68, 70)
+	p.size = Vector2(80, 80)
 	p.set_meta("index", index)
 	p.mouse_filter = Control.MOUSE_FILTER_STOP
 	p.gui_input.connect(func(event): _on_cell_input(event, index))

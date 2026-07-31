@@ -57,24 +57,26 @@ var _download_http: HTTPRequest
 var _latest_version: String = ""
 var _download_url: String = ""
 
+const UPDATE_SERVER = "http://47.107.47.251:17891"
+
 func _check_update():
 	if OS.get_name() != "Android": return
 	_update_http = HTTPRequest.new()
 	add_child(_update_http)
+	_update_http.timeout = 15
 	_update_http.request_completed.connect(_on_update_check_done)
-	var err = _update_http.request("https://api.github.com/repos/41hu/card_duel/releases/latest")
+	var err = _update_http.request(UPDATE_SERVER + "/version.json")
 	if err != OK: _update_http.queue_free()
 
 func _on_update_check_done(result: int, _code: int, _headers: PackedStringArray, body: PackedByteArray):
 	_update_http.queue_free()
 	if result != HTTPRequest.RESULT_SUCCESS: return
 	var data = JSON.parse_string(body.get_string_from_utf8())
-	if data == null or not data.has("tag_name"): return
-	_latest_version = str(data.get("tag_name", "")).trim_prefix("v")
+	if data == null or not data.has("version"): return
+	_latest_version = str(data.get("version", "")).trim_prefix("v")
 	var local_ver = _get_version()
 	if _version_greater(_latest_version, local_ver):
-		# 从自建服务器下载（GitHub CDN 国内不可达）
-		_download_url = "http://47.107.47.251:17891/CardDuel.apk"
+		_download_url = UPDATE_SERVER + "/CardDuel.apk"
 		_show_update_popup()
 
 func _version_greater(a: String, b: String) -> bool:

@@ -22,15 +22,18 @@ func move_player(player_idx: int, direction: int) -> bool:
 	var other_player = match_ref.get_player(1 - player_idx)
 	var new_pos = Config.clamp_position(player.position + direction)
 
-	# 不能移动到对方所在格
+	# 贴脸时向对方方向移动可推人（先判断推人，再判断阻挡）
+	var moving_toward = (direction == (1 if player_idx == 0 else -1))
+	if moving_toward and new_pos == other_player.position:
+		if not _can_push(player_idx):
+			return false
+		_push_opponent(player_idx)
+		player.position = new_pos
+		return true
+
+	# 不能移动到对方所在格（非推人情况）
 	if new_pos == other_player.position:
 		return false
-
-	# 贴脸时向对方方向移动可推人
-	if direction == (1 if player_idx == 0 else -1):
-		# 向对方方向移动
-		if _can_push(player_idx):
-			_push_opponent(player_idx)
 
 	player.position = new_pos
 	return true
@@ -73,10 +76,11 @@ func attract(player_idx: int) -> bool:
 	var direction = 1 if other.position < my_pos else -1
 	var new_pos = Config.clamp_position(other.position + direction)
 	if new_pos == my_pos:
-		# 贴脸时推自己后退
-		var back_dir = 1 if player_idx == 1 else -1
-		var my_new = Config.clamp_position(my_pos + back_dir)
+		# 贴脸：对方被吸引到我的位置，我沿对方方向后退一格腾出空间
+		var my_new = Config.clamp_position(my_pos + direction)
 		if my_new == other.position: return false
+		other.position = my_pos
+		check_trap_trigger(1 - player_idx)
 		player.position = my_new
 		check_trap_trigger(player_idx)
 		return true

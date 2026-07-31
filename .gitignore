@@ -26,3 +26,7 @@ export_presets.cfg
 *.exe
 *.pck
 *.zip
+android/build/
+*.apk
+*.idsig
+android/.build_version

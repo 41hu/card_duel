@@ -106,6 +106,7 @@ func _create_player(idx: int, char_id: String, char_data: Dictionary) -> Diction
 		combo_attacks_this_turn=[],
 		upgrades={},
 		skill_counts={},
+		skills_used=[],
 		pending_swordsman_skill=false,
 	}
 
@@ -304,7 +305,6 @@ func _handle_attack_card(player_idx: int, card: Dictionary) -> Dictionary:
 			add_log(player_idx, "被防具挡下")
 			state_changed.emit(get_full_state())
 			return {success=true, msg="被防具挡下"}
-		
 		return {success=false, msg="无法造成伤害"}
 	phase = Config.Phase.RESPONSE_WINDOW
 	response_pending = true
@@ -320,11 +320,11 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 	if respond and card_uid >= 0:
 		var rr = combat.process_response(attacker_idx, defender_idx, pending_attack_card, card_uid)
 		if rr.success:
+			var rname = Config.card_name(rr.get("response_card", ""))
 			match rr.effect:
-				"block": final_damage = floori(final_damage / 2.0)
-				"restrain": final_damage = max(0, final_damage - rr.value)
-				"dodge": final_damage = 0
-			add_log(defender_idx, "用%s响应" % Config.card_name(rr.get("response_card", "")))
+				"block": final_damage = floori(final_damage / 2.0); add_log(defender_idx, "用%s格挡→%d" % [rname, final_damage])
+				"restrain": final_damage = max(0, final_damage - rr.value); add_log(defender_idx, "用%s牵制(-%d)" % [rname, rr.value])
+				"dodge": final_damage = 0; add_log(defender_idx, "用%s闪避" % rname)
 		else:
 			if respond: add_log(defender_idx, "无法响应")
 	card_systems[attacker_idx].play_card(pending_attack_uid)
@@ -535,6 +535,12 @@ func reveal_opponent_hand(asking_player_idx: int) -> Array:
 	var opp = 1 - asking_player_idx
 	return card_systems[opp].get_hand_type_ids()
 
+func _skill_list(player_idx: int) -> Array:
+	var out = []
+	for sk in char_skills.has_active_skills(player_idx):
+		out.append({"id": sk, "name": char_skills.skill_button_name(sk)})
+	return out
+
 func get_full_state(full: bool = false) -> Dictionary:
 	var now = Time.get_ticks_msec()
 	var atl = -1
@@ -564,7 +570,7 @@ func get_full_state(full: bool = false) -> Dictionary:
 			ap_attack=p.get("ap_attack",0), ap_move=p.get("ap_move",0), ap_function=p.get("ap_function",0),
 			hand_size=cs.hand.size(), deck_size=cs.deck.size(),
 			hand=cs.hand.duplicate(), hand_limit=movement.get_hand_limit(i),
-			active_skill=char_skills.has_active_skill(i),
+			active_skills=_skill_list(i),
 			pending_swordsman_skill=p.get("pending_swordsman_skill", false),
 		})
 	if full: state.bp_state = bp.get_bp_state()

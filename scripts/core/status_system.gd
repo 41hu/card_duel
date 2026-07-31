@@ -37,8 +37,7 @@ func clear_freeze(player_idx: int):
 
 # 回合开始处理
 func on_turn_start(player_idx: int):
-	var player = match_ref.get_player(player_idx)
-	player.frozen_lockout = false  # 重置冻结锁
+	pass  # 冻结锁在 char_skills.on_turn_start 中重置（仅正常回合）
 
 # 回合结束处理
 func on_turn_end(player_idx: int):

@@ -36,6 +36,8 @@ var attacker_last_damage: int = 0
 var attacker_last_type: int = 0
 var pending_attack_card: String = ""
 var pending_attack_uid: int = -1
+var pending_attack_segment: int = 0      # 多段攻击：当前段（1 起）
+var pending_attack_segments: int = 1     # 多段攻击：总段数（1 = 单段，现有行为）
 var game_result: Dictionary = {}
 # 对战统计（结算页展示 + 称号判定）：每玩家一个字典
 var stats: Array = []
@@ -239,11 +241,14 @@ func _do_play_card(player_idx: int, data: Dictionary) -> Dictionary:
 	var type_id = card.type_id
 	var player = players[player_idx]
 	var cd = Config.CARD_DB[type_id]
+	# 角色专属消耗覆盖（如快枪手远程 2AP）；-1 = 用卡牌默认消耗
+	var cost = char_skills.get_attack_cost(player_idx, type_id)
+	if cost < 0: cost = cd.cost
 	var ap_ok = false
 	match cd.ap:
-		Config.APType.ATTACK: ap_ok = (player.ap_attack >= cd.cost)
-		Config.APType.MOVE: ap_ok = (player.ap_move >= cd.cost)
-		Config.APType.FUNCTION: ap_ok = (player.ap_function >= cd.cost)
+		Config.APType.ATTACK: ap_ok = (player.ap_attack >= cost)
+		Config.APType.MOVE: ap_ok = (player.ap_move >= cost)
+		Config.APType.FUNCTION: ap_ok = (player.ap_function >= cost)
 		Config.APType.NONE: ap_ok = true
 	if not ap_ok: return {success=false, msg="行动点不足"}
 	var free_archer = char_skills.can_attack_free(player_idx, type_id)
@@ -252,16 +257,16 @@ func _do_play_card(player_idx: int, data: Dictionary) -> Dictionary:
 		player.free_move_used = true
 	if not free_archer and cd.ap != Config.APType.NONE:
 		match cd.ap:
-			Config.APType.ATTACK: player.ap_attack -= cd.cost
-			Config.APType.MOVE: player.ap_move -= cd.cost
-			Config.APType.FUNCTION: player.ap_function -= cd.cost
+			Config.APType.ATTACK: player.ap_attack -= cost
+			Config.APType.MOVE: player.ap_move -= cost
+			Config.APType.FUNCTION: player.ap_function -= cost
 	var result = _execute_card_effect(player_idx, card)
 	if not result.get("success", false) and result.get("phase") != "choose":
 		if not free_archer and cd.ap != Config.APType.NONE:
 			match cd.ap:
-				Config.APType.ATTACK: player.ap_attack += cd.cost
-				Config.APType.MOVE: player.ap_move += cd.cost
-				Config.APType.FUNCTION: player.ap_function += cd.cost
+				Config.APType.ATTACK: player.ap_attack += cost
+				Config.APType.MOVE: player.ap_move += cost
+				Config.APType.FUNCTION: player.ap_function += cost
 		return result
 	if free_archer: player.skill_used_this_turn = true
 	if cd.ap == Config.APType.FUNCTION: player.used_function_card = true
@@ -339,13 +344,22 @@ func _handle_respondable_card(player_idx: int, card: Dictionary, kind: String) -
 
 func _handle_attack_card(player_idx: int, card: Dictionary) -> Dictionary:
 	var type_id = card.type_id
-	var opp = 1 - player_idx
-	var distance = movement.get_distance()
-	if type_id in ["near", "heavy"] and distance != 0:
+	if type_id in ["near", "heavy"] and movement.get_distance() != 0:
 		return {success=false, msg="必须贴脸"}
-	var player = players[player_idx]
 	pending_attack_card = type_id
 	pending_attack_uid = card.uid
+	# 多段攻击：总段数由角色钩子决定（默认 1 = 单段，现有行为）
+	pending_attack_segments = char_skills.get_attack_hit_count(player_idx, type_id)
+	pending_attack_segment = 0
+	return _begin_attack_segment(player_idx)
+
+# 开始攻击的一段：计算伤害 → 进入响应窗口；段间推进由 process_response 处理
+func _begin_attack_segment(player_idx: int) -> Dictionary:
+	pending_attack_segment += 1
+	var type_id = pending_attack_card
+	var opp = 1 - player_idx
+	var distance = movement.get_distance()
+	var player = players[player_idx]
 	attacker_last_damage = 0
 	attacker_last_type = Config.get_damage_type(type_id)
 	var calc = combat.calculate_attack(player_idx, opp, type_id)
@@ -359,20 +373,27 @@ func _handle_attack_card(player_idx: int, card: Dictionary) -> Dictionary:
 			# 距离不够（穿心）：攻击无效，不消耗卡
 			return {success=false, msg=calc.get("msg", "距离不够")}
 		combat.consume_armor(opp)  # 防具生效消耗耐久（免疫也算一次命中）
-		_use_card(player_idx, card)
 		add_log(player_idx, "被防具挡下")
+		# 多段攻击：本段被免疫则继续下一段（防具耐久已消耗，下一段按减半结算）
+		if pending_attack_segment < pending_attack_segments:
+			return _begin_attack_segment(player_idx)
+		_use_card(player_idx, {uid=pending_attack_uid, type_id=pending_attack_card})
 		state_changed.emit(get_full_state())
 		return {success=true, msg="被防具挡下"}
 	if attacker_last_damage <= 0:
+		# 本段 0 伤害：跳过本段响应，直接尝试下一段；末段仍 0 则整卡无效
+		if pending_attack_segment < pending_attack_segments:
+			return _begin_attack_segment(player_idx)
 		return {success=false, msg="无法造成伤害"}
-	# 有效攻击才计入连击（失败的穿心不算）
-	player.combo_attacks_this_turn.append(type_id)
+	# 有效攻击才计入连击（失败的穿心不算）；多段攻击整卡只计一次连击
+	if pending_attack_segment == 1:
+		player.combo_attacks_this_turn.append(type_id)
 	# 记录攻击声明（谁打出了什么），便于复盘验证
 	add_log(player_idx, "%s打出%s" % [Config.char_name(players[player_idx].char_id), Config.card_name(type_id)])
 	phase = Config.Phase.RESPONSE_WINDOW
 	response_pending = true
 	_action_deadline = Time.get_ticks_msec() + RESPONSE_TIME * 1000  # 响应窗口独立计时
-	response_needed.emit(opp, {attacker=player_idx, card=type_id, damage=calc.damage, distance=distance})
+	response_needed.emit(opp, {attacker=player_idx, card=type_id, damage=calc.damage, distance=distance, segment=pending_attack_segment, segments=pending_attack_segments})
 	return {success=true, phase="response", damage=calc.damage}
 
 func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
@@ -394,8 +415,9 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 				"dodge": final_damage = 0; add_log(defender_idx, "用%s闪避" % rname)
 		else:
 			if respond: add_log(defender_idx, "无法响应")
-	_use_card(attacker_idx, {uid=pending_attack_uid, type_id=pending_attack_card})
 	if pending_attack_card == "freeze":
+		# 冻结为单段攻击：结算后直接消耗卡结束
+		_use_card(attacker_idx, {uid=pending_attack_uid, type_id=pending_attack_card})
 		if final_damage == 0:
 			add_log(attacker_idx, "冻结被闪避")
 		else:
@@ -427,6 +449,13 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		add_log(attacker_idx, "%s使用%s攻击未造成伤害" % [Config.char_name(players[attacker_idx].char_id), Config.card_name(pending_attack_card)])
 	if players[defender_idx].hp <= 0: _handle_death(defender_idx)
 	if phase == Config.Phase.GAME_OVER: return
+	# 多段攻击：还有段则进入下一段响应窗口（每段独立结算；末段才消耗卡）
+	# 注意：_begin_attack_segment 内部会自增段号，这里不能重复自增
+	if pending_attack_segment < pending_attack_segments:
+		_begin_attack_segment(attacker_idx)
+		state_changed.emit(get_full_state())
+		return
+	_use_card(attacker_idx, {uid=pending_attack_uid, type_id=pending_attack_card})
 	turn_phase = Config.TurnPhase.ACTION
 	var st = get_full_state()
 	if _reveal_to >= 0:
@@ -686,6 +715,7 @@ func get_full_state(full: bool = false) -> Dictionary:
 		phase=phase, turn_phase=turn_phase, current_player=current_player,
 		turn_number=turn_number, first_player=first_player,
 		response_pending=response_pending, pending_attack_card=pending_attack_card,
+		pending_attack_segment=pending_attack_segment, pending_attack_segments=pending_attack_segments,
 		waiting_for_discard=waiting_for_discard, discard_count=discard_count,
 		action_time_left=atl, discard_time_left=dtl,
 		deck_size=card_systems[0].deck.size(), discard_size=card_systems[0].discard.size(),

@@ -200,7 +200,11 @@ func _show_resp_popup(atk_card: String):
 		c.remove_child(child); child.queue_free()
 	var box = _box(c, 140, 100, 700, 480)
 	box.name = "RespBox"
-	var t = _lbl("对方使用 %s 攻击！选择响应卡：" % atk_card)
+	# 多段攻击显示段号（如 第1/2段）
+	var seg = int(_game_state.get("pending_attack_segment", 0))
+	var segs = int(_game_state.get("pending_attack_segments", 1))
+	var seg_txt = "（第%d/%d段）" % [seg, segs] if segs > 1 else ""
+	var t = _lbl("对方使用 %s 攻击%s！选择响应卡：" % [atk_card, seg_txt])
 	t.add_theme_font_size_override("font_size", 28)
 	box.add_child(t)
 	var has_any = false

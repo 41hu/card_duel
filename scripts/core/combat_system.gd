@@ -26,13 +26,19 @@ func calculate_attack(attacker_idx: int, defender_idx: int, card_type_id: String
 			base_damage = attacker.near_power
 			formula = str(base_damage)
 		"range":
-			var eff_dist = distance
-			var lb_bonus = 0
-			if not attacker.weapon.is_empty() and attacker.weapon.id == "longbow":
-				eff_dist = max(0, distance - 1)
-				lb_bonus = 1  # 长弓：远程+1
-			base_damage = max(0, attacker.range_power - eff_dist) + lb_bonus
-			formula = "%d-%d+%d" % [attacker.range_power, eff_dist, lb_bonus]
+			var custom = match_ref.char_skills.get_attack_base_damage(attacker_idx, card_type_id, distance)
+			if custom >= 0:
+				# 角色公式覆盖（多段攻击角色，如快枪手）；后续武器/防具/Buff 修正照常
+				base_damage = custom
+				formula = str(custom)
+			else:
+				var eff_dist = distance
+				var lb_bonus = 0
+				if not attacker.weapon.is_empty() and attacker.weapon.id == "longbow":
+					eff_dist = max(0, distance - 1)
+					lb_bonus = 1  # 长弓：远程+1
+				base_damage = max(0, attacker.range_power - eff_dist) + lb_bonus
+				formula = "%d-%d+%d" % [attacker.range_power, eff_dist, lb_bonus]
 		"magic":
 			base_damage = attacker.magic_power
 			formula = str(base_damage)
@@ -42,16 +48,21 @@ func calculate_attack(attacker_idx: int, defender_idx: int, card_type_id: String
 			base_damage = attacker.near_power + 3
 			formula = "%d+3" % attacker.near_power
 		"pierce":
-			var eff_dist2 = distance
-			var lb_bonus2 = 0
-			if not attacker.weapon.is_empty() and attacker.weapon.id == "longbow":
-				eff_dist2 = max(0, distance - 1)
-				lb_bonus2 = 1  # 长弓：远程+1
-			# 规则：面板-距离≤0 时无法打出（穿心是唯一有此限制的攻击卡）
-			if attacker.range_power - eff_dist2 <= 0:
-				return {damage=0, blocked=true, msg="距离太远，穿心无法打出", reason="distance"}
-			base_damage = max(0, attacker.range_power - eff_dist2) + 3 + lb_bonus2
-			formula = "%d-%d+3+%d" % [attacker.range_power, eff_dist2, lb_bonus2]
+			var custom2 = match_ref.char_skills.get_attack_base_damage(attacker_idx, card_type_id, distance)
+			if custom2 >= 0:
+				base_damage = custom2
+				formula = str(custom2)
+			else:
+				var eff_dist2 = distance
+				var lb_bonus2 = 0
+				if not attacker.weapon.is_empty() and attacker.weapon.id == "longbow":
+					eff_dist2 = max(0, distance - 1)
+					lb_bonus2 = 1  # 长弓：远程+1
+				# 规则：面板-距离≤0 时无法打出（穿心是唯一有此限制的攻击卡）
+				if attacker.range_power - eff_dist2 <= 0:
+					return {damage=0, blocked=true, msg="距离太远，穿心无法打出", reason="distance"}
+				base_damage = max(0, attacker.range_power - eff_dist2) + 3 + lb_bonus2
+				formula = "%d-%d+3+%d" % [attacker.range_power, eff_dist2, lb_bonus2]
 		"chant":
 			base_damage = attacker.magic_power + 3
 			formula = "%d+3" % attacker.magic_power

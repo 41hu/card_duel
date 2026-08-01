@@ -207,6 +207,36 @@
 
 ---
 
+## 14. 加多段攻击角色（预留机制，如快枪手）
+
+核心机制已预留：`match_state` 攻击流程按段循环（每段独立 计算→响应→扣血→命中特效→死亡判定），段间自动进入下一响应窗口，末段才消耗卡。**只需在 `character_skills.gd` 加角色分支**：
+
+### 必改（3 个钩子，都在 `scripts/core/character_skills.gd`）
+```gdscript
+match _ms.players[player_idx].char_id:
+    "gunslinger":
+        # ① 远程/穿心固定消耗 2 攻击行动点（返回 -1 = 用卡牌默认消耗）
+        func get_attack_cost(player_idx, type_id): ...
+        # ② 远程/穿心返回 2（两段伤害；其他卡返回 1）
+        func get_attack_hit_count(player_idx, type_id): ...
+        # ③ 段伤害公式（返回 -1 = 标准公式）：
+        #    普通远程 floor((面板-距离)/2)；穿心 floor((面板+3-距离)/2)
+        func get_attack_base_damage(player_idx, type_id, distance): ...
+```
+
+### 机制行为（已实现，无需再改）
+- 两段各自独立响应窗口（敌人需两张响应卡）；0 伤害段自动跳过不弹响应
+- 圣骑士首伤-2 只减免第一段（`damage_reduction_used` 标记天然满足）；狂战士狂化每段触发
+- 武器命中特效每段独立（毒牙两次等）；防具每段独立计算/消耗耐久
+- 整卡只计一次连击（共鸣不误判）；卡在末段结算后消耗
+
+### 注意
+- 数据层：`scripts/data/character_data.gd` 注册角色（数值/技能描述）由平衡性开发者负责
+- AI：`ai_player.gd` 若需快枪手智能出牌，在 `decide_action` 评估两段价值
+- 客户端段号显示已接好（响应弹窗"第X/Y段"）
+
+---
+
 ## 通用规则（所有扩展适用）
 
 1. **服务端权威**：逻辑判定只在 `scripts/core/`，UI 只转发

@@ -195,10 +195,6 @@ func can_equip(player_idx: int, _equip_type: String) -> String:
 	match _ms.players[player_idx].char_id:
 		_: return ""
 
-func armor_durability_bonus(player_idx: int) -> int:
-	if _ms.players[player_idx].char_id == "paladin": return 1
-	return 0
-
 func _swordsman_hit(player_idx: int, damage_type: int):
 	var p = _ms.players[player_idx]
 	if damage_type == Config.DamageType.PHYSICAL and not p.skill_used_this_turn:

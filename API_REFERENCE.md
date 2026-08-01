@@ -63,7 +63,7 @@ func _n():
 ### CharacterSkills（`scripts/core/character_skills.gd`）— 角色技能钩子
 所有角色技能用 **`match p.char_id:` 分支**实现。钩子分三类：
 - 被动钩子（MatchState 固定时机调用）：`on_turn_start`、`on_turn_end`、`on_attack_hit`、`on_taking_damage->int`、`on_heal->int`、`on_attack_cast->int`、`is_immune(idx, effect)`
-- 查询钩子（返回值）：`draw_count`、`move_distances`、`hand_limit_bonus`、`can_attack_free`、`can_equip`、`armor_durability_bonus`、`check_hand_condition(idx, cond)`、`can_upgrade_skill`
+- 查询钩子（返回值）：`draw_count`、`move_distances`、`hand_limit_bonus`、`can_attack_free`、`can_equip`、`check_hand_condition(idx, cond)`、`can_upgrade_skill`
 - 主动技能：`has_active_skills(idx)->[id]`、`skill_button_name`、`skill_game_limit`、`use_skill(idx, skill, params)->{success, msg}`
 
 ### CardEffects（`scripts/core/card_effects.gd`）— 卡牌效果注册表

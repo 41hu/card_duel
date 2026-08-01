@@ -37,7 +37,7 @@
 1. `scripts/data/character_data.gd` → `CHARACTER_DB` 加 `"char_id": {name, hp, near, range, magic, skill, skill_desc}`；`CHARACTER_IDS` 加 char_id
 2. `scripts/core/character_skills.gd` → 在需要的钩子里加 `"char_id": 逻辑` 分支（`match p.char_id:` 模式）：
    - 被动：`on_turn_start`（设 AP 等）、`on_taking_damage`、`on_attack_hit`、`on_heal`
-   - 查询：`draw_count`、`move_distances`、`hand_limit_bonus`、`can_equip`、`armor_durability_bonus`、`is_immune`
+   - 查询：`draw_count`、`move_distances`、`hand_limit_bonus`、`can_equip`、`is_immune`
 
 ### 主动技能额外必改（3 步）
 3. `character_skills.gd` → `has_active_skills()` 加条件、`skill_button_name()` 加名字

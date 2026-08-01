@@ -206,7 +206,9 @@ RESPONSE_BY = {
 
 ### 安全/瑕疵
 
-13. **Android 返回键双击退出未生效**（1.0.17）— back_handler 已接通知/信号/输入三通道 + 防重入，但真机仍划一次直接退出。已尝试：`_unhandled_input`（输入流收不到，官方确认 Android back 不发输入事件）→ `NOTIFICATION_WM_GO_BACK_REQUEST` + `go_back_requested` 信号（桌面模拟受限无法验证真机行为）。可能方向：Android 预测性返回（onBackInvokedCallback）绕过引擎、或需自定义 Android 模板。用户决定暂不修（细枝末节），留档待查
+13. **Android 返回键双击退出未生效**（1.0.17-1.0.19）— back_handler 已接通知/信号/输入三通道 + 400ms 防抖，但真机与模拟器均划/按一次直接退出（无提示）。
+    **最终结论（2026-08-01 模拟器验证）**：Godot 4.7 Android 模板的 `GodotActivity.onBackPressed` **直接 finish Activity**，返回键事件根本不到达引擎层（logcat 仅 `OnGodotTerminating`，无 back 事件进入）——GDScript 层任何钩子都收不到。`adb input keyevent 4`、模拟器 UI 返回按钮、真机全面屏手势三条路径行为一致。
+    **修复方向**：需自定义 Android 模板（重写 `onBackPressed` 把 back 传给引擎 → GDScript 拦截），涉及 `custom_template/debug` 配置 + CI 集成。用户决定暂不修（细枝末节），留档待查
 14. **`_cheat` 无服务端校验** — `match_state.gd:184` 任意联网玩家可发
 14. **响应未校验身份** — `match_state.gd:319` 攻击方可对自己"响应"
 15. **本地模式残留** — 结算返回后 `LocalGame.game` 未清空，再开网络局状态错乱

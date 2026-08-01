@@ -557,12 +557,15 @@ func _show_armor_confirm(card_uid: int, _attack_type: String):
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
 	var vb = _popup_box(c, 700, 340)
 	var armor_name = ""
+	var is_full_durability = false
 	for p in _game_state.players:
 		if p.index != _player_index and not p.armor.is_empty():
 			armor_name = p.armor.data.name
+			is_full_durability = p.armor.durability >= p.armor.get("max_durability", 3)
 			break
 	vb.add_child(_lbl("对方装备了%s" % armor_name))
-	vb.add_child(_lbl("此次攻击将被完全免疫"))
+	# 按耐久区分提示：满耐久才完全免疫，其余是减免一半
+	vb.add_child(_lbl("此次攻击将被完全免疫" if is_full_durability else "此次攻击将被减免一半"))
 	vb.add_child(_lbl("确定要打出吗？"))
 	var hb = HBoxContainer.new(); vb.add_child(hb)
 	var ok = _mkbtn("确定")

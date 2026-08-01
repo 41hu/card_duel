@@ -206,27 +206,35 @@ func apply_on_hit_effects(attacker_idx: int, defender_idx: int, damage: int, dam
 	# 霜咬：近战命中后对方下回合位移=0
 	if weapon_id == "frost_bite":
 		defender.frozen_move = true
+		match_ref.add_log(attacker_idx, "霜咬: 对方下回合无法移动")
 
 	# 嗜血：近战≥3伤害回2HP
 	if weapon_id == "bloodthirst" and damage >= 3:
+		var before = attacker.hp
 		attacker.hp = min(attacker.max_hp, attacker.hp + 2)
+		match_ref.stats[attacker_idx]["heal_total"] += attacker.hp - before  # 武器回血计入统计
+		match_ref.add_log(attacker_idx, "嗜血: +%dHP" % (attacker.hp - before))
 
 	# 鹰眼：远程命中后查看对方手牌
 	if weapon_id == "hawkeye":
 		match_ref._reveal_to = attacker_idx
 		match_ref._reveal_from = defender_idx
+		match_ref.add_log(attacker_idx, "鹰眼: 查看对方手牌")
 
 	# 毒牙：远程命中后给予2层中毒（每回合-1HP，层数每回合-1，可叠加）
 	if weapon_id == "toxic_fang":
-		match_ref.status.add_poison(defender_idx, 2)
+		match_ref.status.add_poison(defender_idx, 2, attacker_idx)
+		match_ref.add_log(attacker_idx, "毒牙: 对方中毒2层")
 
 	# 灼烧：魔法命中后灼烧2回合每回合-2HP，再次命中刷新时长
 	if weapon_id == "scorch":
-		match_ref.status.add_burn(defender_idx)
+		match_ref.status.add_burn(defender_idx, attacker_idx)
+		match_ref.add_log(attacker_idx, "灼烧: 对方灼烧2回合")
 
 	# 时滞：魔法命中后对方下回合攻击-1
 	if weapon_id == "time_lag":
 		match_ref.status.add_buff(defender_idx, "attack_down", -1, 1)
+		match_ref.add_log(attacker_idx, "时滞: 对方下回合攻击-1")
 
 	# 共鸣：在 _apply_weapon_damage_bonus 中处理（本回合已出过其他攻击则+2）
 
@@ -237,17 +245,20 @@ func apply_dot_damage(player_idx: int) -> Dictionary:
 	var player = match_ref.get_player(player_idx)
 	var total_damage = 0
 	var details = []
+	var dot_stats = []  # [{source, damage}] 用于伤害来源统计
 
 	for i in range(player.dots.size() - 1, -1, -1):
 		var dot = player.dots[i]
 		if dot.type == "burn":
 			total_damage += dot.damage
 			details.append("灼烧-%d" % dot.damage)
+			dot_stats.append({"source": dot.get("source", -1), "damage": dot.damage})
 		elif dot.type == "poison":
 			total_damage += dot.damage
 			details.append("中毒-%d" % dot.damage)
+			dot_stats.append({"source": dot.get("source", -1), "damage": dot.damage})
 		dot.duration -= 1
 		if dot.duration <= 0:
 			player.dots.remove_at(i)
 
-	return {damage=total_damage, details=details}
+	return {damage=total_damage, details=details, dot_stats=dot_stats}

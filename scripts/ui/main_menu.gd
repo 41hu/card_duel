@@ -190,12 +190,18 @@ func _on_disconnected(): status_label.text = "断开连接"
 func _on_room_created(room_id: String):
 	c_room_label.text = "房间号: %s" % room_id
 	status_label.text = "等待对手加入..."
-	var btn = _make_ready_btn(create_panel, 360)
+	# 房间已创建：隐藏创建/返回按钮，准备按钮显示在按钮区（避免与输入框重叠）
+	c_create_btn.visible = false
+	c_back_btn.visible = false
+	var btn = _make_ready_btn(create_panel, 560)
 	btn.pressed.connect(func(): Network.ready_up(); btn.disabled = true; btn.text = "已准备")
 
 func _on_room_joined(room_id: String, _players: Array):
 	status_label.text = "已加入房间 %s" % room_id
-	var btn = _make_ready_btn(join_panel, 390)
+	# 房间已加入：隐藏加入/返回按钮，准备按钮显示在按钮区
+	j_join_btn.visible = false
+	j_back_btn.visible = false
+	var btn = _make_ready_btn(join_panel, 560)
 	btn.pressed.connect(func(): Network.ready_up(); btn.disabled = true; btn.text = "已准备")
 
 func _make_ready_btn(parent: Control, y: float) -> Button:

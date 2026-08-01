@@ -223,6 +223,9 @@ func _on_response_needed(defender_idx: int, attack_info: Dictionary, room):
 
 func _on_game_ended(result: Dictionary, room):
 	room.stage = "ended"; result["t"]="game_over"
+	# 结算页显示玩家输入的名字（peer_names[i] 与 players[i] 索引对齐）
+	if room.peer_names.size() >= 2:
+		result["names"] = room.peer_names.duplicate()
 	_broadcast_to_room(room, result)
 
 func _send_to(peer_idx: int, msg: Dictionary):

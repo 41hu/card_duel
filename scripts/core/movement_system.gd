@@ -117,6 +117,9 @@ func check_trap_trigger(player_idx: int) -> int:
 
 	if damage > 0:
 		player.hp -= damage
+		# 伤害来源统计：陷阱属于无来源伤害（只计入受到伤害，不计入造成伤害）
+		match_ref.stats[player_idx]["damage_taken"] += damage
+		match_ref.stats[player_idx]["damage_from_trap"] += damage
 		match_ref.add_log(player_idx, "踩陷阱-%dHP" % damage)
 	return damage
 

@@ -96,8 +96,8 @@ func init_match(p1_char_id: String, p2_char_id: String, bp_first: int = -1):
 	discard_count = 0
 	game_result = {}
 	stats = [
-		{"damage_dealt": 0, "damage_taken": 0, "heal_total": 0, "moves": 0, "responses": 0, "resurrected": 0, "cards_played": {}, "card_total": 0},
-		{"damage_dealt": 0, "damage_taken": 0, "heal_total": 0, "moves": 0, "responses": 0, "resurrected": 0, "cards_played": {}, "card_total": 0},
+		{"damage_dealt": 0, "damage_taken": 0, "damage_from_attack": 0, "damage_from_trap": 0, "damage_from_dot": 0, "heal_total": 0, "moves": 0, "responses": 0, "resurrected": 0, "cards_played": {}, "card_total": 0},
+		{"damage_dealt": 0, "damage_taken": 0, "damage_from_attack": 0, "damage_from_trap": 0, "damage_from_dot": 0, "heal_total": 0, "moves": 0, "responses": 0, "resurrected": 0, "cards_played": {}, "card_total": 0},
 	]
 	_action_deadline = 0
 	_discard_deadline = 0
@@ -154,6 +154,12 @@ func _judgment_phase():
 		var dd = combat.apply_dot_damage(current_player)
 		if dd.damage > 0:
 			player.hp -= dd.damage
+			# 伤害来源统计：DoT 计入受到伤害；施放者（source）计入造成伤害
+			stats[current_player]["damage_taken"] += dd.damage
+			stats[current_player]["damage_from_dot"] += dd.damage
+			for ds in dd.dot_stats:
+				if ds.source >= 0:
+					stats[ds.source]["damage_dealt"] += ds.damage
 			var detail_str = "、".join(dd.details)
 			add_log(current_player, "%s共%d点伤害" % [detail_str, dd.damage])
 			if player.hp <= 0:
@@ -285,7 +291,9 @@ func _handle_swordsman_choice(player_idx: int, data: Dictionary) -> Dictionary:
 	if p.skill_used_this_turn: return {success=false, msg="本回合已使用过"}
 	var choice = data.get("choice", "")
 	if choice == "heal":
+		var before = p.hp
 		p.hp = min(p.max_hp, p.hp + 2)
+		stats[player_idx]["heal_total"] += p.hp - before  # 技能回血计入统计
 		add_log(player_idx, "剑士+2HP")
 	elif choice == "draw":
 		card_systems[player_idx].draw_cards(1)
@@ -395,9 +403,10 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		if final_damage != before_skill:
 			formula += "-%d" % (before_skill - final_damage)
 		players[defender_idx].hp -= final_damage
-		# 对战统计：伤害
+		# 对战统计：伤害（来源=攻击）
 		stats[attacker_idx]["damage_dealt"] += final_damage
 		stats[defender_idx]["damage_taken"] += final_damage
+		stats[defender_idx]["damage_from_attack"] += final_damage
 		var attacker_name = Config.char_name(players[attacker_idx].char_id)
 		var defender_name = Config.char_name(players[defender_idx].char_id)
 		var card_name = Config.card_name(pending_attack_card)

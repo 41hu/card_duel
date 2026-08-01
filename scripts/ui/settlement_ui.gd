@@ -42,8 +42,11 @@ func _on_game_ended(result: Dictionary):
 			title_label.add_theme_color_override("font_color", Style.LOSE_RED)
 		var title = result.get("title", "")
 		title2_label.text = "称号：%s" % title if title != "" else ""
-		stats_label.text = _fmt_stats(result.get("stats", []), result.get("names", ["P1", "P2"]))
-		detail_label.text = "玩家 %d 获胜" % (winner + 1)
+		var names = result.get("names", ["P1", "P2"])
+		stats_label.text = _fmt_stats(result.get("stats", []), names)
+		# 优先显示玩家名（联机为创建房间时输入的名字），否则回退"玩家 N"
+		var wname = names[winner] if winner < names.size() else "玩家 %d" % (winner + 1)
+		detail_label.text = "%s 获胜" % wname
 
 # 组装对战统计文本（结算页展示）
 func _fmt_stats(stats: Array, names: Array) -> String:
@@ -54,16 +57,22 @@ func _fmt_stats(stats: Array, names: Array) -> String:
 	var out = "── 对战统计 ──\n"
 	out += "造成伤害：%s %d  |  %s %d\n" % [names[0], d0.get("damage_dealt", 0), names[1], d1.get("damage_dealt", 0)]
 	out += "受到伤害：%s %d  |  %s %d\n" % [names[0], d0.get("damage_taken", 0), names[1], d1.get("damage_taken", 0)]
+	out += "  其中攻击：%s %d  |  %s %d\n" % [names[0], d0.get("damage_from_attack", 0), names[1], d1.get("damage_from_attack", 0)]
+	out += "  陷阱/DoT：%s %d/%d  |  %s %d/%d\n" % [names[0], d0.get("damage_from_trap", 0), d0.get("damage_from_dot", 0), names[1], d1.get("damage_from_trap", 0), d1.get("damage_from_dot", 0)]
 	out += "回复血量：%s %d  |  %s %d\n" % [names[0], d0.get("heal_total", 0), names[1], d1.get("heal_total", 0)]
 	out += "移动步数：%s %d  |  %s %d\n" % [names[0], d0.get("moves", 0), names[1], d1.get("moves", 0)]
-	out += "打出最多：%s %s×%d  |  %s %s×%d\n" % [names[0], m0[0], m0[1], names[1], m1[0], m1[1]]
+	out += "打出最多：%s %s  |  %s %s\n" % [names[0], _max_card_str(m0), names[1], _max_card_str(m1)]
 	out += "复活次数：%s %d  |  %s %d" % [names[0], d0.get("resurrected", 0), names[1], d1.get("resurrected", 0)]
 	return out
 
 # 从出牌统计字典里找出打出最多的牌，返回 [卡名, 次数]
 func _max_card(cards: Dictionary) -> Array:
-	var best = ["-", 0]
+	var best = ["无", 0]
 	for tid in cards:
 		if cards[tid] > best[1]:
 			best = [Config.card_name(tid), cards[tid]]
 	return best
+
+# 打出最多的展示：没出过牌显示"无"，否则"卡名×次数"
+func _max_card_str(mc: Array) -> String:
+	return "%s×%d" % [mc[0], mc[1]] if mc[1] > 0 else "无"

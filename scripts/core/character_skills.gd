@@ -36,6 +36,20 @@ func _heal_limit(player_idx: int) -> int:
 	match _ms.players[player_idx].char_id:
 		_: return -1
 
+# 判定阶段受到某类 DoT 伤害后调用：dot_types = 本回合造成伤害的 DoT 类型列表
+# 牧师被动：清除自身对应类型的 DoT（受到一次伤害后即净化，不再持续）
+func on_dot_damage(player_idx: int, dot_types: Array):
+	if dot_types.is_empty(): return
+	var p = _ms.players[player_idx]
+	if p.char_id != "priest": return
+	var cleared = false
+	for i in range(p.dots.size() - 1, -1, -1):
+		if p.dots[i].type in dot_types:
+			p.dots.remove_at(i)
+			cleared = true
+	if cleared:
+		_ms.add_log(player_idx, "牧师净化: 清除%s" % "、".join(dot_types))
+
 func on_turn_start(player_idx: int):
 	var p = _ms.players[player_idx]
 	p.skill_used_this_turn = false
@@ -208,8 +222,8 @@ func _paladin_reduce(player_idx: int, base: int) -> int:
 	return base
 
 func _berserker_rage(player_idx: int):
-	_ms.status.add_buff(player_idx, "near_up", 1, 2)
-	_ms.add_log(player_idx, "狂战士+1近战")
+	_ms.status.add_buff(player_idx, "near_up", 1, 3)
+	_ms.add_log(player_idx, "狂战士获得狂化(近战+1)")
 
 func _mage_discard(player_idx: int, params: Dictionary) -> Dictionary:
 	var uid = int(params.get("card_uid", -1))

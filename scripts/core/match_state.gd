@@ -151,6 +151,11 @@ func _judgment_phase():
 	turn_phase = Config.TurnPhase.JUDGMENT
 	var player = players[current_player]
 	if player.dots.size() > 0:
+		# 先快照本回合将造成伤害的 DoT 类型（牧师净化用）
+		var dot_types: Array = []
+		for dot in player.dots:
+			if not dot.type in dot_types:
+				dot_types.append(dot.type)
 		var dd = combat.apply_dot_damage(current_player)
 		if dd.damage > 0:
 			player.hp -= dd.damage
@@ -162,6 +167,8 @@ func _judgment_phase():
 					stats[ds.source]["damage_dealt"] += ds.damage
 			var detail_str = "、".join(dd.details)
 			add_log(current_player, "%s共%d点伤害" % [detail_str, dd.damage])
+			# 角色被动：受到 DoT 伤害后的处理（牧师清除对应 DoT）
+			char_skills.on_dot_damage(current_player, dot_types)
 			if player.hp <= 0:
 				_handle_death(current_player)
 				if phase == Config.Phase.GAME_OVER: return

@@ -100,6 +100,7 @@ _advance_to_next_player()  # 切换到对手
 | `on_attack_hit(att, def, dmg, type)` | 攻击命中后 | void | 剑士回血 |
 | `on_taking_damage(def, att, dmg)` | 受伤前 | int(修正后伤害) | 圣骑士减伤/狂战士加攻 |
 | `on_heal(idx, amount)` | 回复时 | int(修正后回复量) | 牧师额外+2 |
+| `on_dot_damage(idx, dot_types)` | 受DoT伤害后 | void | 牧师清除对应DoT |
 | `has_active_skill(idx)` | 检查主动技能 | String(技能名或"") | 法师/刺客按钮 |
 | `use_skill(idx, skill, params)` | 执行主动技能 | {success, msg} | 法师弃牌/刺客闪现 |
 | `draw_count(idx)` | 每回合抽牌数 | int | 默认2 |

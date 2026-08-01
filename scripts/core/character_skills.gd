@@ -213,20 +213,32 @@ func can_equip(player_idx: int, _equip_type: String) -> String:
 # 攻击 AP 消耗覆盖：返回 -1 = 使用卡牌默认消耗
 func get_attack_cost(player_idx: int, type_id: String) -> int:
 	match _ms.players[player_idx].char_id:
-		# "gunslinger": 远程/穿心固定消耗 2 攻击行动点
+		"gunslinger":
+			if type_id in ["range", "pierce"]:
+				return 2  # 远程/穿心固定消耗 2 攻击行动点
+			return -1
 		_: return -1
 
 # 攻击段数：返回 1 = 单段（现有行为）；>1 = 多段攻击（每段独立 计算→响应→扣血→特效→死亡判定）
 func get_attack_hit_count(player_idx: int, type_id: String) -> int:
 	match _ms.players[player_idx].char_id:
-		# "gunslinger": 远程/穿心返回 2（两段伤害）
+		"gunslinger":
+			if type_id in ["range", "pierce"]:
+				return 2  # 远程/穿心两段伤害
+			return 1
 		_: return 1
 
 # 攻击基础伤害公式覆盖：返回 -1 = 使用标准公式；>=0 = 用角色公式（后续武器/防具/Buff 修正照常）
 # distance 为当前距离；多段攻击每段独立调用
 func get_attack_base_damage(player_idx: int, type_id: String, distance: int) -> int:
-	match _ms.players[player_idx].char_id:
-		# "gunslinger": 普通远程 floor((面板-距离)/2)，穿心 floor((面板+3-距离)/2)
+	var p = _ms.players[player_idx]
+	match p.char_id:
+		"gunslinger":
+			if type_id == "range":
+				return max(0, floori((p.range_power - distance) / 2.0))
+			elif type_id == "pierce":
+				return max(0, floori((p.range_power + 3 - distance) / 2.0))
+			return -1
 		_: return -1
 
 func _swordsman_hit(player_idx: int, damage_type: int):

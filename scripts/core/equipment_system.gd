@@ -32,8 +32,7 @@ func equip_armor(player_idx: int, armor_type_id: String) -> Dictionary:
 	if reject != "": return {success=false, msg=reject}
 	var player = match_ref.get_player(player_idx)
 	var dur = 3 + match_ref.char_skills.armor_durability_bonus(player_idx)
-	if not player.armor.is_empty():
-		match_ref.card_systems[player_idx].discard.append(player.armor.duplicate())
+	# 旧防具直接消失（防具卡打出时已进弃牌堆；若把 {id,data} 结构塞进弃牌堆会污染牌堆）
 	player.armor = {id=armor_type_id, data=Config.ARMOR_DB[armor_type_id], durability=dur, max_durability=dur}
 	return {success=true, msg="装备了" + Config.ARMOR_DB[armor_type_id].name}
 

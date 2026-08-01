@@ -20,8 +20,7 @@ const Style = preload("res://scripts/theme/style_const.gd")
 @onready var version_label: Label
 
 func _ready():
-	$MainPanel/CreateBtn.pressed.connect(_show_create)
-	$MainPanel/JoinBtn.pressed.connect(_show_join)
+	$MainPanel/MultiBtn.pressed.connect(_on_multi_battle)
 	$MainPanel/SelfBtn.pressed.connect(_on_self_play)
 	$MainPanel/AiBtn.pressed.connect(_on_ai_battle)
 	$MainPanel/QuitBtn.pressed.connect(func(): get_tree().quit())
@@ -219,6 +218,21 @@ func _on_game_starting(data: Dictionary):
 func _on_self_play():
 	LocalGame.start_bp()
 	get_tree().change_scene_to_file("res://scenes/bp_scene.tscn")
+
+# ---- 多人对战（选择创建或加入） ----
+func _on_multi_battle():
+	var c = _make_popup("多人对战")
+	var vb = c.get_child(1)
+	var create = _popup_btn("创建房间")
+	create.pressed.connect(func(): c.queue_free(); _show_create())
+	vb.add_child(create)
+	var join = _popup_btn("加入房间")
+	join.pressed.connect(func(): c.queue_free(); _show_join())
+	vb.add_child(join)
+	var back = _popup_btn("返回")
+	back.pressed.connect(func(): c.queue_free())
+	vb.add_child(back)
+	add_child(c)
 
 # ---- 人机对战 ----
 func _on_ai_battle():

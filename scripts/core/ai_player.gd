@@ -73,6 +73,7 @@ func decide_action(player_idx: int) -> Dictionary:
 
 	# 1. 攻击动作（按手牌类型计算伤害）
 	for card in hand:
+		if not card.has("type_id"): continue  # 防御：跳过异常卡（防牌堆污染残留）
 		var tid = card.type_id
 		var dmg = -1
 		match tid:

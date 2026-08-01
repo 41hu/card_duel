@@ -90,6 +90,10 @@ jobs:
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
           ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
+          # 显式指定 debug keystore（否则 Godot 可能用默认路径/自动生成导致签名漂移）
+          GODOT_ANDROID_KEYSTORE_DEBUG_PATH: /home/runner/.android/debug.keystore
+          GODOT_ANDROID_KEYSTORE_DEBUG_USER: android
+          GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
         run: |
           mkdir -p dist
           ./Godot_v4.7.1-stable_linux.x86_64 --headless --path . --export-debug "Android" "dist/CardDuel.apk"

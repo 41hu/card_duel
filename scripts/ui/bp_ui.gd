@@ -76,6 +76,10 @@ func _create_char_buttons():
 		d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		d.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		d.add_theme_font_size_override("font_size", 18)
+		# 限制描述行数：超长描述（如快枪手）会撑高按钮 → 角色区超可视区/出现滚动条
+		# → 第 3 行按钮（快枪手）点击异常。截断省略保持按钮高度固定 190。
+		d.max_lines_visible = 2
+		d.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		vb.add_child(d)
 		btn.set_meta("state_label", st)
 		btn.set_meta("labels", [st, n, s, d])

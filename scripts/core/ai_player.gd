@@ -22,7 +22,9 @@ func _card_value(player_idx: int, type_id: String) -> int:
 	var p = match_ref.get_player(player_idx)
 	match type_id:
 		"near", "heavy": return p.near_power + 2
-		"range", "pierce": return p.range_power + 2
+		"range", "pierce":
+			# 多段攻击角色（如快枪手双发）价值按段数放大，AI 自动适配
+			return (p.range_power + 2) * match_ref.char_skills.get_attack_hit_count(player_idx, type_id)
 		"magic", "chant": return p.magic_power + 2
 		"move": return 3
 		"heal_3": return 4
@@ -82,9 +84,18 @@ func decide_action(player_idx: int) -> Dictionary:
 			"heavy":
 				if distance == 0: dmg = p.near_power + 3
 			"range":
-				dmg = max(0, p.range_power - distance)
+				# 角色公式覆盖（多段攻击角色）：总伤害 = 单段 × 段数；否则标准公式
+				var custom = match_ref.char_skills.get_attack_base_damage(player_idx, tid, distance)
+				if custom >= 0:
+					dmg = custom * match_ref.char_skills.get_attack_hit_count(player_idx, tid)
+				else:
+					dmg = max(0, p.range_power - distance)
 			"pierce":
-				dmg = max(0, p.range_power - distance) + 3
+				var custom2 = match_ref.char_skills.get_attack_base_damage(player_idx, tid, distance)
+				if custom2 >= 0:
+					dmg = custom2 * match_ref.char_skills.get_attack_hit_count(player_idx, tid)
+				else:
+					dmg = max(0, p.range_power - distance) + 3
 			"magic":
 				dmg = p.magic_power
 			"chant":

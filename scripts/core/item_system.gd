@@ -10,15 +10,17 @@ extends RefCounted
 var match_ref
 
 # 道具类型注册表
-# damage:  踩上触发的固定伤害；on_step: 自定义触发回调（func(player_idx, item) -> int，有则优先于 damage）
-# stack:   堆叠规则 —— "unlimited" 无限叠加 | "single" 同格同类仅1个 | "max:N" 同格同类上限N
-# special: 特殊道具标记（特殊道具可被一张摧毁清掉整格全部特殊道具，反制手段）
+# name:         道具名（卡面/日志显示）；desc: 效果描述（点击卡牌说明区显示）
+# damage:       踩上触发的固定伤害；on_step: 自定义触发回调（func(player_idx, item) -> int，有则优先于 damage）
+# stack:        堆叠规则 —— "unlimited" 无限叠加 | "single" 同格同类仅1个 | "max:N" 同格同类上限N
+# destroy_rule: 摧毁卡对它的拆除规则 —— "one" 一次拆1个（默认）| "all" 一张清掉该格全部同类道具
 var _item_types: Dictionary = {
 	"trap": {
 		"name": "陷阱",
+		"desc": "踩上-3HP，可重叠放置",
 		"damage": 3,
 		"stack": "unlimited",
-		"special": false,
+		"destroy_rule": "one",
 	},
 }
 
@@ -94,24 +96,21 @@ func trigger_on_step(player_idx: int) -> int:
 	return total
 
 # ---- 摧毁 ----
-# 指定格子摧毁：该格存在特殊道具时，一张摧毁清掉整格全部特殊道具（反制手段）；
-# 否则拆除该格一个普通道具（后放的先拆）
+# 指定格子摧毁：按目标道具类型的 destroy_rule 执行
+#   "one"（默认）：拆除该格一个道具（后放的先拆）
+#   "all"：一张摧毁清掉该格全部同类道具（由道具类型自行声明，未来角色可设计逐层拆的反制）
 func destroy_item_at(pos: int) -> bool:
-	var has_special = false
-	for it in match_ref.items:
-		if it.position == pos and get_item_type(it.item_type).get("special", false):
-			has_special = true
-			break
-	var removed = false
 	for i in range(match_ref.items.size() - 1, -1, -1):
 		var it = match_ref.items[i]
 		if it.position != pos:
 			continue
-		if has_special:
-			if get_item_type(it.item_type).get("special", false):
-				match_ref.items.remove_at(i)
-				removed = true
-		else:
-			match_ref.items.remove_at(i)
-			return true
-	return removed
+		if str(get_item_type(it.item_type).get("destroy_rule", "one")) == "all":
+			var removed = false
+			for j in range(match_ref.items.size() - 1, -1, -1):
+				if match_ref.items[j].position == pos and match_ref.items[j].item_type == it.item_type:
+					match_ref.items.remove_at(j)
+					removed = true
+			return removed
+		match_ref.items.remove_at(i)
+		return true
+	return false

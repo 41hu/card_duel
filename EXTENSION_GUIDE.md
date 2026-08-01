@@ -191,7 +191,7 @@
        "damage": 2,                # 踩上固定伤害；或挂 on_step 自定义回调
        # "on_step": func(player_idx, item): return 伤害值,   # 自定义触发（优先于 damage）
        "stack": "unlimited",       # unlimited 无限叠 | single 同格同类仅1 | max:N 上限N
-       "special": false,           # true = 特殊道具（一张摧毁可清掉指定格全部特殊道具）
+       "destroy_rule": "one",      # 摧毁拆除规则：one 一次拆1个 | all 一张清该格全部同类
    },
    ```
 2. 棋盘显示：`scripts/ui/components/board_renderer.gd` → `item_marks` 加类型标记（如 `"trap": "X"`）
@@ -199,11 +199,17 @@
 ### 触发/放置规则（自动生效，无需改）
 - 放置：目标格不能有单位；按 `stack` 堆叠规则校验
 - 触发：踩上按注册表结算（一次性消耗），伤害属无来源伤害（计入 `damage_from_trap`）
-- 摧毁：必须指定格子（客户端棋盘选格）；该格有 `special` 道具时一张摧毁清掉整格全部特殊道具
+- 摧毁：必须指定格子（客户端棋盘选格）；按目标类型的 `destroy_rule` 执行（"one"拆1个 / "all"清整格同类）
 
 ### 注意
 - 若道具由新卡牌放置：按"第 1 章加一张新卡"流程，卡效果里调 `_m.item_system.place_item(player_idx, "类型", pos)`
 - AI 决策（ai_player.gd）如需利用新道具，在 `decide_action` 加对应评分/放置逻辑
+
+### 角色专属道具（方案 A：一张通用道具卡，角色决定放什么）
+- `scripts/core/character_skills.gd` → `get_item_type(player_idx)` 加角色分支（如 `"hunter": return "snare"`），默认返回 `"trap"`
+- 注册表（item_system）加对应道具类型；`desc` 字段会显示在点击卡牌的说明区
+- 卡面/说明/棋盘标记自动按角色道具显示（状态已序列化 `item_type/item_type_name/item_type_desc`）
+- 棋盘标记：`board_renderer.gd` 的 `item_marks` 需为新类型补标记（如 `"snare": "S"`）
 
 ---
 

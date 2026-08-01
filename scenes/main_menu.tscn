@@ -49,35 +49,45 @@ layout_mode = 0
 offset_left = 285.0
 offset_top = 15.0
 offset_right = 665.0
-offset_bottom = 165.0
+offset_bottom = 155.0
 theme_override_font_sizes/font_size = 40
 text = "多人对战"
 
 [node name="SelfBtn" type="Button" parent="MainPanel" unique_id=1625168154]
 layout_mode = 0
 offset_left = 285.0
-offset_top = 185.0
+offset_top = 175.0
 offset_right = 665.0
-offset_bottom = 335.0
+offset_bottom = 315.0
 theme_override_font_sizes/font_size = 40
 text = "自我对战"
 
 [node name="AiBtn" type="Button" parent="MainPanel" unique_id=1144228867]
 layout_mode = 0
 offset_left = 285.0
-offset_top = 355.0
+offset_top = 335.0
 offset_right = 665.0
-offset_bottom = 505.0
+offset_bottom = 475.0
 theme_override_colors/font_color = Color(0.55, 0.9, 1, 1)
 theme_override_font_sizes/font_size = 40
 text = "人机对战"
 
+[node name="WikiBtn" type="Button" parent="MainPanel" unique_id=1144228865]
+layout_mode = 0
+offset_left = 285.0
+offset_top = 495.0
+offset_right = 665.0
+offset_bottom = 635.0
+theme_override_colors/font_color = Color(0.7, 1, 0.7, 1)
+theme_override_font_sizes/font_size = 40
+text = "游戏百科"
+
 [node name="QuitBtn" type="Button" parent="MainPanel" unique_id=1144228866]
 layout_mode = 0
 offset_left = 285.0
-offset_top = 525.0
+offset_top = 655.0
 offset_right = 665.0
-offset_bottom = 675.0
+offset_bottom = 795.0
 theme_override_colors/font_color = Color(1, 0.55, 0.55, 1)
 theme_override_font_sizes/font_size = 40
 text = "退出游戏"

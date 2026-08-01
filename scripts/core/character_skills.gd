@@ -241,6 +241,13 @@ func get_attack_base_damage(player_idx: int, type_id: String, distance: int) -> 
 			return -1
 		_: return -1
 
+# ---- 角色道具类型（一张通用道具卡，角色决定放什么道具；默认陷阱） ----
+# 道具类型需在 item_system._item_types 注册（堆叠/触发/拆除规则都在注册表）
+func get_item_type(player_idx: int) -> String:
+	match _ms.players[player_idx].char_id:
+		# 示例（协作者）："hunter": return "snare"（捕兽夹，见 item_system 注册表）
+		_: return "trap"
+
 func _swordsman_hit(player_idx: int, damage_type: int):
 	var p = _ms.players[player_idx]
 	if damage_type == Config.DamageType.PHYSICAL and not p.skill_used_this_turn:

@@ -735,6 +735,10 @@ func get_full_state(full: bool = false) -> Dictionary:
 			hand=cs.hand.duplicate(), hand_limit=movement.get_hand_limit(i),
 			active_skills=_skill_list(i),
 			pending_swordsman_skill=p.get("pending_swordsman_skill", false),
+			# 角色道具类型（一张通用道具卡，卡面/说明按角色道具显示）
+			item_type=char_skills.get_item_type(i),
+			item_type_name=item_system.get_item_type(char_skills.get_item_type(i)).get("name", "道具"),
+			item_type_desc=item_system.get_item_type(char_skills.get_item_type(i)).get("desc", ""),
 		})
 	if full: state.bp_state = bp.get_bp_state()
 	return state

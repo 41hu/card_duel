@@ -406,9 +406,13 @@ func _refresh_all(state: Dictionary):
 			var tid = card.type_id
 			var cd = Config.CARD_DB.get(tid, {})
 			var cw = CardWidget.new()
+			# 通用道具卡：卡面按角色道具显示（猎人手里显示"捕兽夹"而非"陷阱"）
+			var cname = cd.get("name", tid)
+			if tid == "trap":
+				cname = me.get("item_type_name", cname)
 			# 注意：网络 JSON 传输后 uid 是 float，而 CardWidget.setup(uid: int) 强转 int，
 			# 必须统一 int 比较（`in` 是严格类型匹配，37.0 in [37] 为 false → 弃牌红框不显示）
-			cw.setup(card.uid, tid, cd.get("name", tid), cd.get("ap", 0), int(card.uid) in _discard_selected)
+			cw.setup(card.uid, tid, cname, cd.get("ap", 0), int(card.uid) in _discard_selected)
 			cw.pressed.connect(_on_card_clicked.bind(tid))
 			if can_resp:
 				var atk = state.get("pending_attack_card", "")
@@ -522,7 +526,12 @@ func _on_card_clicked(card_uid: int, type_id: String):
 		_selected_type = type_id
 		confirm_btn.visible = true
 		cancel_btn.visible = true
-		card_info.text = Config.card_name(type_id) + ": " + Config.CARD_DB.get(type_id, {}).get("desc", "")
+		# 通用道具卡：点击说明按角色道具显示（道具名 + 效果描述）
+		if type_id == "trap":
+			var me2 = _game_state.players[0] if _game_state.players[0].index == _player_index else _game_state.players[1]
+			card_info.text = "%s：%s" % [me2.get("item_type_name", "道具"), me2.get("item_type_desc", "")]
+		else:
+			card_info.text = Config.card_name(type_id) + ": " + Config.CARD_DB.get(type_id, {}).get("desc", "")
 	_refresh_highlight()
 
 func _on_confirm_card():

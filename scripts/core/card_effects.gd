@@ -99,9 +99,12 @@ func _blessing(player_idx: int, card: Dictionary):
 func _trap(player_idx: int, card: Dictionary):
 	var p = _m.players[player_idx]
 	var pos = card.get("trap_pos", p.position + (1 if player_idx == 1 else -1))
-	if _m.item_system.place_item(player_idx, "trap", pos):
+	# 一张通用道具卡：放什么道具由角色决定（默认陷阱，猎人=捕兽夹等）
+	var item_type = _m.char_skills.get_item_type(player_idx)
+	if _m.item_system.place_item(player_idx, item_type, pos):
 		_m.card_systems[player_idx].play_card(card.uid)
-		_m.add_log(player_idx, "陷阱于%d" % pos)
+		var it_name = _m.item_system.get_item_type(item_type).get("name", item_type)
+		_m.add_log(player_idx, "%s于%d" % [it_name, pos])
 		return {success=true}
 	return {success=false, msg="无法放置"}
 

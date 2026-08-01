@@ -23,6 +23,9 @@ func _ready():
 	$MainPanel/MultiBtn.pressed.connect(_on_multi_battle)
 	$MainPanel/SelfBtn.pressed.connect(_on_self_play)
 	$MainPanel/AiBtn.pressed.connect(_on_ai_battle)
+	$MainPanel/WikiBtn.pressed.connect(func():
+		get_tree().change_scene_to_file("res://scenes/wiki_scene.tscn")
+	)
 	$MainPanel/QuitBtn.pressed.connect(func(): get_tree().quit())
 	_add_server_shortcut(c_server, "本地")
 	_add_server_shortcut(c_server, "云端")

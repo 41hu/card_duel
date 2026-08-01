@@ -75,6 +75,8 @@ jobs:
           mkdir -p ~/.android
           echo "${{ secrets.DEBUG_KEYSTORE }}" | base64 -d > ~/.android/debug.keystore
           chmod 600 ~/.android/debug.keystore
+          # 校验：secret 缺失/为空时直接失败，避免 Godot 自动生成新 keystore 导致签名漂移
+          test -s ~/.android/debug.keystore || { echo "ERROR: DEBUG_KEYSTORE secret 未配置或为空，构建中止"; exit 1; }
 
       - name: Set Android App Version from version.gd
         run: |

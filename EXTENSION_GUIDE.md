@@ -143,7 +143,16 @@
 
 ---
 
-## 11. 结算优先级规范（判断顺序，新功能对照此表确认插在哪一层）
+## 11. 卡牌流转规范（防牌堆污染，新增牌堆操作必读）
+
+- **卡牌唯一合法结构**：`{uid: int, type_id: String}`。装备数据结构（`{id, data, ...}`）**不是卡牌**，禁止进入手牌/弃牌堆/牌堆
+- **只走 CardSystem 的方法**：`add_to_hand(card)` / `play_card(uid)` / `discard_card(uid)` / `discard_all()` / `random_discard(n)` / `draw_cards(n)`——**禁止直接操作 `hand`/`discard`/`deck` 数组**（CardSystem 会在入口校验卡结构，非法卡被拒绝并 `push_error`）
+- 需要新流转方式（如"从对方牌堆偷牌"）→ 在 CardSystem 加方法（内部走校验），不要在外部拼数组
+- 弃牌堆重洗（`_recycle_discard`）会把内容倒回牌堆——**弃牌堆一旦混入非法数据，污染会扩散到牌堆和手牌**（历史教训：换装防具数据误入弃牌堆导致 AI 决策崩溃）
+
+---
+
+## 12. 结算优先级规范（判断顺序，新功能对照此表确认插在哪一层）
 
 **攻击伤害结算**（`combat.calculate_attack` + `match_state.process_response` 实际顺序）：
 1. **条件检查**：近战/重击必须贴脸；穿心面板-距离≤0 → 攻击无效，**卡不消耗**

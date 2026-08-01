@@ -43,6 +43,8 @@ var stats: Array = []
 var _moved_to_adjacent_this_turn: bool = false
 # 本次攻击防具是否生效（实际造成伤害时消耗耐久，闪避/0伤害不消耗）
 var _armor_hit: bool = false
+# 调试发牌的 uid 计数器（保证唯一，与正常卡 uid 0-77 隔离）
+var _cheat_uid_counter: int = -1000
 var char_skills
 var card_effects
 var waiting_for_discard: bool = false
@@ -100,6 +102,7 @@ func init_match(p1_char_id: String, p2_char_id: String, bp_first: int = -1):
 	_action_deadline = 0
 	_discard_deadline = 0
 	_moved_to_adjacent_this_turn = false
+	_cheat_uid_counter = -1000
 	first_player = bp_first if bp_first >= 0 else randi() % 2
 	current_player = first_player
 	phase = Config.Phase.BP_PHASE
@@ -261,8 +264,9 @@ func _handle_skill(player_idx: int, skill: String, params: Dictionary = {}) -> D
 
 func _cheat_card(player_idx: int, type_id: String) -> Dictionary:
 	if not Config.CARD_DB.has(type_id): return {success=false, msg="未知卡牌类型"}
-	var uid = -1000 - randi() % 1000
-	var card = {"uid": uid, "type_id": type_id}
+	# uid 用递减计数器保证唯一（随机 uid 可能重复导致出牌选错卡）
+	var card = {"uid": _cheat_uid_counter, "type_id": type_id}
+	_cheat_uid_counter -= 1
 	card_systems[player_idx].add_to_hand(card)
 	add_log(player_idx, "[DEV]+%s" % type_id)
 	state_changed.emit(get_full_state())

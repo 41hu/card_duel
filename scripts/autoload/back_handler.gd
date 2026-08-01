@@ -1,24 +1,44 @@
 # back_handler.gd — 返回键/ESC 拦截（Android 全面屏手势）
-# 默认行为：Godot 收到未处理的 ESC/返回键会直接退出应用（划一下就走）。
-# 本 autoload 拦截并实现"2 秒内再按一次才退出"，第一次按只显示提示。
+# 默认行为：Godot 收到未处理的返回请求会直接退出应用（划一下就走）。
+# Android 返回键不产生输入事件，而是发 NOTIFICATION_WM_GO_BACK_REQUEST 通知 + Window.go_back_requested 信号；
+# 桌面 ESC 则走 KEY_ESCAPE 输入事件。本 autoload 三通道全部拦截，
+# 实现"2 秒内再按一次才退出"，第一次按只显示提示。
 extends Node
 
 const HINT_TIME_MS = 2000
 
 var _last_back_time: int = 0
 var _hint_label: Label
+# 同一次返回会同时触发通知和信号，防重入避免双击判定被计两次
+var _handling_back: bool = false
+
+func _ready():
+	# 通道 2：Window.go_back_requested 信号（Android 返回）
+	get_tree().root.go_back_requested.connect(_handle_back)
+
+func _notification(what):
+	# 通道 1：NOTIFICATION_WM_GO_BACK_REQUEST（Node 级通知，传播到场景树）
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		_handle_back()
 
 func _unhandled_input(event: InputEvent):
-	# Android 返回手势 / 桌面 ESC 都会产生 KEY_ESCAPE 输入事件
+	# 通道 3：桌面 ESC 等输入事件
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
-		get_viewport().set_input_as_handled()  # 阻止 Godot 默认退出
-		var now = Time.get_ticks_msec()
-		if _last_back_time > 0 and now - _last_back_time < HINT_TIME_MS:
-			_clear_hint()
-			get_tree().quit()
-		else:
-			_last_back_time = now
-			_show_hint()
+		get_viewport().set_input_as_handled()
+		_handle_back()
+
+func _handle_back():
+	if _handling_back: return  # 防重入（通知+信号同帧双触发）
+	_handling_back = true
+	get_viewport().set_input_as_handled()  # 阻止 Godot 默认退出
+	var now = Time.get_ticks_msec()
+	if _last_back_time > 0 and now - _last_back_time < HINT_TIME_MS:
+		_clear_hint()
+		get_tree().quit()
+	else:
+		_last_back_time = now
+		_show_hint()
+	_handling_back = false
 
 func _show_hint():
 	if _hint_label == null or not is_instance_valid(_hint_label):

@@ -49,7 +49,7 @@ func play_card(card_uid: int) -> Dictionary:
 		if hand[i].uid == card_uid:
 			var card = hand[i]
 			hand.remove_at(i)
-			discard.append(card)
+			_append_discard(card)
 			return card
 	return {}
 
@@ -59,14 +59,15 @@ func discard_card(card_uid: int) -> Dictionary:
 		if hand[i].uid == card_uid:
 			var card = hand[i]
 			hand.remove_at(i)
-			discard.append(card)
+			_append_discard(card)
 			return card
 	return {}
 
 # 弃掉所有手牌
 func discard_all() -> Array:
 	var discarded = hand.duplicate()
-	discard.append_array(hand)
+	for card in hand:
+		_append_discard(card)
 	hand.clear()
 	return discarded
 
@@ -77,7 +78,7 @@ func random_discard(count: int) -> Array:
 	for _i in range(to_discard):
 		var idx = randi() % hand.size()
 		discarded.append(hand[idx])
-		discard.append(hand[idx])
+		_append_discard(hand[idx])
 		hand.remove_at(idx)
 	return discarded
 
@@ -94,8 +95,24 @@ func random_take() -> Dictionary:
 	hand.remove_at(idx)
 	return card
 
+# ---------- 卡牌流转统一入口（防牌堆污染） ----------
+# 所有卡牌必须是 {uid, type_id} 结构；非法卡（如装备数据结构）直接拒绝并报错。
+# 新增牌堆操作功能时，必须走这些入口，禁止直接碰 hand/discard/deck 数组。
+func _is_valid_card(card) -> bool:
+	return card is Dictionary and card.has("uid") and card.has("type_id")
+
+func _append_discard(card: Dictionary) -> bool:
+	if not _is_valid_card(card):
+		push_error("[CardSystem] 拒绝非法卡进入弃牌堆: %s" % str(card))
+		return false
+	discard.append(card)
+	return true
+
 # 将卡牌加入手牌
 func add_to_hand(card: Dictionary):
+	if not _is_valid_card(card):
+		push_error("[CardSystem] 拒绝非法卡进入手牌: %s" % str(card))
+		return
 	hand.append(card)
 
 # 是否包含某张卡
@@ -138,7 +155,7 @@ func use_heal_card() -> Dictionary:
 		if type_id == "heal_3" or type_id == "heal_5":
 			var card = hand[i]
 			hand.remove_at(i)
-			discard.append(card)
+			_append_discard(card)
 			return card
 	return {}
 

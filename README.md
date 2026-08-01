@@ -57,21 +57,29 @@ git clone https://github.com/41hu/card_duel.git
 
 你的唯一职责：**游戏平衡性调整**——调整角色数值、卡牌强度、技能效果。不修 UI bug、不做新功能系统、不动推送更新相关代码。
 
-**你可以改的**：
-- `scripts/autoload/config.gd` — 卡牌数据（`CARD_DB`/`CARD_COUNTS`）、角色属性、武器效果数值
-- `scripts/core/character_skills.gd` — 角色技能逻辑
-- `scripts/core/card_effects.gd` — 卡牌效果逻辑
-- `scripts/core/combat_system.gd`、`movement_system.gd`、`status_system.gd`、`equipment_system.gd`、`bp_system.gd`、`card_system.gd`、`match_state.gd` — 相关规则逻辑
-- `GAME_RULES.md`、`RESPONSE_RULES.md` — 同步更新你改动的规则文档
+**你可以改的（数值层）**：
+- `scripts/data/` 全部（卡牌/角色/武器/防具数据表）
+- `scripts/autoload/config.gd` 的**数值部分**（`CARD_DB`/`CARD_COUNTS`/角色属性/武器数值）
+- `GAME_RULES.md`、`RESPONSE_RULES.md` — 同步更新你改动的规则
+
+**数值层是主战场**：平衡性 = 调数值，与主维护者的逻辑修复（`core/*.gd` 的流程/判断）**文件不重叠，冲突基本不会发生**。
+
+**core/ 的规则**：`scripts/core/` 的逻辑由主维护者维护（bug 修复、机制实现）。你**尽量不直接改逻辑文件**；如果调整平衡性必须动逻辑（如加新机制、改判定），提交信息标注"含逻辑改动"并通知主维护者，push 前 `git pull --rebase` 遇到冲突时**后推的人解决**。
 
 **你绝对不能改的**：`scripts/ui/`、`scenes/`、`scripts/version.gd`、`scripts/theme/`、`.github/`、`export_presets.cfg`、`deploy.sh`、`start_server.sh`、`project.godot`
 
+**收到主维护者推送后**（每次开工前必做）：
+1. `git pull --rebase`（拉取最新代码与文档）
+2. `git log --oneline -5` 看推送内容
+3. **让 AI 重新读 `README.md` / `GAME_RULES.md` / `RESPONSE_RULES.md`**（规则可能已更新，别用旧认知工作）
+4. 若主维护者的改动涉及你正在调的数值/机制 → 重测你的调整是否仍成立
+
 **平衡性改动自检清单**（改完逐项确认）：
 1. 数值一致性：`CARD_COUNTS` 各卡数量总和仍为 78？角色仍为 8 名？武器/防具池数量与文档一致？
-2. 改 `scripts/core/` 后**必须通知主维护者部署服务器**（服务端跑的是同一套逻辑，不部署则联机对战不生效）
+2. 涉及 `scripts/core/` 或服务端逻辑后**必须通知主维护者部署服务器**（服务端跑的是同一套逻辑，不部署则联机对战不生效）
 3. 提交前用**自我对战**跑一局验证：主菜单 → 自我对战 → 随机选两个角色 → 完整走完一局
 
-**提交规范**：提交信息以 `balance:` 开头（如 `balance: 剑士HP 28→26`），push 前先 `git pull --rebase`。
+**提交规范**：提交信息以 `balance:` 开头（如 `balance: 剑士HP 28→26`），push 前先 `git pull --rebase`。**冲突只发生在本地 rebase**（远端始终安全）：数值/逻辑分层后基本不会冲突；真冲突时判断保留哪边，解决不了（主维护者的改动改变了你数值的语义）再沟通。
 
 ### 开始工作前
 
@@ -86,9 +94,11 @@ git clone https://github.com/41hu/card_duel.git
 
 | 区域 | 文件 | 归属 |
 |---|---|---|
-| **平衡性**（另一位开发者） | `scripts/autoload/config.gd`、`scripts/core/` 全部、`GAME_RULES.md`、`RESPONSE_RULES.md` | 另一位开发者 |
-| **推送更新 + UI/手机适配**（主维护者） | `scripts/version.gd`、`scripts/ui/` 全部、`scenes/` 全部、`scripts/theme/`、`.github/`、`export_presets.cfg`、部署脚本 | 主维护者 |
+| **平衡性（数值层）**（另一位开发者） | `scripts/data/` 全部、`config.gd` 数值部分、`GAME_RULES.md`、`RESPONSE_RULES.md` | 另一位开发者 |
+| **逻辑层 + 推送更新 + UI**（主维护者） | `scripts/core/*.gd`（bug 修复/机制）、`scripts/version.gd`、`scripts/ui/`、`scenes/`、`scripts/theme/`、`.github/`、`export_presets.cfg`、部署脚本 | 主维护者 |
 | **公共区** | `project.godot`、`README.md`、`WORKFLOW.md` | 谁改谁负责，改完通知对方 |
+
+> 重叠区：平衡性调整需要动逻辑（新机制/判定）时，改动归主维护者审阅合并，提交信息标注"含逻辑改动"。
 
 三条铁律：
 1. **`scripts/version.gd` 只有主维护者能改**（版本号与 CI 发布、游戏内更新提示联动）

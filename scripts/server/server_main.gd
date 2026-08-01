@@ -136,7 +136,12 @@ func _on_bp_action(peer_idx: int, data: Dictionary):
 	if room.match.bp.is_done():
 		var chars = room.match.bp.picked_chars
 		var bf = room.match.bp._bp_first
-		room.match.init_match(chars[0], chars[1], bf)
+		# 角色与玩家索引对齐：players[0]=peer0角色, players[1]=peer1角色
+		# picked_chars[0]=先手选的；先手是 peer1(bf=1) 时交换，否则角色错位
+		if bf == 0:
+			room.match.init_match(chars[0], chars[1], bf)
+		else:
+			room.match.init_match(chars[1], chars[0], bf)
 		room.match._start_game()
 		room.stage = "game"
 		log_msg("BP完成 P1=%s P2=%s" % [chars[0], chars[1]])

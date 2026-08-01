@@ -34,11 +34,25 @@ func _handle_back():
 	var now = Time.get_ticks_msec()
 	if _last_back_time > 0 and now - _last_back_time < HINT_TIME_MS:
 		_clear_hint()
-		get_tree().quit()
+		if _is_main_menu():
+			get_tree().quit()  # 主界面双击退出游戏
+		else:
+			_exit_to_menu()  # 其他界面双击退出对局回主界面
 	else:
 		_last_back_time = now
 		_show_hint()
 	_handling_back = false
+
+func _is_main_menu() -> bool:
+	return get_tree().current_scene != null and get_tree().current_scene.name == "MainMenu"
+
+# 退出当前对局并返回主界面（清理本地/网络对局状态）
+func _exit_to_menu():
+	if LocalGame.game != null:
+		LocalGame.disconnect_from_server()
+	else:
+		Network.disconnect_from_server()
+	get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
 
 func _show_hint():
 	if _hint_label == null or not is_instance_valid(_hint_label):
@@ -49,6 +63,7 @@ func _show_hint():
 		_hint_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.9))
 		_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		get_tree().root.add_child(_hint_label)
+	_hint_label.text = "再按一次退出游戏" if _is_main_menu() else "再按一次退出对局"
 	# 居中于屏幕底部（覆盖在任意场景之上）
 	var vp = get_viewport().get_visible_rect().size
 	_hint_label.position = Vector2((vp.x - _hint_label.size.x) / 2.0, vp.y - 120)

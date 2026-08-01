@@ -76,9 +76,9 @@ func _ready():
 	_apply_safe_area()
 	_setup_debug_button()
 
-# 调试菜单按钮（仅 debug 构建显示）：快速结束对局/发牌，方便验证结算等功能
+# 调试菜单按钮（仅编辑器运行时显示，导出到真机不显示）：快速结束对局/发牌
 func _setup_debug_button():
-	if not OS.is_debug_build(): return
+	if not OS.has_feature("editor"): return
 	var dbg = Button.new()
 	dbg.name = "DebugBtn"
 	dbg.text = "调试"
@@ -163,7 +163,7 @@ func _apply_safe_area():
 		skill_cancel.offset_bottom -= bottom
 
 func _input(event):
-	if not OS.is_debug_build(): return
+	if not OS.has_feature("editor"): return  # F12 作弊仅在编辑器运行时有效
 	if not event is InputEventKey or not event.pressed: return
 	if event.keycode == KEY_F12: _cheat_on = not _cheat_on; return
 	if not _cheat_on or not _is_my_turn: return
@@ -306,11 +306,17 @@ func _mkbtn(txt: String) -> Button:
 func _on_state_updated(state: Dictionary):
 	_game_state = state
 	if _n() == LocalGame:
-		if state.get("response_pending", false):
-			_player_index = 1 - state.current_player
+		if LocalGame.ai_mode:
+			# 人机对战：人类固定 P0 视角（否则 AI 回合会泄露 AI 手牌）
+			_player_index = 0
+			_is_my_turn = (state.current_player == 0 and state.phase == Config.Phase.PLAYER_TURN)
 		else:
-			_player_index = state.current_player
-		_is_my_turn = (state.phase == Config.Phase.PLAYER_TURN)
+			# 自我对战：轮流操作，视角跟随当前回合玩家
+			if state.get("response_pending", false):
+				_player_index = 1 - state.current_player
+			else:
+				_player_index = state.current_player
+			_is_my_turn = (state.phase == Config.Phase.PLAYER_TURN)
 	else:
 		_player_index = _n().player_index
 		_is_my_turn = (state.current_player == _player_index) and (state.phase == Config.Phase.PLAYER_TURN)

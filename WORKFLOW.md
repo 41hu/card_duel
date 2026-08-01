@@ -206,7 +206,8 @@ RESPONSE_BY = {
 
 ### 安全/瑕疵
 
-13. **`_cheat` 无服务端校验** — `match_state.gd:184` 任意联网玩家可发
+13. **Android 返回键双击退出未生效**（1.0.17）— back_handler 已接通知/信号/输入三通道 + 防重入，但真机仍划一次直接退出。已尝试：`_unhandled_input`（输入流收不到，官方确认 Android back 不发输入事件）→ `NOTIFICATION_WM_GO_BACK_REQUEST` + `go_back_requested` 信号（桌面模拟受限无法验证真机行为）。可能方向：Android 预测性返回（onBackInvokedCallback）绕过引擎、或需自定义 Android 模板。用户决定暂不修（细枝末节），留档待查
+14. **`_cheat` 无服务端校验** — `match_state.gd:184` 任意联网玩家可发
 14. **响应未校验身份** — `match_state.gd:319` 攻击方可对自己"响应"
 15. **本地模式残留** — 结算返回后 `LocalGame.game` 未清空，再开网络局状态错乱
 16. **BP 超时后不广播** — `server_main.gd:49-54` 超时自动操作后双方 UI 停在旧阶段

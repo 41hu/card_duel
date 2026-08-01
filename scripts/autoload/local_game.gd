@@ -70,9 +70,9 @@ func start_ai_game(p1_char: String, p2_char: String, difficulty: int):
 	game.init_match(p1_char, p2_char, randi() % 2)
 	_ai = AIPlayerClass.new(game, difficulty)
 	game._start_game()
-	battle_state_cache = game.get_full_state()
 	if game.current_player == ai_idx:
-		_ai_act_frame()  # AI 先手：立即走第一步，后续由 _process 驱动
+		_ai_act_frame()  # AI 先手：先走一步，缓存取最新状态
+	battle_state_cache = game.get_full_state()
 
 # AI 单步决策（由 _process 每帧驱动，一次只做一步，busy 标志防重入）
 func _ai_act_frame():

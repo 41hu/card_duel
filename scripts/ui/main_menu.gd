@@ -260,12 +260,18 @@ func _show_ai_char(diff: int):
 	var vb = c.get_child(1)
 	for char_id in Config.CHARACTER_IDS:
 		var b = _popup_btn(Config.char_name(char_id))
-		b.pressed.connect(func(cid=char_id): c.queue_free(); _start_ai_battle(diff, cid))
+		# 用 bind 显式绑定参数（不依赖 lambda 默认参数语义，杜绝闭包绑定错位）
+		b.pressed.connect(_on_ai_char_picked.bind(diff, char_id))
 		vb.add_child(b)
 	var back = _popup_btn("返回")
 	back.pressed.connect(func(): c.queue_free())
 	vb.add_child(back)
 	add_child(c)
+
+func _on_ai_char_picked(diff: int, char_id: String):
+	var popup = get_node_or_null("AiPopup")
+	if popup: popup.queue_free()
+	_start_ai_battle(diff, char_id)
 
 func _start_ai_battle(diff: int, my_char: String):
 	var pool = Config.CHARACTER_IDS.duplicate()

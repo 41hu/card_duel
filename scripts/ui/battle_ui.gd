@@ -402,14 +402,16 @@ func _refresh_all(state: Dictionary):
 			var tid = card.type_id
 			var cd = Config.CARD_DB.get(tid, {})
 			var cw = CardWidget.new()
-			cw.setup(card.uid, tid, cd.get("name", tid), cd.get("ap", 0), card.uid in _discard_selected)
+			# 注意：网络 JSON 传输后 uid 是 float，而 CardWidget.setup(uid: int) 强转 int，
+			# 必须统一 int 比较（`in` 是严格类型匹配，37.0 in [37] 为 false → 弃牌红框不显示）
+			cw.setup(card.uid, tid, cd.get("name", tid), cd.get("ap", 0), int(card.uid) in _discard_selected)
 			cw.pressed.connect(_on_card_clicked.bind(tid))
 			if can_resp:
 				var atk = state.get("pending_attack_card", "")
 				if tid in ["magic"]: cw.set_respondable(true)
 				elif tid in ["range"]: cw.set_respondable(atk in ["range", "pierce", "magic", "chant"])
 				elif tid in ["near"]: cw.set_respondable(atk in ["near", "heavy"])
-			if in_disc and card.uid in _discard_selected:
+			if in_disc and int(card.uid) in _discard_selected:
 				cw.set_discard_mark(true)
 			if card.uid == _selected_uid:
 				cw.set_selected(true)

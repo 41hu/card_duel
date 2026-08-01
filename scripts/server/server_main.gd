@@ -44,8 +44,13 @@ func _process(_delta):
 				while peer.ws.get_available_packet_count() > 0:
 					_handle_message(i, peer.ws.get_packet().get_string_from_utf8())
 			WebSocketPeer.STATE_CLOSED:
-				log_msg("断开: %s" % peer.peer_name)
-				_on_peer_disconnected(i); _peers.remove_at(i)
+				# 注意：不能 remove_at——移除会压缩数组，导致 room.peer_indices 里的
+				# 索引错位（后续新连接补位后，消息发错人/发到死连接）。断开的 peer 保留
+				# 并打 dead 标记，避免每帧重复触发断开处理（否则日志死循环）。
+				if not peer.get("dead", false):
+					peer.dead = true
+					log_msg("断开: %s" % peer.peer_name)
+					_on_peer_disconnected(i)
 	_timer_acc += _delta
 	if _timer_acc >= 1.0:
 		_timer_acc = 0.0
@@ -116,7 +121,8 @@ func _start_bp(room):
 	log_msg("BP开始 房间%s" % room.id)
 
 # BP 倒计时超时自动操作后：广播并推进流程
-func _on_bp_timeout(room, _bs: Dictionary):
+# 注意参数顺序：信号 emit(bp_state) + bind(room) → 回调实际收到 (bp_state, room)
+func _on_bp_timeout(_bs: Dictionary, room):
 	_broadcast_bp_state(room)
 	if room.match.bp.is_done():
 		var chars = room.match.bp.picked_chars

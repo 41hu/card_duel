@@ -51,8 +51,8 @@ func _on_cell_input(event: InputEvent, cell_index: int):
 		return
 	cell_clicked.emit(cell_index)
 
-# 根据玩家和陷阱数据刷新棋盘显示
-func update(players: Array, traps: Array, my_index: int):
+# 根据玩家和地格道具数据刷新棋盘显示
+func update(players: Array, items: Array, my_index: int):
 	for cell in _cells:
 		var idx = cell.get_meta("index")
 		var lbl = cell.get_child(0)
@@ -67,7 +67,9 @@ func update(players: Array, traps: Array, my_index: int):
 			var col = Style.ME_GREEN if p.index == my_index else Style.OPP_RED
 			lbl.add_theme_color_override("font_color", col)
 
-	for t in traps:
-		var pos = t.position
+	# 道具按类型差异化显示（新增道具类型时在此补充标记）
+	var item_marks = {"trap": "X"}
+	for it in items:
+		var pos = it.position
 		if pos >= 0 and pos < _cells.size():
-			_cells[pos].get_child(0).text += " X"
+			_cells[pos].get_child(0).text += " " + item_marks.get(it.item_type, "?")

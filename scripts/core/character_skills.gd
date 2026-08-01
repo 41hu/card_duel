@@ -239,8 +239,8 @@ func _assassin_move(player_idx: int, params: Dictionary) -> Dictionary:
 	if dir == 0: return {success=false, msg="请选择方向"}
 	# 禁移动检查统一在 movement.move_player 兜底（霜咬同样限制暗影步）
 	if not _ms.movement.move_player(player_idx, dir): return {success=false, msg="无法移动"}
-	var td = _ms.movement.check_trap_trigger(player_idx)
+	var td = _ms.item_system.trigger_on_step(player_idx)
 	if td > 0:
-		_ms._check_any_death()  # check_trap_trigger 内部已扣血，这里只补死亡判定
+		_ms._check_any_death()  # trigger_on_step 内部已扣血，这里只补死亡判定
 	_ms.add_log(player_idx, "暗影步")
 	return {success=true}

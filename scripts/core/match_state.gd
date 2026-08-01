@@ -27,7 +27,7 @@ var current_player: int = 0
 var turn_number: int = 0
 var first_player: int = 0
 var used_weapon_ids: Array = []
-var traps: Array = []
+var items: Array = []  # 地格道具（原 traps，泛化为道具系统；结构 {item_type, position, owner}）
 var action_log: Array = []
 var waiting_for_weapon_choice: int = -1
 var pending_weapon_id: String = ""
@@ -47,6 +47,7 @@ var _armor_hit: bool = false
 var _cheat_uid_counter: int = -1000
 var char_skills
 var card_effects
+var item_system
 var waiting_for_discard: bool = false
 var discard_count: int = 0
 var _reveal_to: int = -1
@@ -69,6 +70,7 @@ func _init():
 	equipment = EquipmentSys.new(self)
 	status = StatusSys.new(self)
 	bp = BPSys.new(self)
+	item_system = preload("res://scripts/core/item_system.gd").new(self)
 	char_skills = preload("res://scripts/core/character_skills.gd").new(self)
 	card_effects = preload("res://scripts/core/card_effects.gd").new(self)
 
@@ -87,7 +89,7 @@ func init_match(p1_char_id: String, p2_char_id: String, bp_first: int = -1):
 		CardSys.new(shared_deck, shared_discard),
 	]
 	used_weapon_ids.clear()
-	traps.clear()
+	items.clear()
 	action_log.clear()
 	turn_number = 0
 	waiting_for_weapon_choice = -1
@@ -129,7 +131,7 @@ func _create_player(idx: int, char_id: String, char_data: Dictionary) -> Diction
 	}
 
 func get_player(idx: int): return players[idx]
-func get_traps() -> Array: return traps
+func get_items() -> Array: return items
 
 func do_bp_action(player_idx: int, action: String, char_id: String) -> bool:
 	var ok = bp.execute_action(player_idx, action, char_id)
@@ -451,9 +453,9 @@ func _handle_move_card(player_idx: int, card: Dictionary) -> Dictionary:
 	add_log(player_idx, "移动到%d" % players[player_idx].position)
 	if movement.get_distance() == 0:
 		_moved_to_adjacent_this_turn = true  # 突刺武器：移动贴脸后额外+3
-	var td = movement.check_trap_trigger(player_idx)
+	var td = item_system.trigger_on_step(player_idx)
 	if td > 0:
-		_check_any_death()  # 移动者或被推的对方都可能踩陷阱致死（内部已扣血）
+		_check_any_death()  # 移动者或被推的对方都可能踩道具致死（内部已扣血）
 	return {success=true}
 
 func _handle_destroy(player_idx: int, card: Dictionary) -> Dictionary:
@@ -462,8 +464,13 @@ func _handle_destroy(player_idx: int, card: Dictionary) -> Dictionary:
 	if target == "hand":
 		card_systems[opp].random_discard(1); _use_card(player_idx, card); add_log(player_idx, "摧毁手牌"); return {success=true}
 	if target == "trap":
-		if traps.size() > 0: traps.pop_back(); _use_card(player_idx, card); add_log(player_idx, "摧毁陷阱"); return {success=true}
-		return {success=false, msg="场上没有陷阱"}
+		# 摧毁必须指定格子（客户端走棋盘选格；无位置参数视为操作错误）
+		var pos = int(card.get("trap_pos", -1))
+		if pos < 0:
+			return {success=false, msg="请选择要摧毁的格子"}
+		if item_system.destroy_item_at(pos):
+			_use_card(player_idx, card); add_log(player_idx, "摧毁%d格道具" % pos); return {success=true}
+		return {success=false, msg="该格没有道具"}
 	var et = card.get("equip_type", "weapon")
 	if et != "weapon" and et != "armor": return {success=false, msg="无效装备类型"}
 	var msg = equipment.destroy_equipment(opp, et); _use_card(player_idx, card); add_log(player_idx, msg); return {success=true}
@@ -682,7 +689,7 @@ func get_full_state(full: bool = false) -> Dictionary:
 		waiting_for_discard=waiting_for_discard, discard_count=discard_count,
 		action_time_left=atl, discard_time_left=dtl,
 		deck_size=card_systems[0].deck.size(), discard_size=card_systems[0].discard.size(),
-		players=[], traps=traps.duplicate(), action_log=action_log.duplicate(),
+		players=[], items=items.duplicate(), action_log=action_log.duplicate(),
 		distance=movement.get_distance(),
 	}
 	for i in range(2):

@@ -99,7 +99,7 @@ func _blessing(player_idx: int, card: Dictionary):
 func _trap(player_idx: int, card: Dictionary):
 	var p = _m.players[player_idx]
 	var pos = card.get("trap_pos", p.position + (1 if player_idx == 1 else -1))
-	if _m.movement.place_trap(player_idx, pos):
+	if _m.item_system.place_item(player_idx, "trap", pos):
 		_m.card_systems[player_idx].play_card(card.uid)
 		_m.add_log(player_idx, "陷阱于%d" % pos)
 		return {success=true}

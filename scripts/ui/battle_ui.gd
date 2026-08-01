@@ -385,7 +385,7 @@ func _refresh_all(state: Dictionary):
 	_deck_label.offset_top = 38; _deck_label.offset_bottom = 66
 	_deck_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
-	board.update(pls, state.get("traps", []), _player_index)
+	board.update(pls, state.get("items", []), _player_index)
 
 	for c in hand_area.get_children():
 		c.queue_free()
@@ -584,6 +584,15 @@ func _refresh_highlight():
 			child.set_selected(child.card_uid == _selected_uid)
 
 func _on_board_cell_clicked(cell_index: int):
+	if _selected_type == "destroy_trap" and _is_my_turn:
+		_n().send_play_card(_selected_uid, {"destroy_target": "trap", "trap_pos": cell_index})
+		_selected_uid = -1
+		_selected_type = ""
+		confirm_btn.visible = false
+		cancel_btn.visible = false
+		card_info.text = ""
+		status_label.text = ""
+		return
 	if _selected_type != "trap" or not _is_my_turn:
 		return
 	_n().send_play_card(_selected_uid, {"trap_pos": cell_index})
@@ -638,12 +647,20 @@ func _popup_destroy(card_uid: int):
 		var ab = _mkbtn("摧毁对方防具: " + opp.armor.data.name)
 		ab.pressed.connect(func(): c.queue_free(); _n().send_play_card(card_uid, {"destroy_target": "equip", "equip_type": "armor"}))
 		vb.add_child(ab)
-	var traps_list = _game_state.get("traps", [])
+	var traps_list = _game_state.get("items", [])
 	if traps_list.size() > 0:
-		var tb = _mkbtn("摧毁场上陷阱(%d个)" % traps_list.size())
-		tb.pressed.connect(func(): c.queue_free(); _n().send_play_card(card_uid, {"destroy_target": "trap"}))
+		var tb = _mkbtn("摧毁道具：点击棋盘指定格子(%d个)" % traps_list.size())
+		tb.pressed.connect(func(): c.queue_free(); _enter_destroy_trap(card_uid))
 		vb.add_child(tb)
 	add_child(c)
+
+# 摧毁陷阱：进入棋盘选格模式（复用放陷阱的格子点击交互）
+func _enter_destroy_trap(card_uid: int):
+	_selected_uid = card_uid
+	_selected_type = "destroy_trap"
+	cancel_btn.visible = true
+	card_info.text = "点击棋盘上有陷阱的格子进行摧毁"
+	status_label.text = "点击棋盘上有陷阱的格子进行摧毁"
 
 func _popup_trap(card_uid: int):
 	status_label.text = "已选陷阱,点击棋盘格子放置"

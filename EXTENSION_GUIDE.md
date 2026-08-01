@@ -175,7 +175,35 @@
 - 闪避 > 防具耐久（被闪避不消耗）
 - 伤害 > 0 才触发"受伤类"技能
 - 失败攻击（距离不够）不计入连击（共鸣判定）
-- 死亡判定覆盖所有扣血路径：攻击 / DoT / 陷阱（移动、推人、吸引、威慑、暗影步）/ 复活失败
+- 死亡判定覆盖所有扣血路径：攻击 / DoT / 道具（移动、推人、吸引、威慑、暗影步）/ 复活失败
+
+---
+
+## 13. 加地格道具类型（item_system 注册表模式）
+
+道具 = 可放置在地格、被踩后触发效果的元素（陷阱是默认道具）。核心在 `scripts/core/item_system.gd`。
+
+### 必改（2 处）
+1. `scripts/core/item_system.gd` → `_item_types` 注册表加一条配置：
+   ```gdscript
+   "新类型": {
+       "name": "显示名",
+       "damage": 2,                # 踩上固定伤害；或挂 on_step 自定义回调
+       # "on_step": func(player_idx, item): return 伤害值,   # 自定义触发（优先于 damage）
+       "stack": "unlimited",       # unlimited 无限叠 | single 同格同类仅1 | max:N 上限N
+       "special": false,           # true = 特殊道具（一张摧毁可清掉指定格全部特殊道具）
+   },
+   ```
+2. 棋盘显示：`scripts/ui/components/board_renderer.gd` → `item_marks` 加类型标记（如 `"trap": "X"`）
+
+### 触发/放置规则（自动生效，无需改）
+- 放置：目标格不能有单位；按 `stack` 堆叠规则校验
+- 触发：踩上按注册表结算（一次性消耗），伤害属无来源伤害（计入 `damage_from_trap`）
+- 摧毁：必须指定格子（客户端棋盘选格）；该格有 `special` 道具时一张摧毁清掉整格全部特殊道具
+
+### 注意
+- 若道具由新卡牌放置：按"第 1 章加一张新卡"流程，卡效果里调 `_m.item_system.place_item(player_idx, "类型", pos)`
+- AI 决策（ai_player.gd）如需利用新道具，在 `decide_action` 加对应评分/放置逻辑
 
 ---
 

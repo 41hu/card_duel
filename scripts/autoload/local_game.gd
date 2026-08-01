@@ -70,8 +70,9 @@ func start_ai_game(p1_char: String, p2_char: String, difficulty: int):
 	game.init_match(p1_char, p2_char, randi() % 2)
 	_ai = AIPlayerClass.new(game, difficulty)
 	game._start_game()
-	if game.current_player == ai_idx:
-		_ai_act_frame()  # AI 先手：先走一步，缓存取最新状态
+	# AI 先手：不立即行动——等场景加载完成后由帧驱动逐步行动，
+	# 否则 AI 会在场景切换期间连续出牌（用户看不到过程、日志被顶掉）
+	_ai_next_act_time = Time.get_ticks_msec() + AI_STEP_DELAY_MS + 500
 	battle_state_cache = game.get_full_state()
 
 # AI 单步决策（由 _process 每帧驱动，一次只做一步，busy 标志防重入）

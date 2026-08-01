@@ -8,9 +8,11 @@ extends Node
 const HINT_TIME_MS = 2000
 
 var _last_back_time: int = 0
+var _last_handle_time: int = 0
 var _hint_label: Label
-# 同一次返回会同时触发通知和信号，防重入避免双击判定被计两次
-var _handling_back: bool = false
+# 同一次返回会同时触发通知和信号，且真机划一次可能产生多次返回事件（跨帧）。
+# 400ms 内重复事件忽略——同一次划的间隔极小，用户真正再划一次间隔远大于此
+const REPEAT_GUARD_MS = 400
 
 func _ready():
 	# 通道 2：Window.go_back_requested 信号（Android 返回）
@@ -28,10 +30,11 @@ func _unhandled_input(event: InputEvent):
 		_handle_back()
 
 func _handle_back():
-	if _handling_back: return  # 防重入（通知+信号同帧双触发）
-	_handling_back = true
-	get_viewport().set_input_as_handled()  # 阻止 Godot 默认退出
 	var now = Time.get_ticks_msec()
+	if now - _last_handle_time < REPEAT_GUARD_MS:
+		return  # 同一次返回的重复事件（通知/信号/手势多次回调）
+	_last_handle_time = now
+	get_viewport().set_input_as_handled()  # 阻止 Godot 默认退出
 	if _last_back_time > 0 and now - _last_back_time < HINT_TIME_MS:
 		_clear_hint()
 		if _is_main_menu():
@@ -41,7 +44,6 @@ func _handle_back():
 	else:
 		_last_back_time = now
 		_show_hint()
-	_handling_back = false
 
 func _is_main_menu() -> bool:
 	return get_tree().current_scene != null and get_tree().current_scene.name == "MainMenu"

@@ -29,12 +29,21 @@ func _unhandled_input(event: InputEvent):
 		get_viewport().set_input_as_handled()
 		_handle_back()
 
+# 主菜单注册的回调：返回主面板（创建/加入房间界面返回时调用）。
+# 回调返回 true = 已处理（本次返回不退出游戏）；false = 未处理（走正常退出逻辑）
+var main_menu_back: Callable = Callable()
+
 func _handle_back():
 	var now = Time.get_ticks_msec()
 	if now - _last_handle_time < REPEAT_GUARD_MS:
 		return  # 同一次返回的重复事件（通知/信号/手势多次回调）
 	_last_handle_time = now
 	get_viewport().set_input_as_handled()  # 阻止 Godot 默认退出
+	# 主菜单子面板（创建/加入房间）：返回键直接回主面板，不退出游戏
+	if _is_main_menu() and main_menu_back.is_valid() and main_menu_back.call():
+		_last_back_time = 0
+		_clear_hint()
+		return
 	if _last_back_time > 0 and now - _last_back_time < HINT_TIME_MS:
 		_clear_hint()
 		if _is_main_menu():

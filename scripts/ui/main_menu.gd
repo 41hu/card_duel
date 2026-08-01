@@ -45,8 +45,16 @@ func _ready():
 	var sy = (win.y / vp.y) if vp.y > 0 else 1.0
 	version_label.position = Vector2(sa.position.x / sx + 12, sa.position.y / sy + 12)
 	add_child(version_label)
-	c_back_btn.pressed.connect(_show_main)
-	j_back_btn.pressed.connect(_show_main)
+	# 返回按钮：断开连接（若已连服务器）并回主面板
+	c_back_btn.pressed.connect(func(): Network.disconnect_from_server(); _show_main())
+	j_back_btn.pressed.connect(func(): Network.disconnect_from_server(); _show_main())
+	# 手机返回键：创建/加入房间面板可见时回主面板（不退出游戏）
+	BackHandler.main_menu_back = func() -> bool:
+		if create_panel.visible or join_panel.visible:
+			Network.disconnect_from_server()
+			_show_main()
+			return true
+		return false
 	c_create_btn.pressed.connect(_on_create)
 	j_join_btn.pressed.connect(_on_join)
 	Network.connected_to_server.connect(_on_connected)
@@ -193,17 +201,15 @@ func _on_disconnected(): status_label.text = "断开连接"
 func _on_room_created(room_id: String):
 	c_room_label.text = "房间号: %s" % room_id
 	status_label.text = "等待对手加入..."
-	# 房间已创建：隐藏创建/返回按钮，准备按钮显示在按钮区（避免与输入框重叠）
+	# 房间已创建：隐藏创建按钮，保留返回按钮（等待时可返回主界面，断开连接）
 	c_create_btn.visible = false
-	c_back_btn.visible = false
 	var btn = _make_ready_btn(create_panel, 560)
 	btn.pressed.connect(func(): Network.ready_up(); btn.disabled = true; btn.text = "已准备")
 
 func _on_room_joined(room_id: String, _players: Array):
 	status_label.text = "已加入房间 %s" % room_id
-	# 房间已加入：隐藏加入/返回按钮，准备按钮显示在按钮区
+	# 房间已加入：隐藏加入按钮，保留返回按钮（等待时可返回主界面，断开连接）
 	j_join_btn.visible = false
-	j_back_btn.visible = false
 	var btn = _make_ready_btn(join_panel, 560)
 	btn.pressed.connect(func(): Network.ready_up(); btn.disabled = true; btn.text = "已准备")
 
@@ -212,7 +218,8 @@ func _make_ready_btn(parent: Control, y: float) -> Button:
 		if c is Button and "准备" in c.text: c.queue_free()
 	var btn = Button.new()
 	btn.text = "准备开始"
-	btn.position = Vector2(100, y)
+	# 右侧按钮区（原创建/加入按钮位置），左侧保留返回按钮不重叠
+	btn.position = Vector2(400, y)
 	btn.size = Vector2(320, 100)
 	btn.add_theme_font_size_override("font_size", 32)
 	btn.add_theme_color_override("font_color", Style.READY_YELLOW)
@@ -322,3 +329,7 @@ func _popup_btn(text: String) -> Button:
 func _on_error(msg: String):
 	status_label.text = "错误: " + msg
 	status_label.add_theme_color_override("font_color", Style.ERROR_RED)
+
+func _exit_tree():
+	# 场景卸载时清空回调，避免 BackHandler 调用已释放的 Callable
+	BackHandler.main_menu_back = Callable()

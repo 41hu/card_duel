@@ -273,6 +273,20 @@ git commit -m "描述"
 git push
 ```
 
+### 测试环境注意事项（改代码后验证前必读，避免误判"修复没生效"）
+
+1. **清理残留 Godot 进程**：多次运行会留下多个 Godot 进程，旧进程可能被复用（脚本缓存旧代码）→ 改代码后验证前先清理：
+   ```bash
+   tasklist | grep -i godot   # 看进程
+   taskkill /F /PID <pid>     # 逐个清理后重新运行
+   ```
+2. **检查状态残留**：跑过人机对战后 `LocalGame.ai_mode` 可能残留（自我对战不重置），残留 AI 会自动出牌/响应干扰测试。
+3. **eval 限制**（若用调试桥）：单行紧凑写法；多语句可能截断；多行 for 只执行第一次迭代；循环用 map/filter 单行；二维数组只显示第一项；eval 语法错误会卡死需重启。
+4. **跨进程数字比较**：JSON 传输后整数变 float，GDScript `in` 是严格类型匹配（`37.0 in [37]` = false），比较前统一类型（如 `int(uid) in 数组`）。
+5. **模拟器/真机验证**：确认 APK 是最新版本（`dumpsys package` 查 versionCode），旧版残留会白测。
+6. **BP 30 秒超时**：测试 BP 流程要快，超时自动 ban/pick 并切场景。
+7. **输入事件注入**：`Input.parse_input_event` 注入的鼠标按下在 GUI 上不可靠，按下/释放分两步，或直接用 `get_viewport().push_input()`。
+
 ---
 
 ## 八、调试工具

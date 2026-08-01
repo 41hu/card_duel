@@ -364,8 +364,13 @@ func _begin_attack_segment(player_idx: int) -> Dictionary:
 	attacker_last_type = Config.get_damage_type(type_id)
 	var calc = combat.calculate_attack(player_idx, opp, type_id)
 	attacker_last_damage = calc.damage
-	attacker_last_damage += char_skills.on_attack_cast(player_idx, type_id)
+	# 技能伤害加成（法师强化等）计入实际伤害，公式同步显示（避免"8=10"）
+	var skill_bonus = char_skills.on_attack_cast(player_idx, type_id)
+	if skill_bonus != 0:
+		attacker_last_damage += skill_bonus
 	_pending_formula = calc.get("formula", "")
+	if skill_bonus != 0:
+		_pending_formula += ("+%d" if skill_bonus > 0 else "%d") % skill_bonus
 	_armor_hit = calc.get("armor_hit", false)
 	# 防具完全免疫优先于伤害加成判定（技能加成不能穿透满耐久防具）
 	if calc.get("blocked", false):

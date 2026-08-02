@@ -1,4 +1,4 @@
-# character_data.gd — 角色数据定义（9名角色）
+# character_data.gd — 角色数据定义（10名角色）
 extends RefCounted
 
 const CHARACTER_DB = {
@@ -11,6 +11,7 @@ const CHARACTER_DB = {
 	"berserker":   {name="狂战士", hp=28, near=8, range=2, magic=2, skill="berserker",    skill_desc="受直接攻击后获得狂化（近战+1，持续3回合，可叠加）"},
 	"warlock":     {name="术士",   hp=24, near=2, range=3, magic=3, skill="warlock",      skill_desc="功能点+1；未用功能牌则回合结束抽1张"},
 	"gunslinger":  {name="快枪手", hp=26, near=2, range=6, magic=2, skill="gunslinger",   skill_desc="远程双发：固定消耗2攻击点，造成两段伤害，两段各需一次响应"},
+	"hunter":      {name="猎人",   hp=26, near=4, range=5, magic=2, skill="hunter",       skill_desc="埋伏：消耗1攻击点，将一张远程攻击牌转为捕兽夹放置（可重叠，踩上-3HP）"},
 }
 
-const CHARACTER_IDS = ["swordsman", "archer", "mage", "paladin", "assassin", "priest", "berserker", "warlock", "gunslinger"]
+const CHARACTER_IDS = ["swordsman", "archer", "mage", "paladin", "assassin", "priest", "berserker", "warlock", "gunslinger", "hunter"]

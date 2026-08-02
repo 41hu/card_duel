@@ -17,9 +17,9 @@ var match_ref
 var _item_types: Dictionary = {
 	"trap": {
 		"name": "陷阱",
-		"desc": "踩上-3HP，可重叠放置",
+		"desc": "踩上-3HP，同格仅放1个",
 		"damage": 3,
-		"stack": "unlimited",
+		"stack": "single",
 		"destroy_rule": "one",
 	},
 }

@@ -623,14 +623,15 @@ func _popup_move(card_uid: int):
 	vb.add_child(_lbl("移动方向"))
 	var hb = HBoxContainer.new()
 	vb.add_child(hb)
+	# 哨兵 -1 = 技能调用（暗影步）；调试发牌卡 uid 为负数（-1000 递减），必须走 play_card
 	var lb = _mkbtn("左1格")
-	if card_uid < 0:
+	if card_uid == -1:
 		lb.pressed.connect(func(): c.queue_free(); _n().send_use_skill("assassin_move", {"direction": -1}))
 	else:
 		lb.pressed.connect(func(): c.queue_free(); _n().send_play_card(card_uid, {"direction": -1, "steps": 1}))
 	hb.add_child(lb)
 	var rb = _mkbtn("右1格")
-	if card_uid < 0:
+	if card_uid == -1:
 		rb.pressed.connect(func(): c.queue_free(); _n().send_use_skill("assassin_move", {"direction": 1}))
 	else:
 		rb.pressed.connect(func(): c.queue_free(); _n().send_play_card(card_uid, {"direction": 1, "steps": 1}))

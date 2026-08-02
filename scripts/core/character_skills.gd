@@ -153,6 +153,9 @@ func skill_game_limit(skill: String) -> int:
 
 func use_skill(player_idx: int, skill: String, params: Dictionary) -> Dictionary:
 	var p = _ms.players[player_idx]
+	# 技能必须属于该角色（下划线前缀为调试技能，放行）——防误调/调试卡 uid 冲突
+	if not skill.begins_with("_") and not skill in has_active_skills(player_idx):
+		return {success=false, msg="无此技能"}
 	var limit = skill_game_limit(skill)
 	if limit > 0:
 		var used = p.skill_counts.get(skill, 0)

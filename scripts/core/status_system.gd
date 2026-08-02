@@ -71,21 +71,20 @@ func add_poison(player_idx: int, stacks: int = 2, source: int = -1):
 	player.dots.append({type="poison", damage=1, duration=stacks, source=source})
 
 # 冻结玩家
+# 规则：冻结后隔一个完整回合才能再次冻结（t1 冻结→对方跳回合→t2 不能冻→t3 可冻）
 func freeze_player(player_idx: int) -> bool:
 	var player = match_ref.get_player(player_idx)
-	# 不能连续冻结
 	if match_ref.char_skills.is_immune(player_idx, "freeze"): return false
-	if player.frozen_lockout:
-		return false
+	if player.frozen_lockout > 0:
+		return false  # 冻结冷却中
 	player.frozen = true
-	player.frozen_lockout = true
+	player.frozen_lockout = 2  # 冷却 2 个出牌阶段（被冻回合 + 下一回合）
 	return true
 
-# 清除冻结
+# 清除冻结（冷却计数由 _action_phase 每回合递减，不在此清除）
 func clear_freeze(player_idx: int):
 	var player = match_ref.get_player(player_idx)
 	player.frozen = false
-	player.frozen_lockout = true  # 本回合不能被再次冻结
 
 # 回合开始处理
 func on_turn_start(_player_idx: int):

@@ -121,7 +121,7 @@ func _create_player(idx: int, char_id: String, char_data: Dictionary) -> Diction
 		near_power=char_data.near, range_power=char_data.range, magic_power=char_data.magic,
 		position=(3 if idx == 0 else 7),
 		weapon={}, armor={}, buffs=[], dots=[],
-		frozen=false, frozen_lockout=false, frozen_move=false,
+		frozen=false, frozen_lockout=0, frozen_move=false,
 		damage_reduction_used=false, skill_used_this_turn=false, free_move_used=false,
 		damage_bonus={},
 		combo_attacks_this_turn=[],
@@ -192,10 +192,12 @@ func _action_phase():
 	turn_phase = Config.TurnPhase.ACTION
 	_moved_to_adjacent_this_turn = false  # 每回合重置突刺贴脸标记
 	var player = players[current_player]
+	# 冻结冷却：每经过一个出牌阶段递减，到 0 后才可再次被冻结（不能连续冻结）
+	if player.frozen_lockout > 0:
+		player.frozen_lockout -= 1
 	if player.frozen:
 		add_log(current_player, "被冻结，跳过出牌阶段")
 		status.clear_freeze(current_player)
-		player.frozen_lockout = false  # 冻结已生效一次，解锁允许之后再次被冻结
 		_discard_phase()
 		return
 	char_skills.on_turn_start(current_player)
@@ -601,7 +603,7 @@ func _handle_death(player_idx: int):
 	if players[player_idx].hp > 0:
 		add_log(player_idx, "复活成功")
 		stats[player_idx]["resurrected"] += 1  # 对战统计：复活次数
-		players[player_idx].frozen = false; players[player_idx].frozen_lockout = false
+		players[player_idx].frozen = false; players[player_idx].frozen_lockout = 0
 		phase = Config.Phase.PLAYER_TURN; response_pending = false
 		state_changed.emit(get_full_state())
 	else: _check_permanent_death(player_idx)

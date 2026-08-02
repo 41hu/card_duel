@@ -243,6 +243,19 @@ func _broadcast_to_room(room, msg: Dictionary):
 func _on_peer_disconnected(peer_idx: int):
 	var peer = _peers[peer_idx]; var room = _find_room(peer.room_id)
 	if room != null:
+		# 存活方获胜：发送完整结算数据（与正常对局结束一致），结算界面可查看统计/称号
 		for p_idx in room.peer_indices:
-			if p_idx != peer_idx: _send_to(p_idx, {"t":"game_over","winner":-1,"reason":"opponent_disconnected"})
+			if p_idx != peer_idx:
+				var winner = _peers[p_idx].player_index
+				var result = {
+					"t": "game_over",
+					"winner": winner,
+					"loser": peer.player_index,
+					"reason": "opponent_disconnected",
+					"stats": room.match.stats.duplicate(),
+					"names": room.peer_names.duplicate() if room.peer_names.size() >= 2 else [
+						Config.char_name(room.match.players[0].char_id), Config.char_name(room.match.players[1].char_id)],
+					"title": room.match._calc_title(winner),
+				}
+				_send_to(p_idx, result)
 		_rooms.erase(room)

@@ -3,11 +3,25 @@ extends Control
 
 const Style = preload("res://scripts/theme/style_const.gd")
 
+# 获胜称号 → 获得条件（与 match_state._calc_title 的判定一致）
+# 判定顺序即此表顺序：满足第一个条件即获得对应称号
+const _TITLE_CONDITIONS := {
+	"无伤传说": "全程未受到任何伤害",
+	"毁灭之王": "本局造成伤害 ≥ 25",
+	"绝对防御": "对手本局造成伤害为 0",
+	"圣光使者": "本局回复血量 ≥ 10",
+	"不死凤凰": "本局复活过",
+	"出牌大师": "本局打出卡牌 ≥ 15",
+	"征服者": "获得胜利（默认称号）",
+}
+
 @onready var title_label = $Title
-@onready var title2_label = $Title2
+@onready var title2_label: Button = $Title2
 @onready var stats_label = $StatsLabel
 @onready var detail_label = $Detail
 @onready var back_btn = $BackBtn
+
+var _current_title: String = ""
 
 func _n():
 	if LocalGame.game != null: return LocalGame
@@ -20,11 +34,22 @@ func _ready():
 		Network.disconnect_from_server()
 		get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
 	)
+	# 称号悬停显示条件（PC）；点击显示条件，3 秒后恢复（移动端无 hover）
+	title2_label.pressed.connect(_show_title_condition)
 	_n().game_ended.connect(_on_game_ended)
 	# 从缓存读取结果：battle_ui 切场景时信号已发完，直接 connect 收不到
 	var cached = _n().last_game_result
 	if not cached.is_empty():
 		_on_game_ended(cached)
+
+func _show_title_condition():
+	if _current_title == "": return
+	var cond: String = _TITLE_CONDITIONS.get(_current_title, "")
+	if cond == "": return
+	title2_label.text = "条件：%s" % cond
+	await get_tree().create_timer(3.0).timeout
+	if _current_title != "":
+		title2_label.text = "称号：%s" % _current_title
 
 func _on_game_ended(result: Dictionary):
 	var winner = result.get("winner", -1)
@@ -32,6 +57,7 @@ func _on_game_ended(result: Dictionary):
 		title_label.text = "对手断线"
 		title_label.add_theme_color_override("font_color", Style.WIN_GOLD)
 		title2_label.text = ""
+		_current_title = ""
 		stats_label.text = ""
 		detail_label.text = "对方已断开连接"
 	else:
@@ -43,7 +69,10 @@ func _on_game_ended(result: Dictionary):
 			title_label.text = "败北"
 			title_label.add_theme_color_override("font_color", Style.LOSE_RED)
 		var title = result.get("title", "")
+		_current_title = title
 		title2_label.text = "称号：%s" % title if title != "" else ""
+		if title != "":
+			title2_label.tooltip_text = "条件：%s" % _TITLE_CONDITIONS.get(title, "")
 		var names = result.get("names", ["P1", "P2"])
 		stats_label.text = _fmt_stats(result.get("stats", []), names)
 		# 优先显示玩家名（联机为创建房间时输入的名字），否则回退"玩家 N"

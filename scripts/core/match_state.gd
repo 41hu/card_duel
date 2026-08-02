@@ -547,7 +547,9 @@ func _handle_seize(player_idx: int, card: Dictionary) -> Dictionary:
 	var opp = 1 - player_idx
 	var taken = card_systems[opp].random_take(); _use_card(player_idx, card)
 	if taken.is_empty(): add_log(player_idx, "夺取空"); return {success=true}
-	card_systems[player_idx].add_to_hand(taken); add_log(player_idx, "夺取1张"); return {success=true}
+	card_systems[player_idx].add_to_hand(taken)
+	add_log(player_idx, "夺取：%s" % Config.card_name(taken.type_id))
+	return {success=true}
 
 func _handle_heal(player_idx: int, card: Dictionary, amount: int) -> Dictionary:
 	var player = players[player_idx]

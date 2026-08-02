@@ -103,21 +103,26 @@ func trigger_on_step(player_idx: int) -> int:
 	return total
 
 # ---- 摧毁 ----
-# 指定格子摧毁：按目标道具类型的 destroy_rule 执行
+# 指定格子摧毁：按目标道具类型的 destroy_rule 执行（不同道具类型与摧毁卡的交互规则）
 #   "one"（默认）：拆除该格一个道具（后放的先拆）
-#   "all"：一张摧毁清掉该格全部同类道具（由道具类型自行声明，未来角色可设计逐层拆的反制）
+#   "all"：一张摧毁清掉该格全部同类道具
+#   "none"：该类型道具不可被摧毁卡拆除（如某些特殊道具，免疫摧毁）
 func destroy_item_at(pos: int) -> bool:
 	for i in range(match_ref.items.size() - 1, -1, -1):
 		var it = match_ref.items[i]
 		if it.position != pos:
 			continue
-		if str(get_item_type(it.item_type).get("destroy_rule", "one")) == "all":
-			var removed = false
-			for j in range(match_ref.items.size() - 1, -1, -1):
-				if match_ref.items[j].position == pos and match_ref.items[j].item_type == it.item_type:
-					match_ref.items.remove_at(j)
-					removed = true
-			return removed
-		match_ref.items.remove_at(i)
-		return true
+		match str(get_item_type(it.item_type).get("destroy_rule", "one")):
+			"none":
+				return false  # 该类型道具免疫摧毁（整格都不拆）
+			"all":
+				var removed = false
+				for j in range(match_ref.items.size() - 1, -1, -1):
+					if match_ref.items[j].position == pos and match_ref.items[j].item_type == it.item_type:
+						match_ref.items.remove_at(j)
+						removed = true
+				return removed
+			_:
+				match_ref.items.remove_at(i)
+				return true
 	return false

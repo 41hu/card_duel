@@ -684,8 +684,8 @@ func _enter_destroy_trap(card_uid: int):
 	_selected_uid = card_uid
 	_selected_type = "destroy_trap"
 	cancel_btn.visible = true
-	card_info.text = "点击棋盘上有陷阱的格子进行摧毁"
-	status_label.text = "点击棋盘上有陷阱的格子进行摧毁"
+	card_info.text = "点击棋盘上有道具的格子进行摧毁"
+	status_label.text = "点击棋盘上有道具的格子进行摧毁"
 
 func _popup_trap(card_uid: int):
 	status_label.text = "已选陷阱,点击棋盘格子放置"

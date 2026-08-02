@@ -191,7 +191,7 @@
        "damage": 2,                # 踩上固定伤害；或挂 on_step 自定义回调
        # "on_step": func(player_idx, item): return 伤害值,   # 自定义触发（优先于 damage）
        "stack": "single",          # single 同格同类仅1 | unlimited 无限叠 | max:N 上限N（陷阱默认 single）
-       "destroy_rule": "one",      # 摧毁拆除规则：one 一次拆1个 | all 一张清该格全部同类
+       "destroy_rule": "one",      # 摧毁拆除规则：one 一次拆1个 | all 清整格同类 | none 免疫摧毁
    },
    ```
 2. 棋盘显示：`scripts/ui/components/board_renderer.gd` → `item_marks` 加类型标记（如 `"trap": "X"`）

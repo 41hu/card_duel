@@ -101,15 +101,12 @@ func _apply_weapon_damage_bonus(attacker, base_damage: int, damage_type: int) ->
 		return base_damage
 	var dmg = base_damage
 	match attacker.weapon.id:
-		"flame_sword": dmg += 2
+		"iron_cutter": dmg += 2
 		"lunge":
 			dmg += 1  # 突刺：近战+1
 			if match_ref._moved_to_adjacent_this_turn:
 				dmg += 3  # 通过移动牌位移到贴脸：额外+3
 		"sage_book": dmg += 2
-		"resonance":
-			if attacker.combo_attacks_this_turn.size() > 1:
-				dmg += 2
 	return dmg
 
 # ---------- 防具计算（只算减伤，不消耗耐久；耐久由 consume_armor 在实际伤害时扣） ----------
@@ -248,7 +245,12 @@ func apply_on_hit_effects(attacker_idx: int, defender_idx: int, damage: int, dam
 		match_ref.status.add_buff(defender_idx, "ap_attack_down", -1, 1)
 		match_ref.add_log(attacker_idx, "时滞: 对方下回合攻击行动点-1")
 
-	# 共鸣：在 _apply_weapon_damage_bonus 中处理（本回合已出过其他攻击则+2）
+	# 共鸣：法术命中后减少对方护甲耐久2点
+	if weapon_id == "resonance" and not defender.armor.is_empty():
+		defender.armor.durability -= 2
+		if defender.armor.durability <= 0:
+			defender.armor = {}  # 碎裂
+		match_ref.add_log(attacker_idx, "共鸣: 对方护甲耐久-2")
 
 # ---------- 处置DoT伤害 ----------
 # 灼烧: 每回合-2HP，duration-1，到0移除

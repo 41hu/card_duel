@@ -136,11 +136,18 @@ func has_active_skills(player_idx: int) -> Array:
 			if _has_range_attack(player_idx): skills.append("hunter_ambush")
 	var result = []
 	for sk in skills:
-		if p.skills_used.has(sk): continue
-		var limit = skill_game_limit(sk)
-		if limit > 0:
+		# 每回合限次（数据表 skill_turn_limit，默认 1）
+		var cd = Config.CHARACTER_DB[p.char_id]
+		var turn_limit = int(cd.get("skill_turn_limit", 1))
+		var turn_used = 0
+		for sku in p.skills_used:
+			if sku == sk: turn_used += 1
+		if turn_used >= turn_limit: continue
+		# 整局限次（数据表 skill_game_limit，默认 -1 无限）
+		var game_limit = int(cd.get("skill_game_limit", -1))
+		if game_limit > 0:
 			var used = p.skill_counts.get(sk, 0)
-			if used >= limit: continue
+			if used >= game_limit: continue
 		result.append(sk)
 	return result
 
@@ -158,20 +165,25 @@ func skill_button_name(skill: String) -> String:
 		"hunter_ambush": return "埋伏"
 	return skill
 
-func skill_game_limit(skill: String) -> int:
-	match skill:
-		_: return -1
-
 func use_skill(player_idx: int, skill: String, params: Dictionary) -> Dictionary:
 	var p = _ms.players[player_idx]
 	# 技能必须属于该角色（下划线前缀为调试技能，放行）——防误调/调试卡 uid 冲突
 	if not skill.begins_with("_") and not skill in has_active_skills(player_idx):
 		return {success=false, msg="无此技能"}
-	var limit = skill_game_limit(skill)
-	if limit > 0:
+	# 技能次数由角色数据表配置（协作者在 character_data.gd 直接调）：
+	#   skill_turn_limit: 每回合限次（默认 1）；skill_game_limit: 整局限次（默认 -1 无限）
+	var cd = Config.CHARACTER_DB[p.char_id]
+	var game_limit = int(cd.get("skill_game_limit", -1))
+	if game_limit > 0:
 		var used = p.skill_counts.get(skill, 0)
-		if used >= limit: return {success=false, msg="整局已达上限(%d次)" % limit}
+		if used >= game_limit: return {success=false, msg="整局已达上限(%d次)" % game_limit}
 		p.skill_counts[skill] = used + 1
+	var turn_limit = int(cd.get("skill_turn_limit", 1))
+	var turn_used = 0
+	for sk in p.skills_used:
+		if sk == skill: turn_used += 1
+	if turn_used >= turn_limit:
+		return {success=false, msg="本回合已达次数上限"}
 	p.skills_used.append(skill)
 	match skill:
 		"mage_discard": return _mage_discard(player_idx, params)

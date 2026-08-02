@@ -57,6 +57,10 @@ func _atk_deter(player_idx: int, card: Dictionary):
 	return {success=true}
 
 func _atk_freeze(player_idx: int, card: Dictionary):
+	# 冻结冷却中（不能连续冻结）：卡不消耗、明确提示
+	var opp = 1 - player_idx
+	if _m.players[opp].frozen_lockout > 0:
+		return {success=false, msg="不能对同一目标连续冻结"}
 	# 冻结可被魔法闪避响应
 	return _m._handle_respondable_card(player_idx, card, "freeze")
 

@@ -497,8 +497,8 @@ func _fmt_player(p, tag: String) -> String:
 func _ap_circles(atk: int, mov: int, fun: int) -> String:
 	var a = ""; for _i in range(2): a += "●" if _i < atk else "○"
 	var m = ""; for _i in range(1): m += "●" if _i < mov else "○"
-	# 功能点最多 2 个圆（术士 +1 时为 2，其他角色 1）
-	var f = ""; for _i in range(2): f += "●" if _i < fun else "○"
+	# 功能点按实际值显示（术士 2 圆，其他角色 1 圆）；不显示空心圆避免误解上限为 2
+	var f = ""; for _i in range(fun): f += "●"
 	return "攻%s 移%s 功%s" % [a, m, f]
 
 func _on_card_clicked(card_uid: int, type_id: String):

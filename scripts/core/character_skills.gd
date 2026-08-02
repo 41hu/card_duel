@@ -13,8 +13,8 @@ func on_attack_hit(attacker_idx: int, _defender_idx: int, _damage: int, damage_t
 	match p.char_id:
 		"swordsman": _swordsman_hit(attacker_idx, damage_type)
 		"tracker":
-			# 寻踪者：远程攻击命中（伤害>0）叠 1 层校准，永久持续、无限叠加
-			if damage_type == Config.DamageType.RANGED:
+			# 寻踪者：远程/法术攻击命中（伤害>0）叠 1 层校准，永久持续、无限叠加
+			if damage_type == Config.DamageType.RANGED or damage_type == Config.DamageType.MAGICAL:
 				_ms.status.add_buff(attacker_idx, "calibration", 1, -2)
 				_ms.add_log(attacker_idx, "校准+1（远程伤害+%d）" % _calibration_stacks(attacker_idx))
 
@@ -23,7 +23,7 @@ func on_attack_hit(attacker_idx: int, _defender_idx: int, _damage: int, damage_t
 func on_attack_failed_no_damage(attacker_idx: int, damage_type: int):
 	var p = _ms.players[attacker_idx]
 	if p.char_id != "tracker": return
-	if damage_type != Config.DamageType.RANGED: return
+	if damage_type != Config.DamageType.RANGED and damage_type != Config.DamageType.MAGICAL: return
 	if _calibration_stacks(attacker_idx) <= 0: return
 	for i in range(p.buffs.size() - 1, -1, -1):
 		if p.buffs[i].type == "calibration":

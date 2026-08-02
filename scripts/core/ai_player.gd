@@ -16,6 +16,9 @@ var match_ref
 var difficulty: int = DIFF_NORMAL
 # 记忆对手用过的响应卡类型（hard 难度读牌用）
 var _opp_used_responses: Dictionary = {}
+# 本回合是否已用过"骗响应"低价值攻击（每回合限一次，避免连续骗卡浪费输出）
+var _bait_used: bool = false
+var _bait_turn: int = -1
 
 func _init(match, diff: int = DIFF_NORMAL):
 	match_ref = match
@@ -139,6 +142,29 @@ func _attack_potential(player_idx: int, role: String) -> int:
 func _opp_near_threat(player_idx: int) -> int:
 	return max(_real_damage(1 - player_idx, "near"), _real_damage(1 - player_idx, "heavy"))
 
+# 指定格是否有道具（陷阱/捕兽夹）——位移/暗影步踩中会受伤
+func _item_at(pos: int) -> bool:
+	for it in match_ref.items:
+		if it.get("position", -1) == pos:
+			return true
+	return false
+
+# 对方主要进攻类型：定位优先；hard 记牌修正——牌堆某类攻击牌剩余明显多于定位类时
+# （对方抽到该类攻击牌的概率高），防御转向该类
+func _opp_main_attack_type(player_idx: int) -> String:
+	var role = _current_role(1 - player_idx)
+	if difficulty < DIFF_HARD: return role
+	var counts := {}
+	for t in ["near", "range", "magic"]:
+		counts[t] = 0
+		for atk in _role_types(t):
+			counts[t] += _global_left(atk)
+	var role_count: int = counts.get(role, 0)
+	for t in ["near", "range", "magic"]:
+		if counts[t] > role_count + 3:
+			return t
+	return role
+
 # 远程型贴脸是否安全：贴脸换血不亏（我贴脸最高伤害 ≥ 对手贴脸伤害），或血量显著占优
 func _range_melee_safe(player_idx: int) -> bool:
 	var p = match_ref.get_player(player_idx)
@@ -230,6 +256,11 @@ func decide_action(player_idx: int) -> Dictionary:
 	var best_score: int = -99999
 	var best_action: Dictionary = {}
 
+	# 回合级状态重置（骗响应每回合限一次）
+	if match_ref.turn_number != _bait_turn:
+		_bait_turn = match_ref.turn_number
+		_bait_used = false
+
 	# 防守保留：手里至少保留 1 张响应牌（近战=格挡/远程=牵制/魔法=闪避），
 	# 斩杀（能击倒对手）时例外，全力进攻。
 	var resp_count = 0
@@ -238,12 +269,15 @@ func decide_action(player_idx: int) -> Dictionary:
 			resp_count += 1
 	var can_kill = _my_best_damage(player_idx) >= opp.hp and opp.hp > 0
 
-	# 1. 攻击动作（真实伤害）
+	# 1. 攻击动作（真实伤害；AP 感知——攻击点不够的卡不选，避免打出失败浪费回合）
 	for card in hand:
 		if not card.has("type_id"): continue  # 防御：跳过异常卡（防牌堆污染残留）
 		var tid = card.type_id
 		if not tid in ["near", "heavy", "range", "pierce", "magic", "chant"]:
 			continue
+		var atk_cost = match_ref.char_skills.get_attack_cost(player_idx, tid)
+		if atk_cost < 0: atk_cost = Config.CARD_DB.get(tid, {}).get("cost", 1)
+		if p.ap_attack < atk_cost: continue  # 攻击点不足（快枪手远程耗 2 等）
 		var dmg = _real_damage(player_idx, tid)
 		if dmg <= 0: continue
 		# 定位保留：非斩杀时，定位类攻击卡在"时机未到"（距离不合适）时保留在手，等进入理想距离爆发
@@ -258,13 +292,25 @@ func decide_action(player_idx: int) -> Dictionary:
 			if tid in ["near", "range", "magic"] and resp_count <= 1:
 				continue
 		var s = _attack_score(player_idx, dmg, opp_idx, stance)
+		# 骗响应连招（normal+，每回合限一次）：手牌有主属性爆发（定位卡高伤害）时，
+		# 低价值攻击（非定位、非唯一保命牌）先手消耗对手响应牌，主属性随后爆发——
+		# 对手不响应则骗响应卡本身也耗血，响应则消耗其响应牌（hard 记牌可读）。
+		if is_norm and not can_kill and not _bait_used and _my_best_damage(player_idx) > 0:
+			var is_main_card = tid in _role_types(my_role)
+			var is_last_resp = tid in ["near", "range", "magic"] and resp_count <= 1
+			if not is_main_card and not is_last_resp and dmg * 2 < _my_best_damage(player_idx) \
+					and match_ref.card_systems[opp_idx].hand.size() >= 2:
+				# 骗响应收益：主属性爆发伤害的估算（含对手不响应时骗卡本身的消耗）
+				s += min(18, _my_best_damage(player_idx) * 2 + 6)
+				_bait_used = true  # 本回合只骗一次，之后直接主属性爆发
 		if s > best_score:
 			best_score = s
 			best_action = {"action": "play_card", "card_uid": card.uid}
 
-	# 2. 回复（血少时；保命档大幅提高）
+	# 2. 回复（血少时；保命档大幅提高；功能点感知）
 	if hp_ratio < 0.65:
 		for card in hand:
+			if p.ap_function < 1: break
 			var amt = -1
 			match card.type_id:
 				"heal_3": amt = 3
@@ -277,8 +323,9 @@ func decide_action(player_idx: int) -> Dictionary:
 					best_score = s
 					best_action = {"action": "play_card", "card_uid": card.uid}
 
-	# 3. 强化卡（时机：本回合有该类型攻击配合 / 资源期攒面板 / 无事可做时打掉而非弃掉）
+	# 3. 强化卡（时机：本回合有该类型攻击配合 / 资源期攒面板 / 无事可做时打掉而非弃掉；功能点感知）
 	for card in hand:
+		if p.ap_function < 1: break
 		var tid = card.type_id
 		if tid in ["near_buf", "range_buf", "magic_buf"]:
 			var s = 8  # 基础分：永久+1 不亏，无事可做时打掉比留在手里被弃好
@@ -297,8 +344,9 @@ func decide_action(player_idx: int) -> Dictionary:
 				best_score = s
 				best_action = {"action": "play_card", "card_uid": card.uid}
 
-	# 4. 免费卡（天赐抽2）：手牌少或资源期
+	# 4. 免费卡（天赐抽2）：手牌少或资源期；功能点感知
 	for card in hand:
+		if p.ap_function < 1: break
 		if card.type_id == "blessing":
 			var s = 8
 			if hand.size() <= 3: s = 16
@@ -307,8 +355,9 @@ func decide_action(player_idx: int) -> Dictionary:
 				best_score = s
 				best_action = {"action": "play_card", "card_uid": card.uid}
 
-	# 5. 冻结（打断对手节奏）；对手威胁大（手牌多/即将斩杀）时高分
+	# 5. 冻结（打断对手节奏）；对手威胁大（手牌多/即将斩杀）时高分；功能点感知
 	for card in hand:
+		if p.ap_function < 1: break
 		if card.type_id == "freeze":
 			var s = 8
 			if opp.frozen_lockout == 0:
@@ -320,25 +369,35 @@ func decide_action(player_idx: int) -> Dictionary:
 				best_score = s
 				best_action = {"action": "play_card", "card_uid": card.uid}
 
-	# 6. 摧毁 / 夺取（消耗对方资源；对手手牌多时夺取更值）
+	# 6. 摧毁 / 夺取（消耗对方资源；对手手牌多时夺取更值；功能点感知——邪术师 2 点可打两张）
 	for card in hand:
+		if p.ap_function < 1: break
 		if card.type_id == "destroy":
-			var s = 8
-			# 对手有武器/防具时摧毁装备（server 端 destroy 默认拆手牌？见 extra）
-			if not opp.weapon.is_empty() or not opp.armor.is_empty():
-				s = 14
+			var s = 0
+			var d_target = {}
+			if not opp.weapon.is_empty():
+				s = 14  # 拆武器（对方输出核心）最值
+				d_target = {"destroy_target": "equip", "equip_type": "weapon"}
+			elif not opp.armor.is_empty():
+				s = 12  # 拆防具次之
+				d_target = {"destroy_target": "equip", "equip_type": "armor"}
+			elif match_ref.card_systems[opp_idx].hand.size() > 0:
+				s = 8 + min(4, match_ref.card_systems[opp_idx].hand.size() * 2)  # 拆手牌（对手牌越多越值）
+				d_target = {"destroy_target": "hand"}
+			# 对手无牌无装备 → s=0 不打（避免卡消耗无效果）
 			if s > best_score:
 				best_score = s
-				best_action = {"action": "play_card", "card_uid": card.uid, "extra": {"destroy_target": "hand"}}
+				best_action = {"action": "play_card", "card_uid": card.uid, "extra": d_target}
 		if card.type_id == "seize":
 			var s = 9 + min(6, match_ref.card_systems[opp_idx].hand.size() * 2)  # 对手手牌越多夺牌收益越大
 			if s > best_score:
 				best_score = s
 				best_action = {"action": "play_card", "card_uid": card.uid}
 
-	# 7. 陷阱：预判放置
+	# 7. 陷阱：预判放置；功能点感知
 	#   压制时放对手前方（封锁对方移动/被推踩中）；保命时放自己前方（防贴脸）
 	for card in hand:
+		if p.ap_function < 1: break
 		if card.type_id == "trap":
 			var s = 6
 			var trap_pos = -1
@@ -353,9 +412,10 @@ func decide_action(player_idx: int) -> Dictionary:
 					best_score = s
 					best_action = {"action": "play_card", "card_uid": card.uid, "extra": {"trap_pos": trap_pos}}
 
-	# 8. 位移：按定位控制距离
+	# 8. 位移：按定位控制距离（位移点感知）
 	#   近战型：逼近贴脸；远程型：保持中距离(2~4)；保命：远离
 	for card in hand:
+		if p.ap_move < 1: break
 		if card.type_id == "move":
 			var s = 0
 			var dir = 1 if opp.position > p.position else -1
@@ -390,8 +450,9 @@ func decide_action(player_idx: int) -> Dictionary:
 				best_score = s
 				best_action = {"action": "play_card", "card_uid": card.uid, "extra": {"direction": mdir, "steps": 1}}
 
-	# 9. 吸引/威慑（调整距离）：近战型用吸引拉近，远程型用威慑推开
+	# 9. 吸引/威慑（调整距离）：近战型用吸引拉近，远程型用威慑推开；功能点感知
 	for card in hand:
+		if p.ap_function < 1: break
 		if card.type_id in ["attract", "deter"]:
 			var s = 4
 			if is_norm:
@@ -402,22 +463,33 @@ func decide_action(player_idx: int) -> Dictionary:
 				best_score = s
 				best_action = {"action": "play_card", "card_uid": card.uid}
 
-	# 10. 武器牌：直接装备（process_weapon_card 弹确认——AI 自动确认）
+	# 10. 武器牌：只装备适配自身定位的武器（类型不匹配装了无加成，还会覆盖旧武器）；功能点感知
 	for card in hand:
+		if p.ap_function < 1: break
 		if card.type_id in ["near_weapon", "range_weapon", "magic_weapon"]:
-			var s = 11
-			if is_norm:
-				var wtype = "near" if card.type_id == "near_weapon" else ("range" if card.type_id == "range_weapon" else "magic")
-				if wtype == my_role: s += 6  # 定位匹配的武器更值
+			var wtype = "near" if card.type_id == "near_weapon" else ("range" if card.type_id == "range_weapon" else "magic")
+			if wtype == my_role:
+				var s = 16  # 定位匹配 → 装备提升输出
+				if s > best_score:
+					best_score = s
+					best_action = {"action": "play_card", "card_uid": card.uid}
+			# 不匹配 → 不打（留手里当弃牌，避免占武器位）
+
+	# 11. 防具牌：按对方主要进攻手段选择（对方定位 + 牌堆剩余攻击牌修正）；
+	#     已有防具时不换更差的（装备新防具会覆盖旧防具）；功能点感知
+	var opp_main_atk = _opp_main_attack_type(player_idx)
+	for card in hand:
+		if p.ap_function < 1: break
+		if card.type_id in ["near_armor", "range_armor", "magic_armor"]:
+			var atype = "near" if card.type_id == "near_armor" else ("range" if card.type_id == "range_armor" else "magic")
+			var s = 0
+			if atype == opp_main_atk:
+				s = 16  # 针对对方主要进攻手段（3 耐久完全免疫首击，价值高）
+			elif p.armor.is_empty():
+				s = 8  # 无防具时随便装一个（有总比没有好）
+			# 已有防具且新防具不针对 → 不换（避免覆盖针对防具）
 			if s > best_score:
 				best_score = s
-				best_action = {"action": "play_card", "card_uid": card.uid}
-
-	# 11. 防具牌：直接装
-	for card in hand:
-		if card.type_id in ["near_armor", "range_armor", "magic_armor"]:
-			if 10 > best_score:
-				best_score = 10
 				best_action = {"action": "play_card", "card_uid": card.uid}
 
 	# 12. 主动技能（法师弃牌强化 / 刺客免费移动 / 猎人埋伏）
@@ -431,7 +503,8 @@ func decide_action(player_idx: int) -> Dictionary:
 				for card in hand:
 					if card.type_id in ["magic", "chant"]:
 						has_magic_atk = true
-					elif card.type_id != "magic" and card.type_id != "chant":
+					elif card.type_id != "magic" and card.type_id != "chant" and not card.type_id in ["near", "range"]:
+						# 弃牌跳过响应牌（near/range/magic 保防御能力），只弃低价值功能牌
 						var v = _card_value(player_idx, card.type_id)
 						if v < min_val:
 							min_val = v
@@ -458,21 +531,35 @@ func decide_action(player_idx: int) -> Dictionary:
 						var dir = 1 if opp.position > p.position else -1
 						var s = 9
 						if is_norm and my_role == "near": s = 13  # 近战型暗影步贴脸
+						# 目标格有陷阱 → 暗影步会踩中受伤，高风险低用（保命档更不该踩）
+						var step_pos = p.position + dir
+						if _item_at(step_pos):
+							s -= 8
+							if stance.get("stance", "") == "flee": s -= 6
 						if s > best_score:
 							best_score = s
 							best_action = {"action": "use_skill", "skill": "assassin_move", "direction": dir}
 			"hunter_ambush":
 				if p.ap_attack >= 1:
 					var ambush_uid = -1
+					var rng_count = 0
 					for card in hand:
 						if card.type_id in ["range", "pierce"]:
-							ambush_uid = card.uid
-							break
+							rng_count += 1
+							if ambush_uid < 0: ambush_uid = card.uid
 					if ambush_uid >= 0:
 						var hpos = opp.position + (1 if opp.position < p.position else -1)
 						if hpos >= 0 and hpos <= 10 and hpos != p.position and hpos != opp.position:
-							var s = 8
-							if stance.get("stance", "") == "flee": s = 12
+							# 价值判断：埋伏消耗 1 张远程输出牌，火力充足才划算
+							var s = 0
+							var deck_left = _global_left("range") + _global_left("pierce")
+							if rng_count >= 2 or deck_left >= 4:
+								s = 9  # 远程火力充足 → 转一张不心疼
+							elif rng_count == 1 and deck_left >= 2:
+								s = 5  # 勉强：转一张还有牌堆补充
+							# 否则 s=0：只剩一张远程牌且牌堆枯竭 → 保留输出
+							if stance.get("stance", "") == "flee" and s > 0:
+								s = max(s, 12)  # 保命：防守陷阱价值高
 							if s > best_score:
 								best_score = s
 								best_action = {"action": "use_skill", "skill": "hunter_ambush", "card_uid": ambush_uid, "pos": hpos}
@@ -507,7 +594,7 @@ func decide_response(defender_idx: int, attack_card: String) -> Dictionary:
 			"range": range_uid = card.uid
 	var p = match_ref.get_player(defender_idx)
 	# 本次攻击伤害（真实，含多段单段）：小伤害且自己血量安全 → 省牌不响应（normal+）
-	var atk_dmg = int(match_ref.get("attacker_last_damage", 0))
+	var atk_dmg = int(match_ref.attacker_last_damage)
 	var hp_safe = float(p.hp) / max(p.max_hp, 1) > 0.6
 	if difficulty >= DIFF_NORMAL and atk_dmg <= 2 and hp_safe:
 		return {respond=false, card_uid=-1}
@@ -557,9 +644,12 @@ func decide_discard(player_idx: int, need: int) -> Array:
 		to_discard.append(scored[i].uid)
 	return to_discard
 
-# ---------- 武器确认（AI 直接装备） ----------
-func decide_weapon() -> bool:
-	return true
+# ---------- 武器确认（类型适配自身定位才装备） ----------
+func decide_weapon(player_idx: int, weapon: Dictionary) -> bool:
+	if weapon.is_empty(): return true
+	var wtype: String = weapon.get("data", {}).get("type", "")
+	if wtype == "": return true
+	return wtype == _current_role(player_idx)
 
 # ---------- 记录对手用过的响应（hard 读牌） ----------
 func remember_response(player_idx: int, card_type: String):

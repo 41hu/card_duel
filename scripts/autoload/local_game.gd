@@ -181,7 +181,8 @@ func _on_state(state: Dictionary):
 
 func _on_weapon(player_idx: int, weapon: Dictionary):
 	if ai_mode and player_idx == ai_idx:
-		game.confirm_weapon(player_idx, true)  # AI 获得武器直接装备
+		# 武器类型适配自身定位才装备（不匹配装了无加成）
+		game.confirm_weapon(player_idx, _ai.decide_weapon(player_idx, weapon))
 		return
 	weapon_prompt.emit(weapon)
 

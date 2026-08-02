@@ -1,5 +1,11 @@
 # bp_ui.gd — BP禁选界面
+# 角色按钮完全由服务器下发的 bp_state 驱动（available+banned+picked 并集），
+# 本地 CHARACTER_IDS 仅在没有 bp_state 时兜底。
+# 杜绝"新角色无法 BP"：服务器未部署新角色时，按钮不显示该角色并提示服务器版本过低，
+# 而不是显示一个永远禁用的按钮。
 extends Control
+
+const VERSION_SCRIPT = preload("res://scripts/version.gd")
 
 @onready var phase_label = $PhaseLabel
 @onready var turn_label = $TurnLabel
@@ -21,18 +27,59 @@ func _ready():
 	_is_local = (LocalGame.game != null)
 	# 触摸友好的滚动条宽度
 	char_grid.get_parent().get_v_scroll_bar().custom_minimum_size = Vector2(24, 0)
-	_create_char_buttons()
+	# 先按本地角色兜底建按钮（无缓存时也能显示），收到 bp_state 后按服务器集合校正
+	_create_char_buttons(Config.CHARACTER_IDS)
 	_n().bp_state_updated.connect(_on_bp_state)
 	_n().state_updated.connect(_on_game_state)
 	var cached = _n().bp_state_cache
 	if not cached.is_empty():
 		_on_bp_state(cached); _n().bp_state_cache = {}
 
-func _create_char_buttons():
-	var ids = Config.CHARACTER_IDS
+# 服务器 bp_state 中的角色集合（available + banned + picked 并集，按本地顺序优先）
+func _server_char_ids() -> Array:
+	var sv := []
+	var seen := {}
+	for cid in _bp_state.get("available_chars", []) + _bp_state.get("banned_chars", []) + _bp_state.get("picked_chars", []):
+		if str(cid) == "": continue  # picked_chars 初始占位空串，不是角色
+		if not seen.has(cid):
+			seen[cid] = true
+			sv.append(cid)
+	return sv
+
+# 本地配置有而服务器 bp_state 没有的角色（服务器未部署新角色数据）
+func _missing_chars() -> Array:
+	var sv := {}
+	for cid in _server_char_ids(): sv[cid] = true
+	var missing := []
+	for cid in Config.CHARACTER_IDS:
+		if not sv.has(cid):
+			missing.append(Config.char_name(cid))
+	return missing
+
+# 服务器角色集合变化时重建按钮（新增角色/服务器版本变化）
+func _sync_char_buttons():
+	var ids = _server_char_ids()
+	if ids.is_empty(): return  # 还没收到服务器数据，保持兜底按钮
+	var same = ids.size() == _char_buttons.size()
+	if same:
+		for i in range(ids.size()):
+			if ids[i] != _char_buttons[i].get_meta("char_id"):
+				same = false
+				break
+	if same: return
+	for b in _char_buttons:
+		b.queue_free()
+	_char_buttons.clear()
+	_create_char_buttons(ids)
+
+func _create_char_buttons(ids: Array):
 	char_grid.columns = ceil(sqrt(ids.size()))
 	for i in range(ids.size()):
 		var char_id = ids[i]
+		# 数据驱动容错：服务器数据含未知角色时跳过而非崩溃（并打印便于定位）
+		if not Config.CHARACTER_DB.has(char_id):
+			push_warning("[BP] 跳过未知角色数据: %s" % str(char_id))
+			continue
 		var cd = Config.CHARACTER_DB[char_id]
 		var btn = Button.new()
 		btn.name = "CharBtn_%s" % char_id
@@ -88,10 +135,22 @@ func _create_char_buttons():
 
 func _on_bp_state(data: Dictionary):
 	_bp_state = data; _player_index = Network.player_index
+	_sync_char_buttons()
 	var t = _bp_state.get("bp_time_left", -1)
 	if t > 0: _bp_timer = t; _bp_timer_acc = 0.0
 	else: _bp_timer = -1
 	_update_ui()
+	_check_version()
+
+# 服务器版本/角色缺失提示：联机时服务器旧代码 → 明确告知，避免"按钮在却点不了"
+func _check_version():
+	var sv: String = _bp_state.get("server_version", "")
+	if sv != "" and sv != VERSION_SCRIPT.VERSION:
+		status_label.text = "服务器版本 v%s ≠ 客户端 v%s（新角色可能不可用，请联系管理员部署服务器）" % [sv, VERSION_SCRIPT.VERSION]
+		return
+	var missing = _missing_chars()
+	if missing.size() > 0:
+		status_label.text = "服务器未包含角色：%s（服务器版本过低，请联系管理员部署）" % "、".join(missing)
 
 func _process(delta):
 	if _bp_timer <= 0: return

@@ -2,6 +2,7 @@
 extends RefCounted
 
 const BP_TIME = 30
+const VERSION_SCRIPT = preload("res://scripts/version.gd")
 
 var match_ref
 var bp_phase: String = ""
@@ -38,6 +39,8 @@ func get_bp_state() -> Dictionary:
 		picked_chars = picked_chars.duplicate(),
 		available_chars = available_chars.duplicate(),
 		bp_time_left = left,
+		# 下发运行方版本：联机=服务器版本，本地=客户端版本。客户端比对以识别服务器未部署新角色
+		server_version = VERSION_SCRIPT.VERSION,
 	}
 
 func execute_action(player_idx: int, action: String, char_id: String) -> bool:

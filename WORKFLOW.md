@@ -92,8 +92,8 @@ _advance_to_next_player()  # 切换到对手
 
 | 钩子 | 触发时机 | 返回值 | 用途示例 |
 |---|---|---|---|
-| `on_turn_start(idx)` | 回合开始 | void | 重置状态、分配AP(术士+1) |
-| `on_turn_end(idx)` | 回合结束 | void | 术士额外抽牌 |
+| `on_turn_start(idx)` | 回合开始 | void | 重置状态、分配AP(邪术师+1) |
+| `on_turn_end(idx)` | 回合结束 | void | 邪术师额外抽牌 |
 | `on_opponent_turn_start(curr)` | 对方回合开始 | void | 未来扩展 |
 | `can_attack_free(idx, type)` | 判断是否免费 | bool | 弓手首远程免费 |
 | `on_attack_cast(idx, type)` | 攻击牌打出 | int(伤害加成) | 法师+2魔伤 |
@@ -217,7 +217,7 @@ RESPONSE_BY = {
 17. **[UI] 弃牌确认连点** — 发送后按钮不禁用，第二次发空数组；点选时全量重建手牌，双击会取消选中
 18. **[UI] 取消陷阱选择后 `_selected_type` 未清** — `battle_ui.gd:483-490` 点棋盘报"手牌中没有此卡"
 19. **[UI] 剑士弹窗堆叠** — `battle_ui.gd:350-351` 条件触发时叠多层全屏弹窗
-20. **[UI] 术士 AP 圆点硬编码** — `battle_ui.gd:388-392` 功能点 2 只显示 1 个圆
+20. **[UI] 邪术师 AP 圆点硬编码** — `battle_ui.gd:388-392` 功能点 2 只显示 1 个圆
 21. **[UI] 倒计时归零 UI 冻结** — `battle_ui.gd:234-250` 永久显示"1s"
 22. **[UI] action_log `max_count` 参数被忽略** — `action_log.gd:14` 日志无限增长
 23. **[UI] 连接失败永久挂起** — `main_menu.gd:276-292` 卡在"正在连接..."，且连点创建多个 WebSocket

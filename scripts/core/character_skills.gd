@@ -30,6 +30,7 @@ func on_heal(player_idx: int, amount: int) -> int:
 		amount = min(amount, allowed)
 		p.healed_this_turn = healed + amount
 	if p.char_id == "priest": amount += 2
+	if p.char_id == "warlock": amount = max(0, amount - 1)  # 邪术师被动：自身回血效果-1（+1→0）
 	return amount
 
 func _heal_limit(player_idx: int) -> int:
@@ -72,7 +73,7 @@ func on_turn_end(player_idx: int):
 	var p = _ms.players[player_idx]
 	if p.char_id == "warlock" and not p.used_function_card:
 		_ms.card_systems[player_idx].draw_cards(1)
-		_ms.add_log(player_idx, "术士+1抽")
+		_ms.add_log(player_idx, "邪术师+1抽")
 
 func can_attack_free(player_idx: int, card_type: String) -> bool:
 	var p = _ms.players[player_idx]

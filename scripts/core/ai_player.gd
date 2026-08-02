@@ -73,6 +73,38 @@ func decide_action(player_idx: int) -> Dictionary:
 	var best_score: int = -99999
 	var best_action: Dictionary = {}
 
+	# 防守保留：手里至少保留 1 张响应牌（近战=格挡/远程=牵制/魔法=闪避），
+	# 对手攻击时有牌可应。斩杀（能击倒对手）时例外，全力进攻。
+	var resp_count = 0
+	for card in hand:
+		if card.type_id in ["near", "range", "magic"]:
+			resp_count += 1
+	var can_kill = false
+	for card in hand:
+		var tid2 = card.type_id
+		var kd = -1
+		match tid2:
+			"near":
+				if distance == 0: kd = p.near_power
+			"heavy":
+				if distance == 0: kd = p.near_power + 3
+			"range":
+				var ck = match_ref.char_skills.get_attack_base_damage(player_idx, tid2, distance)
+				kd = ck * match_ref.char_skills.get_attack_hit_count(player_idx, tid2) if ck >= 0 else max(0, p.range_power - distance)
+			"pierce":
+				var ck2 = match_ref.char_skills.get_attack_base_damage(player_idx, tid2, distance)
+				if ck2 >= 0:
+					kd = ck2 * match_ref.char_skills.get_attack_hit_count(player_idx, tid2)
+				elif p.range_power - distance > 0:
+					kd = max(0, p.range_power - distance) + 3
+			"magic":
+				kd = p.magic_power
+			"chant":
+				kd = p.magic_power + 3
+		if kd >= opp.hp:
+			can_kill = true
+			break
+
 	# 1. 攻击动作（按手牌类型计算伤害）
 	for card in hand:
 		if not card.has("type_id"): continue  # 防御：跳过异常卡（防牌堆污染残留）
@@ -94,13 +126,17 @@ func decide_action(player_idx: int) -> Dictionary:
 				var custom2 = match_ref.char_skills.get_attack_base_damage(player_idx, tid, distance)
 				if custom2 >= 0:
 					dmg = custom2 * match_ref.char_skills.get_attack_hit_count(player_idx, tid)
-				else:
+				elif p.range_power - distance > 0:
+					# 与服务器一致：面板-距离≤0 时穿心无法打出，不打
 					dmg = max(0, p.range_power - distance) + 3
 			"magic":
 				dmg = p.magic_power
 			"chant":
 				dmg = p.magic_power + 3
 		if dmg > 0:
+			# 保留响应牌：非斩杀时，不打最后一张可响应卡
+			if not can_kill and tid in ["near", "range", "magic"] and resp_count <= 1:
+				continue
 			var s = _attack_score(player_idx, dmg, opp_idx)
 			if s > best_score:
 				best_score = s
@@ -288,9 +324,15 @@ func decide_response(defender_idx: int, attack_card: String) -> Dictionary:
 	# 格挡（近战）：仅近战/重击
 	if near_uid >= 0 and attack_card in ["near", "heavy"]:
 		return {respond=true, card_uid=near_uid}
-	# 牵制（远程）：仅远程/穿心/魔法/吟唱
+	# 牵制（远程）：仅远程/穿心/魔法/吟唱；减伤 = 自身远程面板 - 距离（连弩+2）
 	if range_uid >= 0 and attack_card in ["range", "pierce", "magic", "chant"]:
-		return {respond=true, card_uid=range_uid}
+		var p = match_ref.get_player(defender_idx)
+		var dist = match_ref.movement.get_distance()
+		var restrain_value = max(0, p.range_power - dist)
+		if not p.weapon.is_empty() and p.weapon.id == "repeater":
+			restrain_value += 2
+		if restrain_value > 0:
+			return {respond=true, card_uid=range_uid}
 	return {respond=false, card_uid=-1}
 
 # ---------- 弃牌决策（弃价值最低的） ----------

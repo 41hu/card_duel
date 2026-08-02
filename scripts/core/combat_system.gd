@@ -219,10 +219,11 @@ func apply_on_hit_effects(attacker_idx: int, defender_idx: int, damage: int, dam
 		defender.frozen_move = true
 		match_ref.add_log(attacker_idx, "霜咬: 对方下回合无法移动")
 
-	# 嗜血：近战≥3伤害回2HP
+	# 嗜血：近战≥3伤害回2HP（走 on_heal 钩子，邪术师回血效果-1 覆盖）
 	if weapon_id == "bloodthirst" and damage >= 3:
 		var before = attacker.hp
-		attacker.hp = min(attacker.max_hp, attacker.hp + 2)
+		var heal_amt = match_ref.char_skills.on_heal(attacker_idx, 2)
+		attacker.hp = min(attacker.max_hp, attacker.hp + heal_amt)
 		match_ref.stats[attacker_idx]["heal_total"] += attacker.hp - before  # 武器回血计入统计
 		match_ref.add_log(attacker_idx, "嗜血: +%dHP" % (attacker.hp - before))
 

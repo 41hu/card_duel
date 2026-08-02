@@ -309,9 +309,11 @@ func _handle_swordsman_choice(player_idx: int, data: Dictionary) -> Dictionary:
 	var choice = data.get("choice", "")
 	if choice == "heal":
 		var before = p.hp
-		p.hp = min(p.max_hp, p.hp + 2)
+		# 走 on_heal 钩子（邪术师回血效果-1 覆盖剑士技能回血）
+		var heal_amt = char_skills.on_heal(player_idx, 2)
+		p.hp = min(p.max_hp, p.hp + heal_amt)
 		stats[player_idx]["heal_total"] += p.hp - before  # 技能回血计入统计
-		add_log(player_idx, "剑士+2HP")
+		add_log(player_idx, "剑士+%dHP" % heal_amt)
 	elif choice == "draw":
 		card_systems[player_idx].draw_cards(1)
 		add_log(player_idx, "剑士抽1张")

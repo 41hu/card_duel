@@ -60,6 +60,15 @@ func execute_action(player_idx: int, action: String, char_id: String) -> bool:
 			bp_phase = "done"; return true
 	return false
 
+# 按先手对齐的开战角色：[P0 角色, P1 角色]
+# picked_chars[0] = 先手选的；先手是 P1（bp_first=1）时交换，否则角色错位。
+# 所有模式（联机 server_main / 自我对战 / 人机 local_game）开战统一走这里，避免各处重复对齐逻辑。
+func get_start_chars() -> Array:
+	var chars = picked_chars.duplicate()
+	if _bp_first == 1:
+		chars.reverse()
+	return chars
+
 func check_bp_timer():
 	if bp_phase == "done" or bp_deadline <= 0: return
 	var now = Time.get_ticks_msec()

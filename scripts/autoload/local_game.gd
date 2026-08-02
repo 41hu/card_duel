@@ -152,18 +152,20 @@ func start_bp():
 func _on_bp_state_changed(bs: Dictionary):
 	# BP 超时自动操作后：完成则开战，否则刷新 UI
 	if game.bp.is_done():
-		var chars = game.bp.picked_chars
-		var bf = game.bp._bp_first
-		if ai_mode:
-			# 人机：人类是 P0，BP 先手可能是 AI——按先手对齐角色
-			var human_char = chars[0] if bf == 0 else chars[1]
-			var ai_char = chars[1] if bf == 0 else chars[0]
-			start_ai_game(human_char, ai_char, ai_difficulty)
-		else:
-			start_local_game(chars[0], chars[1], bf)
+		_bp_done()
 	else:
 		bs["t"] = "bp_state"
 		bp_state_updated.emit(bs)
+
+# BP 完成统一入口（人类操作与 AI 自动操作共用，保证角色对齐一致）
+# 角色对齐统一走 bp.get_start_chars()（返回 [P0 角色, P1 角色]）
+func _bp_done():
+	var chars = game.bp.get_start_chars()
+	var bf = game.bp._bp_first
+	if ai_mode:
+		start_ai_game(chars[0], chars[1], ai_difficulty)
+	else:
+		start_local_game(chars[0], chars[1], bf)
 
 func _on_state(state: Dictionary):
 	state["t"] = "game_state"
@@ -209,9 +211,7 @@ func send_bp_action(action: String, char_id: String):
 	if acting < 0: return
 	game.bp.execute_action(acting, action, char_id)
 	if game.bp.is_done():
-		var chars = game.bp.picked_chars
-		var bf = game.bp._bp_first
-		start_local_game(chars[0], chars[1], bf)
+		_bp_done()
 	else:
 		var bs = game.bp.get_bp_state()
 		bs["t"] = "bp_state"

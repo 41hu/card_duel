@@ -190,6 +190,10 @@ func _on_reveal_hand(peer_idx: int):
 func _on_use_skill(peer_idx: int, data: Dictionary):
 	var peer = _peers[peer_idx]; var room = _find_room(peer.room_id)
 	if room == null or room.match == null: return
+	# 安全：下划线前缀是本地调试技能（发牌/立即结束），联网玩家禁止调用
+	var skill = data.get("skill", "")
+	if skill.begins_with("_"):
+		return
 	data["action"] = "use_skill"
 	room.match.process_action(peer.player_index, data)
 

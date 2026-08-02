@@ -38,6 +38,7 @@ var pending_attack_card: String = ""
 var pending_attack_uid: int = -1
 var pending_attack_segment: int = 0      # 多段攻击：当前段（1 起）
 var pending_attack_segments: int = 1     # 多段攻击：总段数（1 = 单段，现有行为）
+var _response_attacker: int = -1         # 响应等待的攻击者（process_response 身份校验用）
 var game_result: Dictionary = {}
 # 对战统计（结算页展示 + 称号判定）：每玩家一个字典
 var stats: Array = []
@@ -338,6 +339,7 @@ func _handle_respondable_card(player_idx: int, card: Dictionary, kind: String) -
 	var opp = 1 - player_idx
 	pending_attack_card = kind
 	pending_attack_uid = card.uid
+	_response_attacker = player_idx
 	attacker_last_damage = 1
 	phase = Config.Phase.RESPONSE_WINDOW
 	response_pending = true
@@ -353,6 +355,7 @@ func _handle_attack_card(player_idx: int, card: Dictionary) -> Dictionary:
 	# 多段攻击：总段数由角色钩子决定（默认 1 = 单段，现有行为）
 	pending_attack_segments = char_skills.get_attack_hit_count(player_idx, type_id)
 	pending_attack_segment = 0
+	_response_attacker = player_idx
 	return _begin_attack_segment(player_idx)
 
 # 开始攻击的一段：计算伤害 → 进入响应窗口；段间推进由 process_response 处理
@@ -405,6 +408,9 @@ func _begin_attack_segment(player_idx: int) -> Dictionary:
 
 func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 	if not response_pending: return
+	# 身份校验：只有被攻击方（攻击者的对手）可以响应，防止攻击方对自己"响应"
+	if _response_attacker < 0 or defender_idx != 1 - _response_attacker:
+		return
 	var attacker_idx = 1 - defender_idx
 	response_pending = false
 	phase = Config.Phase.PLAYER_TURN
@@ -509,7 +515,10 @@ func _handle_destroy(player_idx: int, card: Dictionary) -> Dictionary:
 		return {success=false, msg="该格没有道具"}
 	var et = card.get("equip_type", "weapon")
 	if et != "weapon" and et != "armor": return {success=false, msg="无效装备类型"}
-	var msg = equipment.destroy_equipment(opp, et); _use_card(player_idx, card); add_log(player_idx, msg); return {success=true}
+	var msg = equipment.destroy_equipment(opp, et)
+	if "没有" in msg:
+		return {success=false, msg=msg}  # 目标不存在：卡不消耗
+	_use_card(player_idx, card); add_log(player_idx, msg); return {success=true}
 
 func _handle_seize(player_idx: int, card: Dictionary) -> Dictionary:
 	var opp = 1 - player_idx

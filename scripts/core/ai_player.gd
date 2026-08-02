@@ -134,10 +134,10 @@ func decide_action(player_idx: int) -> Dictionary:
 				best_score = 12
 				best_action = {"action": "play_card", "card_uid": card.uid}
 
-	# 5. 冻结（打断对手节奏）
+	# 5. 冻结（打断对手节奏）；冷却中（lockout>0）冻结无效，不额外加分
 	for card in hand:
 		if card.type_id == "freeze":
-			var s = 10 + (4 if opp.frozen_lockout == false else 0)
+			var s = 10 + (4 if opp.frozen_lockout == 0 else 0)
 			if s > best_score:
 				best_score = s
 				best_action = {"action": "play_card", "card_uid": card.uid}
@@ -241,6 +241,20 @@ func decide_action(player_idx: int) -> Dictionary:
 						if 9 > best_score:
 							best_score = 9
 							best_action = {"action": "use_skill", "skill": "assassin_move", "direction": dir}
+			"hunter_ambush":
+				# 猎人埋伏：攻击点富裕时把一张远程攻击牌转为捕兽夹（放在对手前方 1 格）
+				if p.ap_attack >= 1:
+					var ambush_uid = -1
+					for card in hand:
+						if card.type_id in ["range", "pierce"]:
+							ambush_uid = card.uid
+							break
+					if ambush_uid >= 0:
+						var hpos = opp.position + (1 if opp.position < p.position else -1)
+						if hpos >= 0 and hpos <= 10 and hpos != p.position:
+							if 8 > best_score:
+								best_score = 8
+								best_action = {"action": "use_skill", "skill": "hunter_ambush", "card_uid": ambush_uid, "pos": hpos}
 
 	# 13. 随机扰动：分数接近时可能选次优（难度越高扰动越小）
 	if best_action.is_empty():

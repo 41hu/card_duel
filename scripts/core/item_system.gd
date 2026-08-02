@@ -22,6 +22,13 @@ var _item_types: Dictionary = {
 		"stack": "single",
 		"destroy_rule": "one",
 	},
+	"snare": {
+		"name": "捕兽夹",
+		"desc": "踩上-3HP，可重叠放置（猎人埋伏）",
+		"damage": 3,
+		"stack": "unlimited",
+		"destroy_rule": "one",
+	},
 }
 
 func _init(match):

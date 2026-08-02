@@ -11,8 +11,10 @@ func _ready():
 func show_logs(action_log: Array, max_count: int = 8, my_index: int = -1):
 	for c in _vbox.get_children():
 		c.queue_free()
-	# ScrollContainer 可滚动查看；上限 200 条平衡性能（每次状态刷新会重建全部日志 Label）
-	var r = action_log.slice(max(0, action_log.size() - 200))
+	# 按 max_count 截断显示最近 N 条（平衡性能，每次状态刷新会重建全部日志 Label）
+	var r = action_log
+	if max_count > 0:
+		r = action_log.slice(max(0, action_log.size() - max_count))
 	for e in r:
 		var lb = Label.new()
 		lb.text = "[T%d] %s: %s" % [e.get("turn", 0), e.get("player_name", "?"), e.get("msg", "")]

@@ -173,6 +173,7 @@ func _input(event):
 
 func _on_cancel_select():
 	_selected_uid = -1
+	_selected_type = ""  # 清类型：残留会导致点棋盘误发 play_card（"手牌中没有此卡"）
 	_discard_selected.clear()
 	confirm_btn.visible = false
 	cancel_btn.visible = false
@@ -496,7 +497,8 @@ func _fmt_player(p, tag: String) -> String:
 func _ap_circles(atk: int, mov: int, fun: int) -> String:
 	var a = ""; for _i in range(2): a += "●" if _i < atk else "○"
 	var m = ""; for _i in range(1): m += "●" if _i < mov else "○"
-	var f = ""; for _i in range(1): f += "●" if _i < fun else "○"
+	# 功能点最多 2 个圆（术士 +1 时为 2，其他角色 1）
+	var f = ""; for _i in range(2): f += "●" if _i < fun else "○"
 	return "攻%s 移%s 功%s" % [a, m, f]
 
 func _on_card_clicked(card_uid: int, type_id: String):
@@ -597,6 +599,15 @@ func _refresh_highlight():
 			child.set_selected(child.card_uid == _selected_uid)
 
 func _on_board_cell_clicked(cell_index: int):
+	if _selected_type == "hunter_ambush" and _is_my_turn:
+		_n().send_use_skill("hunter_ambush", {"card_uid": _selected_uid, "pos": cell_index})
+		_selected_uid = -1
+		_selected_type = ""
+		confirm_btn.visible = false
+		cancel_btn.visible = false
+		card_info.text = ""
+		status_label.text = ""
+		return
 	if _selected_type == "destroy_trap" and _is_my_turn:
 		_n().send_play_card(_selected_uid, {"destroy_target": "trap", "trap_pos": cell_index})
 		_selected_uid = -1
@@ -708,7 +719,39 @@ func _on_server_disconnected():
 func _exec_skill(sk_id: String):
 	if sk_id == "mage_discard": _show_mage_pick()
 	elif sk_id == "assassin_move": _popup_move(-1)
+	elif sk_id == "hunter_ambush": _show_hunter_pick()
 	else: _n().send_use_skill(sk_id)
+
+# 猎人埋伏：第一步选一张远程攻击牌 → 进入选格放置
+func _show_hunter_pick():
+	var c = Control.new()
+	c.name = "HunterPick"
+	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
+	var vb = _popup_box(c, 560, 460)
+	vb.add_child(_lbl("埋伏：选择一张远程攻击牌"))
+	var me = _game_state.players[0] if _game_state.players[0].index == _player_index else _game_state.players[1]
+	var has_any = false
+	for card in me.get("hand", []):
+		if card.type_id in ["range", "pierce"]:
+			has_any = true
+			var b = _mkbtn(Config.card_name(card.type_id))
+			b.pressed.connect(func(uid=card.uid): c.queue_free(); _enter_hunter_pos(uid))
+			vb.add_child(b)
+	if not has_any:
+		vb.add_child(_lbl("没有远程攻击牌"))
+	var close = _mkbtn("取消")
+	close.pressed.connect(func(): c.queue_free())
+	vb.add_child(close)
+	add_child(c)
+
+# 猎人埋伏：第二步进入棋盘选格（复用陷阱落点流程）
+func _enter_hunter_pos(card_uid: int):
+	_selected_uid = card_uid
+	_selected_type = "hunter_ambush"
+	cancel_btn.visible = true
+	status_label.text = "选择捕兽夹放置位置"
 
 func _on_skill_use():
 	var me = _game_state.players[0] if _game_state.players[0].index == _player_index else _game_state.players[1]

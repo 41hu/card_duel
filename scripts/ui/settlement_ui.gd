@@ -15,6 +15,8 @@ func _n():
 
 func _ready():
 	back_btn.pressed.connect(func():
+		# 清理本地模式残留（自我/人机对局），再开网络局不串状态
+		LocalGame.disconnect_from_server()
 		Network.disconnect_from_server()
 		get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
 	)

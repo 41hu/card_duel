@@ -68,7 +68,7 @@ func update(players: Array, items: Array, my_index: int):
 			lbl.add_theme_color_override("font_color", col)
 
 	# 道具按类型差异化显示（新增道具类型时在此补充标记）
-	var item_marks = {"trap": "X"}
+	var item_marks = {"trap": "X", "snare": "S"}
 	for it in items:
 		var pos = it.position
 		if pos >= 0 and pos < _cells.size():

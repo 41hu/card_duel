@@ -271,6 +271,11 @@ func send_reveal_hand():
 func disconnect_from_server():
 	game = null
 	_timer_elapsed = 0.0
+	# 清空本地模式残留（ai_mode/_ai），否则再开网络局会走 LocalGame 分支状态错乱
+	ai_mode = false
+	_ai = null
+	_ai_busy = false
+	last_game_result = {}
 	server_disconnected.emit()
 
 func get_connected() -> bool:

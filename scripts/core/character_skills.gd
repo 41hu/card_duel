@@ -131,6 +131,9 @@ func has_active_skills(player_idx: int) -> Array:
 		"mage":
 			if p.damage_bonus.is_empty(): skills.append("mage_discard")
 		"assassin": skills.append("assassin_move")
+		"hunter":
+			# 埋伏：手牌有远程攻击牌（range/pierce）时才显示
+			if _has_range_attack(player_idx): skills.append("hunter_ambush")
 	var result = []
 	for sk in skills:
 		if p.skills_used.has(sk): continue
@@ -141,10 +144,18 @@ func has_active_skills(player_idx: int) -> Array:
 		result.append(sk)
 	return result
 
+# 手牌是否含远程攻击牌（猎人埋伏按钮条件）
+func _has_range_attack(player_idx: int) -> bool:
+	for c in _ms.card_systems[player_idx].hand:
+		if c.type_id in ["range", "pierce"]:
+			return true
+	return false
+
 func skill_button_name(skill: String) -> String:
 	match skill:
 		"mage_discard": return "法术强化"
 		"assassin_move": return "暗影步"
+		"hunter_ambush": return "埋伏"
 	return skill
 
 func skill_game_limit(skill: String) -> int:
@@ -165,6 +176,7 @@ func use_skill(player_idx: int, skill: String, params: Dictionary) -> Dictionary
 	match skill:
 		"mage_discard": return _mage_discard(player_idx, params)
 		"assassin_move": return _assassin_move(player_idx, params)
+		"hunter_ambush": return _hunter_ambush(player_idx, params)
 	return {success=false, msg="未知技能"}
 
 func hand_limit_bonus(player_idx: int) -> int:
@@ -249,7 +261,7 @@ func get_attack_base_damage(player_idx: int, type_id: String, distance: int) -> 
 # 道具类型需在 item_system._item_types 注册（堆叠/触发/拆除规则都在注册表）
 func get_item_type(player_idx: int) -> String:
 	match _ms.players[player_idx].char_id:
-		# 示例（协作者）："hunter": return "snare"（捕兽夹，见 item_system 注册表）
+		"hunter": return "snare"  # 猎人 → 捕兽夹
 		_: return "trap"
 
 func _swordsman_hit(player_idx: int, damage_type: int):
@@ -286,4 +298,26 @@ func _assassin_move(player_idx: int, params: Dictionary) -> Dictionary:
 	if td > 0:
 		_ms._check_any_death()  # trigger_on_step 内部已扣血，这里只补死亡判定
 	_ms.add_log(player_idx, "暗影步")
+	return {success=true}
+
+# 猎人埋伏：把一张远程攻击牌转为捕兽夹道具放置（不触发攻击）
+func _hunter_ambush(player_idx: int, params: Dictionary) -> Dictionary:
+	var p = _ms.players[player_idx]
+	if p.ap_attack < 1:
+		return {success=false, msg="攻击行动点不足"}
+	var uid = int(params.get("card_uid", -1))
+	var pos = int(params.get("pos", params.get("trap_pos", -1)))
+	var cs = _ms.card_systems[player_idx]
+	# 校验选中的卡在手牌且是远程攻击牌
+	var card = {}
+	for c in cs.hand:
+		if c.uid == uid: card = c; break
+	if card.is_empty() or not card.type_id in ["range", "pierce"]:
+		return {success=false, msg="请选择远程攻击牌"}
+	# 放置捕兽夹（目标格无单位等校验在 place_item）；失败退还 AP
+	if not _ms.item_system.place_item(player_idx, "snare", pos):
+		return {success=false, msg="无法放置"}
+	p.ap_attack -= 1
+	cs.play_card(uid)  # 卡进弃牌堆，不触发攻击/响应
+	_ms.add_log(player_idx, "埋伏: 捕兽夹于%d" % pos)
 	return {success=true}

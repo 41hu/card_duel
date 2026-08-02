@@ -103,8 +103,9 @@ func refresh(p: Dictionary, tag: String, accent: Color):
 	fg.bg_color = Style.OPP_RED if pct <= 0.35 else Style.ME_GREEN
 	fg.set_corner_radius_all(4)
 	_hp_bar.add_theme_stylebox_override("fill", fg)
-	_attr_label.text = "近%d 远%d 魔%d | %s | 格%d" % [p.near_power, p.range_power, p.magic_power,
-		_ap_circles(p.get("ap_attack", 0), p.get("ap_move", 0), p.get("ap_function", 0)), p.position]
+	_attr_label.text = "近%d 远%d 魔%d | %s | 手:%d/%d 格%d" % [p.near_power, p.range_power, p.magic_power,
+		_ap_circles(p.get("ap_attack", 0), p.get("ap_move", 0), p.get("ap_function", 0)),
+		p.get("hand_size", 0), p.get("hand_limit", 5), p.position]
 	_refresh_equip(p)
 	_refresh_status(p)
 

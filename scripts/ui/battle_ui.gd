@@ -810,7 +810,14 @@ func _on_hand_revealed(cards: Array):
 	add_child(c)
 
 func _show_swordsman_popup():
+	# 场景切换/结束瞬间状态刷新会触发：battle_ui 已离树，跳过避免 get_viewport_rect 报错
+	if not is_inside_tree():
+		return
+	# 防堆叠：状态刷新会多次触发，先移除旧弹窗
+	var old = get_node_or_null("SwordsmanPopup")
+	if old: old.queue_free()
 	var c = Control.new()
+	c.name = "SwordsmanPopup"
 	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)

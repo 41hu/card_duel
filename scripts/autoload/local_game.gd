@@ -46,6 +46,11 @@ func _process(delta):
 			if Time.get_ticks_msec() >= _ai_next_act_time:
 				_ai_act_frame()
 				_ai_next_act_time = Time.get_ticks_msec() + AI_STEP_DELAY_MS
+	# AI BP 驱动：人机对战 BP 阶段轮到 AI 时自动随机禁选
+	if ai_mode and game != null and game.phase == Config.Phase.BP_PHASE:
+		if Time.get_ticks_msec() >= _ai_next_act_time:
+			_ai_bp_act()
+			_ai_next_act_time = Time.get_ticks_msec() + AI_STEP_DELAY_MS
 
 func start_local_game(p1_char: String, p2_char: String, bp_first: int = -1):
 	game = MatchStateClass.new()
@@ -56,6 +61,38 @@ func start_local_game(p1_char: String, p2_char: String, bp_first: int = -1):
 	game.init_match(p1_char, p2_char, bp_first)
 	game._start_game()
 	battle_state_cache = game.get_full_state()
+
+# 人机对战 BP：进入 BP 流程（人类在 BP 界面选角色，AI 自动禁选，新角色自动适配）
+func start_ai_bp(difficulty: int):
+	ai_mode = true
+	ai_difficulty = difficulty
+	ai_idx = 1  # 人类永远 P0，AI 是 P1
+	game = MatchStateClass.new()
+	game.bp_state_changed.connect(_on_bp_state_changed)
+	game.bp.reset()
+	bp_state_cache = game.bp.get_bp_state()
+	bp_state_cache["t"] = "bp_state"
+	# 第一步 AI 操作延迟到场景加载后（BP 界面就绪再行动）
+	_ai_next_act_time = Time.get_ticks_msec() + AI_STEP_DELAY_MS + 300
+
+# AI BP 自动操作：轮到 AI（非人类）时随机禁选一个可用角色
+func _ai_bp_act():
+	var phase = game.bp.bp_phase
+	if "done" in phase: return
+	var acting = -1
+	if "first" in phase: acting = game.bp._bp_first
+	elif "second" in phase: acting = 1 - game.bp._bp_first
+	if acting != ai_idx: return
+	var avail = game.bp.available_chars
+	if avail.is_empty(): return
+	var char_id = avail[randi() % avail.size()]
+	game.bp.execute_action(acting, "ban" if "ban" in phase else "pick", char_id)
+	if game.bp.is_done():
+		_on_bp_state_changed(game.bp.get_bp_state())
+	else:
+		var bs = game.bp.get_bp_state()
+		bs["t"] = "bp_state"
+		bp_state_updated.emit(bs)
 
 # 人机对战：不走 BP，直接开战（AI 随机先手，角色由入口传入）
 func start_ai_game(p1_char: String, p2_char: String, difficulty: int):
@@ -117,7 +154,13 @@ func _on_bp_state_changed(bs: Dictionary):
 	if game.bp.is_done():
 		var chars = game.bp.picked_chars
 		var bf = game.bp._bp_first
-		start_local_game(chars[0], chars[1], bf)
+		if ai_mode:
+			# 人机：人类是 P0，BP 先手可能是 AI——按先手对齐角色
+			var human_char = chars[0] if bf == 0 else chars[1]
+			var ai_char = chars[1] if bf == 0 else chars[0]
+			start_ai_game(human_char, ai_char, ai_difficulty)
+		else:
+			start_local_game(chars[0], chars[1], bf)
 	else:
 		bs["t"] = "bp_state"
 		bp_state_updated.emit(bs)

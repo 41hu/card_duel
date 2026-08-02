@@ -258,43 +258,23 @@ func _show_ai_difficulty():
 	var c = _make_popup("选择 AI 难度")
 	var vb = c.get_child(1)
 	var easy = _popup_btn("简单")
-	easy.pressed.connect(func(): c.queue_free(); _show_ai_char(0))
+	easy.pressed.connect(func(): c.queue_free(); _start_ai_bp(0))
 	vb.add_child(easy)
 	var normal = _popup_btn("普通")
-	normal.pressed.connect(func(): c.queue_free(); _show_ai_char(1))
+	normal.pressed.connect(func(): c.queue_free(); _start_ai_bp(1))
 	vb.add_child(normal)
 	var hard = _popup_btn("困难")
-	hard.pressed.connect(func(): c.queue_free(); _show_ai_char(2))
+	hard.pressed.connect(func(): c.queue_free(); _start_ai_bp(2))
 	vb.add_child(hard)
 	var back = _popup_btn("返回")
 	back.pressed.connect(func(): c.queue_free())
 	vb.add_child(back)
 	add_child(c)
 
-func _show_ai_char(diff: int):
-	var c = _make_popup("选择你的角色")
-	var vb = c.get_child(1)
-	for char_id in Config.CHARACTER_IDS:
-		var b = _popup_btn(Config.char_name(char_id))
-		# 用 bind 显式绑定参数（不依赖 lambda 默认参数语义，杜绝闭包绑定错位）
-		b.pressed.connect(_on_ai_char_picked.bind(diff, char_id))
-		vb.add_child(b)
-	var back = _popup_btn("返回")
-	back.pressed.connect(func(): c.queue_free())
-	vb.add_child(back)
-	add_child(c)
-
-func _on_ai_char_picked(diff: int, char_id: String):
-	var popup = get_node_or_null("AiPopup")
-	if popup: popup.queue_free()
-	_start_ai_battle(diff, char_id)
-
-func _start_ai_battle(diff: int, my_char: String):
-	var pool = Config.CHARACTER_IDS.duplicate()
-	pool.erase(my_char)
-	var ai_char = pool[randi() % pool.size()]
-	LocalGame.start_ai_game(my_char, ai_char, diff)
-	get_tree().change_scene_to_file("res://scenes/battle_scene.tscn")
+# 人机对战：进入 BP 界面选角色（AI 自动禁选，新角色自动适配）
+func _start_ai_bp(diff: int):
+	LocalGame.start_ai_bp(diff)
+	get_tree().change_scene_to_file("res://scenes/bp_scene.tscn")
 
 # 弹窗辅助：半透明遮罩 + 居中滚动容器，返回 Control（第 2 个子节点是内容 VBox）
 func _make_popup(title_text: String) -> Control:

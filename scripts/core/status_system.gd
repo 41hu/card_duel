@@ -16,14 +16,36 @@ var _modifier_handlers: Dictionary = {
 	# 近战限定加成（狂战士）：仅物理类伤害（近战/重击）生效
 	"near_up": func(buff, aspect, damage_type):
 		return buff.value if (aspect == "attack" and damage_type == Config.DamageType.PHYSICAL) else 0,
+	# 攻击行动点削减（时滞）：回合开始设置攻击点时应用
+	"ap_attack_down": func(buff, aspect, _damage_type):
+		return buff.value if aspect == "ap_attack" else 0,
+}
+
+# Buff 叠加规则（触发次数开关）：max_stacks = N 同类型最多 N 层（达上限命中只刷新时长）；-1 无限叠加（默认）
+# 例：时滞 ap_attack_down 设为 1 = 永不叠加（刷新），调大 = 允许多层，-1 = 无限
+var _stack_rules: Dictionary = {
+	"ap_attack_down": {"max_stacks": 1},
 }
 
 func _init(match):
 	match_ref = match
 
 # 添加Buff {type, value, duration} duration=-1表示回合结束清除
+# 按 _stack_rules 的 max_stacks 控制叠加：达上限时只刷新时长（不叠加）
 func add_buff(player_idx: int, buff_type: String, value: int, duration: int):
 	var player = match_ref.get_player(player_idx)
+	var max_stacks = int(_stack_rules.get(buff_type, {}).get("max_stacks", -1))
+	if max_stacks >= 0:
+		var stacks = 0
+		for b in player.buffs:
+			if b.type == buff_type: stacks += 1
+		if stacks >= max_stacks:
+			# 达上限：刷新已有层的时长（duration -1 表示回合结束清除，保持原语义）
+			for b in player.buffs:
+				if b.type == buff_type:
+					b.duration = max(b.duration, duration)
+					return
+			return
 	player.buffs.append({type=buff_type, value=value, duration=duration})
 
 # 添加灼烧：持续2回合，每回合-2HP，再次命中刷新持续时间为2回合（不叠加层数）

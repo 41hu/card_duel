@@ -242,10 +242,10 @@ func apply_on_hit_effects(attacker_idx: int, defender_idx: int, damage: int, dam
 		match_ref.status.add_burn(defender_idx, attacker_idx)
 		match_ref.add_log(attacker_idx, "灼烧: 对方灼烧2回合")
 
-	# 时滞：魔法命中后对方下回合攻击-1
+	# 时滞：魔法命中后对方下回合攻击行动点-1
 	if weapon_id == "time_lag":
-		match_ref.status.add_buff(defender_idx, "attack_down", -1, 1)
-		match_ref.add_log(attacker_idx, "时滞: 对方下回合攻击-1")
+		match_ref.status.add_buff(defender_idx, "ap_attack_down", -1, 1)
+		match_ref.add_log(attacker_idx, "时滞: 对方下回合攻击行动点-1")
 
 	# 共鸣：在 _apply_weapon_damage_bonus 中处理（本回合已出过其他攻击则+2）
 

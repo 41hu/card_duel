@@ -116,7 +116,8 @@ func _update_ui():
 	var acting = -1
 	if "first" in phase: acting = bp_first
 	elif "second" in phase: acting = 1 - bp_first
-	var my_turn = true if _is_local else (acting == _player_index)
+	# 人机 BP：人类是 P0，轮到 acting==0 才可操作（AI 自动禁选）；自我对战始终可操作
+	var my_turn = (acting == 0) if (_is_local and LocalGame.ai_mode) else (true if _is_local else (acting == _player_index))
 	var pn = "禁用" if is_ban else "选择"
 	var role = "先手" if acting == bp_first else "后手"
 	var who = "你" if _is_local else ("你" if my_turn else "对手")

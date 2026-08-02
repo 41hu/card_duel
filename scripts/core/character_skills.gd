@@ -64,7 +64,8 @@ func on_turn_start(player_idx: int):
 	match p.char_id:
 		"warlock": p.ap_function = 2
 		_: p.ap_function = 1
-	p.ap_attack = 2
+	# 攻击行动点应用 buff 修正（时滞 ap_attack_down 等）
+	p.ap_attack = max(0, 2 + _ms.status.query_modifier(player_idx, "ap_attack"))
 	p.ap_move = 1
 
 func on_turn_end(player_idx: int):

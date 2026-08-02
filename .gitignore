@@ -33,3 +33,6 @@ android/build/
 *.apk
 *.idsig
 android/.build_version
+
+# 对局记录导出（本地分析用，不入库）
+battle_records/

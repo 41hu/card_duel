@@ -61,6 +61,9 @@ func _can_push(player_idx: int) -> bool:
 	var direction = 1 if player_idx == 0 else -1
 	var new_pos = Config.clamp_position(other.position + direction)
 	var my_pos = match_ref.get_player(player_idx).position
+	# 被推者必须能实际移动（板边 clamp 不动 = 推不动，避免推上去造成人物重叠）
+	if new_pos == other.position:
+		return false
 	# 不能推到和推动者重合
 	return new_pos != my_pos
 
@@ -81,7 +84,9 @@ func attract(player_idx: int) -> bool:
 	if new_pos == my_pos:
 		# 贴脸：对方被吸引到我的位置，我沿对方方向后退一格腾出空间
 		var my_new = Config.clamp_position(my_pos + direction)
-		if my_new == other.position: return false
+		# 我无法实际后退（板边 clamp 不动 / 位置被占）→ 吸引失败，不位移（卡不消耗）
+		if my_new == other.position or my_new == my_pos:
+			return false
 		other.position = my_pos
 		_trigger_items_on_step(1 - player_idx)
 		player.position = my_new
@@ -99,6 +104,9 @@ func deter(player_idx: int) -> bool:
 	var direction = 1 if other.position > my_pos else -1
 	var new_pos = Config.clamp_position(other.position + direction)
 	if new_pos == my_pos:
+		return false
+	# 对方在板边推不动（clamp 后原地不动）→ 威慑失败，不位移（卡不消耗）
+	if new_pos == other.position:
 		return false
 	other.position = new_pos
 	_trigger_items_on_step(1 - player_idx)

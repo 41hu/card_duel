@@ -256,6 +256,8 @@ func _on_peer_disconnected(peer_idx: int):
 					"names": room.peer_names.duplicate() if room.peer_names.size() >= 2 else [
 						Config.char_name(room.match.players[0].char_id), Config.char_name(room.match.players[1].char_id)],
 					"title": room.match._calc_title(winner),
+					"battle_record": room.match.battle_record.duplicate(),
+					"action_log": room.match.action_log.duplicate(),
 				}
 				_send_to(p_idx, result)
 		_rooms.erase(room)

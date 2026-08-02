@@ -67,6 +67,10 @@ const RESPONSE_TIME = 20  # 响应窗口超时秒数（超时默认不响应）
 var disable_timeout: bool = false
 var no_timeout_for: int = -1
 
+# ---- 对局记录（本地/联机共用：每回合双方手牌/血量/位置/AP/牌堆，结算导出分析） ----
+var battle_record: Array = []
+var _last_rec_key: String = ""
+
 func _timeout_enabled(player_idx: int) -> bool:
 	if disable_timeout: return false
 	if no_timeout_for >= 0 and player_idx == no_timeout_for: return false
@@ -109,6 +113,7 @@ func init_match(p1_char_id: String, p2_char_id: String, bp_first: int = -1):
 	used_weapon_ids.clear()
 	items.clear()
 	action_log.clear()
+	battle_record.clear(); _last_rec_key = ""  # 对局记录（本地/联机共用，结算导出）
 	turn_number = 0
 	waiting_for_weapon_choice = -1
 	response_pending = false
@@ -660,6 +665,8 @@ func _check_permanent_death(player_idx: int):
 			stats=stats.duplicate(),
 			names=[Config.char_name(players[0].char_id), Config.char_name(players[1].char_id)],
 			title=_calc_title(winner),
+			battle_record=battle_record.duplicate(),
+			action_log=action_log.duplicate(),
 		}
 		add_log(player_idx, "淘汰")
 		state_changed.emit(get_full_state())
@@ -789,4 +796,27 @@ func get_full_state(full: bool = false) -> Dictionary:
 			item_type_desc=item_system.get_item_type(char_skills.get_item_type(i)).get("desc", ""),
 		})
 	if full: state.bp_state = bp.get_bp_state()
+	_record_snapshot(state)
 	return state
+
+# 对局快照：每玩家每回合的出牌/弃牌阶段各记一次（手牌内容/血量/位置/AP/牌堆）
+func _record_snapshot(st: Dictionary):
+	var tp = st.get("turn_phase", -1)
+	if tp != 2 and tp != 3: return  # 只记录出牌/弃牌阶段
+	var cur = st.get("current_player", -1)
+	var turn = st.get("turn_number", 0)
+	var key = "%d_%d_%d" % [turn, cur, tp]
+	if key == _last_rec_key: return
+	_last_rec_key = key
+	var rec := {turn=turn, player=cur, phase=tp}
+	for p in st.get("players", []):
+		var hand_names := []
+		for c in p.get("hand", []):
+			hand_names.append(Config.card_name(c.type_id))
+		rec["p%d" % p.get("index", -1)] = {
+			hp=p.get("hp", 0), max_hp=p.get("max_hp", 1), pos=p.get("position", 0),
+			hand=hand_names, ap=[p.get("ap_attack", 0), p.get("ap_move", 0), p.get("ap_function", 0)],
+		}
+	rec.deck = st.get("deck_size", 0)
+	rec.discard = st.get("discard_size", 0)
+	battle_record.append(rec)

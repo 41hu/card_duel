@@ -43,14 +43,16 @@ func _atk_move(player_idx: int, card: Dictionary):
 	return _m._handle_move_card(player_idx, card)
 
 func _atk_attract(player_idx: int, card: Dictionary):
-	_m.movement.attract(player_idx)
+	if not _m.movement.attract(player_idx):
+		return {success=false, msg="无法吸引（板边/位置被占）"}  # 失败不消耗卡
 	_m.card_systems[player_idx].play_card(card.uid)
 	_m.add_log(player_idx, "吸引")
 	_m._check_any_death()
 	return {success=true}
 
 func _atk_deter(player_idx: int, card: Dictionary):
-	_m.movement.deter(player_idx)
+	if not _m.movement.deter(player_idx):
+		return {success=false, msg="无法威慑（对方在板边）"}  # 失败不消耗卡
 	_m.card_systems[player_idx].play_card(card.uid)
 	_m.add_log(player_idx, "威慑")
 	_m._check_any_death()

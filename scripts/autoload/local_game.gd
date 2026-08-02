@@ -23,6 +23,8 @@ var _player_names = ["自己(P1)", "自己(P2)"]
 var _timer_elapsed: float = 0.0
 # 最近一局结果缓存（结算界面从缓存读取，避免信号时序问题）
 var last_game_result: Dictionary = {}
+# 最近一局对局记录导出路径（结算界面显示用）
+var last_record_path: String = ""
 
 # ---- 人机对战模式 ----
 var ai_mode: bool = false
@@ -55,6 +57,7 @@ func _process(delta):
 func start_local_game(p1_char: String, p2_char: String, bp_first: int = -1):
 	ai_mode = false  # 防残留：人机后直接进自我对战会被 _process 的 AI 驱动干扰
 	_ai = null
+	last_record_path = ""
 	game = MatchStateClass.new()
 	game.disable_timeout = true  # 自我对战：双方不限时
 	game.state_changed.connect(_on_state)
@@ -103,6 +106,7 @@ func start_ai_game(p1_char: String, p2_char: String, difficulty: int):
 	ai_mode = true
 	ai_difficulty = difficulty
 	ai_idx = 1  # 人类永远 P0，AI 是 P1
+	last_record_path = ""
 	game = MatchStateClass.new()
 	game.no_timeout_for = 0  # 人机对战：人类(P0)不限时，AI 保留（自动行动不影响）
 	game.state_changed.connect(_on_state)

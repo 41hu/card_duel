@@ -17,7 +17,7 @@ const WEAPON_DB = {
 	# 法术武器
 	"sage_book":      {name="贤者之书", type="magic", effect="magic_dmg",  value=2, desc="魔法伤害+2"},
 	"scorch":         {name="灼烧",     type="magic", effect="burn",       value=1, desc="可叠加-1HP/回合"},
-	"time_lag":       {name="时滞",     type="magic", effect="attack_down", value=1, desc="命中后对方下回合攻击行动点-1"},
+	"time_lag":       {name="时滞",     type="magic", effect="ap_attack_down", value=1, desc="命中后对方下回合攻击行动点-1"},
 	"resonance":      {name="共鸣",     type="magic", effect="resonance",  value=2, desc="本回合已出过其他攻击则+2"},
 }
 

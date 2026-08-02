@@ -27,7 +27,10 @@ func reset():
 
 func get_bp_state() -> Dictionary:
 	var now = Time.get_ticks_msec()
-	var left = max(0, int((bp_deadline - now) / 1000.0)) if bp_deadline > 0 else -1
+	# 本地模式 BP 不限时（match_ref.bp_timer_active()），显示 -1 且不触发超时
+	var left = -1
+	if bp_deadline > 0 and match_ref.bp_timer_active():
+		left = max(0, int((bp_deadline - now) / 1000.0))
 	return {
 		phase = bp_phase,
 		bp_first = _bp_first,

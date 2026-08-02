@@ -61,6 +61,21 @@ var _action_deadline: int = 0
 var _discard_deadline: int = 0
 const RESPONSE_TIME = 20  # 响应窗口超时秒数（超时默认不响应）
 
+# 倒计时开关（由启动方设置，联机保持默认全开）：
+#   disable_timeout = true → 全部关闭（自我对战：双方不限时，含 BP）
+#   no_timeout_for >= 0    → 仅该玩家不限时（人机对战：人类 P0 不限时）
+var disable_timeout: bool = false
+var no_timeout_for: int = -1
+
+func _timeout_enabled(player_idx: int) -> bool:
+	if disable_timeout: return false
+	if no_timeout_for >= 0 and player_idx == no_timeout_for: return false
+	return true
+
+# BP 阶段计时是否生效（本地模式 BP 也关闭：AI 自动操作不需要计时）
+func bp_timer_active() -> bool:
+	return not (disable_timeout or no_timeout_for >= 0)
+
 signal state_changed(data: Dictionary)
 signal weapon_prompt(player_idx: int, weapon: Dictionary)
 signal response_needed(defender_idx: int, attack_info: Dictionary)
@@ -381,6 +396,7 @@ func _begin_attack_segment(player_idx: int) -> Dictionary:
 	_armor_hit = calc.get("armor_hit", false)
 	# 防具完全免疫优先于伤害加成判定（技能加成不能穿透满耐久防具）
 	if calc.get("blocked", false):
+		char_skills.on_attack_failed_no_damage(player_idx, attacker_last_type)
 		if calc.get("reason", "") == "distance":
 			# 距离不够（穿心）：攻击无效，不消耗卡
 			return {success=false, msg=calc.get("msg", "距离不够")}
@@ -393,6 +409,7 @@ func _begin_attack_segment(player_idx: int) -> Dictionary:
 		state_changed.emit(get_full_state())
 		return {success=true, msg="被防具挡下"}
 	if attacker_last_damage <= 0:
+		char_skills.on_attack_failed_no_damage(player_idx, attacker_last_type)
 		# 本段 0 伤害：跳过本段响应，直接尝试下一段；末段仍 0 则整卡无效
 		if pending_attack_segment < pending_attack_segments:
 			return _begin_attack_segment(player_idx)
@@ -461,6 +478,7 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		char_skills.on_attack_hit(attacker_idx, defender_idx, final_damage, attacker_last_type)
 	else:
 		# 0 伤害（被闪避/格挡到0等）：补充攻击方记录
+		char_skills.on_attack_failed_no_damage(attacker_idx, attacker_last_type)
 		add_log(attacker_idx, "%s使用%s攻击未造成伤害" % [Config.char_name(players[attacker_idx].char_id), Config.card_name(pending_attack_card)])
 	if players[defender_idx].hp <= 0: _handle_death(defender_idx)
 	if phase == Config.Phase.GAME_OVER: return
@@ -472,6 +490,9 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		return
 	_use_card(attacker_idx, {uid=pending_attack_uid, type_id=pending_attack_card})
 	turn_phase = Config.TurnPhase.ACTION
+	# 响应方不限时清掉 deadline 后，攻击方（若限时）恢复出牌计时
+	if _action_deadline == 0 and _timeout_enabled(attacker_idx):
+		_action_deadline = Time.get_ticks_msec() + ACTION_TIME * 1000
 	var st = get_full_state()
 	if _reveal_to >= 0:
 		st["revealed_hand"] = card_systems[_reveal_from].get_hand_type_ids()
@@ -657,6 +678,7 @@ func _calc_title(winner_idx: int) -> String:
 func check_timers():
 	var now = Time.get_ticks_msec()
 	if phase == Config.Phase.BP_PHASE:
+		if not bp_timer_active(): return  # 本地模式 BP 不限时（AI 自动操作不依赖计时）
 		var before = bp.bp_phase
 		bp.check_bp_timer()
 		if bp.bp_phase != before:
@@ -664,20 +686,24 @@ func check_timers():
 			bp_state_changed.emit(bp.get_bp_state())
 		return
 	if _action_deadline > 0 and now >= _action_deadline:
+		# 超时对象：响应窗口是防守方，出牌阶段是当前玩家
+		var timed_player = (1 - current_player) if response_pending else current_player
 		_action_deadline = 0
-		if response_pending:
-			# 响应窗口超时：默认不响应，结算后攻击者继续出牌（避免软锁）
-			skip_response(1 - current_player)
-			if phase == Config.Phase.PLAYER_TURN and turn_phase == Config.TurnPhase.ACTION:
-				_action_deadline = Time.get_ticks_msec() + ACTION_TIME * 1000
-			return
-		add_log(current_player, "回合超时")
-		if waiting_for_weapon_choice >= 0:
-			confirm_weapon(waiting_for_weapon_choice, false)  # 武器选择超时默认放弃
-		_discard_phase()
+		if _timeout_enabled(timed_player):
+			if response_pending:
+				# 响应窗口超时：默认不响应，结算后攻击者继续出牌（避免软锁）
+				skip_response(1 - current_player)
+				if phase == Config.Phase.PLAYER_TURN and turn_phase == Config.TurnPhase.ACTION:
+					_action_deadline = Time.get_ticks_msec() + ACTION_TIME * 1000
+				return
+			add_log(current_player, "回合超时")
+			if waiting_for_weapon_choice >= 0:
+				confirm_weapon(waiting_for_weapon_choice, false)  # 武器选择超时默认放弃
+			_discard_phase()
 	if _discard_deadline > 0 and now >= _discard_deadline:
 		_discard_deadline = 0
-		_auto_discard()
+		if _timeout_enabled(current_player):
+			_auto_discard()
 
 func _auto_discard():
 	if not waiting_for_discard: return
@@ -725,9 +751,11 @@ func get_full_state(full: bool = false) -> Dictionary:
 	var now = Time.get_ticks_msec()
 	var atl = -1
 	if _action_deadline > 0:
-		atl = max(0, int((_action_deadline - now) / 1000.0))
+		var timed_player = (1 - current_player) if response_pending else current_player
+		if _timeout_enabled(timed_player):
+			atl = max(0, int((_action_deadline - now) / 1000.0))
 	var dtl = -1
-	if _discard_deadline > 0:
+	if _discard_deadline > 0 and _timeout_enabled(current_player):
 		dtl = max(0, int((_discard_deadline - now) / 1000.0))
 	var state = {
 		phase=phase, turn_phase=turn_phase, current_player=current_player,

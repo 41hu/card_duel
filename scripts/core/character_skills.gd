@@ -12,6 +12,30 @@ func on_attack_hit(attacker_idx: int, _defender_idx: int, _damage: int, damage_t
 	var p = _ms.players[attacker_idx]
 	match p.char_id:
 		"swordsman": _swordsman_hit(attacker_idx, damage_type)
+		"tracker":
+			# 寻踪者：远程攻击命中（伤害>0）叠 1 层校准，永久持续、无限叠加
+			if damage_type == Config.DamageType.RANGED:
+				_ms.status.add_buff(attacker_idx, "calibration", 1, -2)
+				_ms.add_log(attacker_idx, "校准+1（远程伤害+%d）" % _calibration_stacks(attacker_idx))
+
+# 攻击未造成伤害（护甲免疫/0伤害/闪避/格挡·牵制减到0）时调用：寻踪者清空校准
+# 多段攻击每段独立判定：任何一段失败都会触发（清空幂等）
+func on_attack_failed_no_damage(attacker_idx: int, damage_type: int):
+	var p = _ms.players[attacker_idx]
+	if p.char_id != "tracker": return
+	if damage_type != Config.DamageType.RANGED: return
+	if _calibration_stacks(attacker_idx) <= 0: return
+	for i in range(p.buffs.size() - 1, -1, -1):
+		if p.buffs[i].type == "calibration":
+			p.buffs.remove_at(i)
+	_ms.add_log(attacker_idx, "攻击未造成伤害，校准清空")
+
+# 当前校准层数
+func _calibration_stacks(player_idx: int) -> int:
+	var n = 0
+	for b in _ms.players[player_idx].buffs:
+		if b.type == "calibration": n += 1
+	return n
 
 func on_taking_damage(defender_idx: int, _attacker_idx: int, base_damage: int) -> int:
 	var p = _ms.players[defender_idx]

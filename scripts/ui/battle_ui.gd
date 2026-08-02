@@ -54,6 +54,8 @@ func _ready():
 	)
 	skill_confirm.pressed.connect(_on_skill_use)
 	board.cell_clicked.connect(_on_board_cell_clicked)
+	me_info.status_clicked.connect(_on_status_clicked)
+	opp_info.status_clicked.connect(_on_status_clicked)
 	_deck_label = Label.new()
 	_deck_label.add_theme_font_size_override("font_size", 26)
 	_deck_label.add_theme_color_override("font_color", Style.HAND_TITLE)
@@ -171,6 +173,11 @@ func _input(event):
 	if event.keycode in cheat:
 		_n().send_use_skill("_cheat", {"type_id": cheat[event.keycode]})
 
+# 状态槽/角色名/装备点击（移动端无 hover）：详情显示到状态栏，3 秒自动消失
+func _on_status_clicked(text: String):
+	status_label.text = text
+	_status_msg_timer = 3.0
+
 func _on_cancel_select():
 	_selected_uid = -1
 	_selected_type = ""  # 清类型：残留会导致点棋盘误发 play_card（"手牌中没有此卡"）
@@ -286,14 +293,6 @@ func _flash(node: Control):
 	tw.tween_property(node, "scale", Vector2(1.15, 1.15), 0.15)
 	tw.tween_property(node, "scale", Vector2.ONE, 0.3)
 
-func _flash_hp(node: Control, is_heal: bool):
-	var c = Style.ME_GREEN if is_heal else Style.OPP_RED
-	var default = node.get_theme_color("font_color")
-	node.add_theme_color_override("font_color", c)
-	var tw = create_tween().set_ease(Tween.EASE_OUT)
-	tw.tween_interval(1.0)
-	tw.tween_callback(func(): node.add_theme_color_override("font_color", default))
-
 func _lbl(txt: String) -> Label:
 	var l = Label.new()
 	l.text = txt
@@ -342,6 +341,12 @@ func _update_timer_label():
 	phase_label.text = "T%d | %s | %s | %ds" % [_game_state.turn_number, tn, who, _timer_left]
 
 func _process(delta):
+	# 状态详情（点击角色名/装备/状态槽）自动消失
+	if _status_msg_timer > 0:
+		_status_msg_timer -= delta
+		if _status_msg_timer <= 0:
+			_status_msg_timer = 0
+			status_label.text = ""
 	if _timer_left <= 0:
 		return
 	_timer_elapsed += delta
@@ -352,6 +357,7 @@ func _process(delta):
 		_update_timer_label()
 
 var _timer_elapsed: float = 0.0
+var _status_msg_timer: float = 0.0
 
 func _refresh_all(state: Dictionary):
 	card_info.text = ""
@@ -360,12 +366,12 @@ func _refresh_all(state: Dictionary):
 		return
 	var opp = pls[0] if pls[0].index != _player_index else pls[1]
 	var me = pls[0] if pls[0].index == _player_index else pls[1]
-	opp_info.text = _fmt_player(opp, "对手")
-	me_info.text = _fmt_player(me, "自己")
+	opp_info.refresh(opp, "对手", Color(1, 0.7, 0.5))
+	me_info.refresh(me, "自己", Color(0.5, 0.8, 1))
 	for p in pls:
 		if p.hp != _last_hp[p.index]:
-			var lbl = me_info if p.index == _player_index else opp_info
-			_flash_hp(lbl, p.hp > _last_hp[p.index])
+			var panel = me_info if p.index == _player_index else opp_info
+			panel.flash_hp(p.hp > _last_hp[p.index])
 			_last_hp[p.index] = p.hp
 	var tp = ["判定", "摸牌", "出牌", "弃牌"]
 	var tn = tp[state.get("turn_phase", 0)] if state.get("turn_phase", 0) < tp.size() else "?"
@@ -439,6 +445,7 @@ func _refresh_all(state: Dictionary):
 		var need = me.get("hand", []).size() - me.get("hand_limit", 5)
 		var txt = "确认弃牌(%d张)" % _discard_selected.size()
 		end_turn_btn.text = txt; end_turn_btn.visible = true
+		_status_msg_timer = 0  # 弃牌提示常驻，不被详情自动消失误清
 		if need > 0:
 			status_label.text = "还需弃%d张（手牌上限%d）" % [need, me.get("hand_limit", 5)]
 		else:
@@ -450,6 +457,7 @@ func _refresh_all(state: Dictionary):
 		end_turn_btn.visible = _is_my_turn
 		confirm_btn.visible = false
 		cancel_btn.visible = false
+		_status_msg_timer = 0
 		status_label.text = ""
 		var skills = me.get("active_skills", [])
 		skill_btn.visible = _is_my_turn and skills.size() > 0
@@ -457,49 +465,6 @@ func _refresh_all(state: Dictionary):
 			skill_btn.text = skills[0].name + ("…" if skills.size() > 1 else "")
 		if me.get("pending_swordsman_skill", false):
 			_show_swordsman_popup()
-
-func _fmt_player(p, tag: String) -> String:
-	var hp_pct = float(p.hp) / max(p.max_hp, 1)
-	var bar = ""
-	for _i in range(20):
-		bar += "=" if (float(_i) / 20.0) < hp_pct else "-"
-	var ap = _ap_circles(p.get("ap_attack", 0), p.get("ap_move", 0), p.get("ap_function", 0))
-	var txt = "[%s] %s HP:%d/%d[%s] 坐标:%d\n" % [tag, p.char_name, p.hp, p.max_hp, bar, p.position]
-	txt += "近%d 远%d 魔%d | %s | 手牌:%d/%d" % [p.near_power, p.range_power, p.magic_power, ap, p.hand_size, p.get("hand_limit", 5)]
-	if not p.weapon.is_empty():
-		txt += " | 武器:%s[%s](%s)" % [p.weapon.data.name, {"near":"近战","range":"远程","magic":"法术"}.get(p.weapon.data.type, "?"), p.weapon.data.desc]
-	if not p.armor.is_empty():
-		txt += " | 防具:%s" % p.armor.data.name + "(%d/%d)" % [p.armor.durability, p.armor.get("max_durability", 3)]
-	if p.get("frozen", false):
-		txt += " | 冻结!"
-	var dots = p.get("dots", [])
-	var buffs = p.get("buffs", [])
-	var skill = Config.CHARACTER_DB.get(p.char_id, {}).get("skill_desc", "?")
-	var extra = ""
-	if dots.size() > 0 or buffs.size() > 0 or skill != "?":
-		extra += "\n"
-		if dots.size() > 0:
-			for d in dots:
-				var dname = "灼烧" if d.type == "burn" else ("中毒" if d.type == "poison" else d.type)
-				var suffix = ("%d回" % d.duration) if d.type == "burn" else ("%d层" % d.duration)
-				extra += " [DoT] %s -%dHP %s" % [dname, d.damage, suffix]
-		if buffs.size() > 0:
-			for b in buffs:
-				var bname = {"attack_up": "攻击强化", "attack_down": "攻击弱化", "near_up": "近战强化"}.get(b.type, b.type)
-				var sgn = "+" if b.value > 0 else ""
-				var dur = ("%d回" % b.duration) if b.duration > 0 else ("回合" if b.duration == -1 else "")
-				extra += " [Buff] %s %s%d %s" % [bname, sgn, b.value, dur]
-		if skill != "?":
-			if extra != "": extra += " |"
-			extra += " 技能:%s" % skill
-	return txt + extra
-
-func _ap_circles(atk: int, mov: int, fun: int) -> String:
-	var a = ""; for _i in range(2): a += "●" if _i < atk else "○"
-	var m = ""; for _i in range(1): m += "●" if _i < mov else "○"
-	# 功能点按实际值显示（术士 2 圆，其他角色 1 圆）；不显示空心圆避免误解上限为 2
-	var f = ""; for _i in range(fun): f += "●"
-	return "攻%s 移%s 功%s" % [a, m, f]
 
 func _on_card_clicked(card_uid: int, type_id: String):
 	var state = _game_state

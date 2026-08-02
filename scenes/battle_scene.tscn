@@ -3,6 +3,7 @@
 [ext_resource type="Script" uid="uid://c1fu85fig3g55" path="res://scripts/ui/battle_ui.gd" id="1_btl"]
 [ext_resource type="Script" uid="uid://cdu6wbs8dqplt" path="res://scripts/ui/components/board_renderer.gd" id="2_brd"]
 [ext_resource type="Script" uid="uid://dcgefa6avvou7" path="res://scripts/ui/components/action_log.gd" id="3_log"]
+[ext_resource type="Script" uid="uid://PonnaA-A0Dk" path="res://scripts/ui/components/info_panel.gd" id="4_inf"]
 
 [node name="BattleScene" type="Control" unique_id=62604844]
 layout_mode = 3
@@ -83,21 +84,20 @@ grow_vertical = 2
 theme_override_constants/separation = 4
 alignment = 1
 
-[node name="MeInfo" type="Label" parent="." unique_id=1645208570]
+[node name="MeInfo" type="PanelContainer" parent="." unique_id=1645208570]
 layout_mode = 1
 anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
 offset_left = 12.0
-offset_top = -388.0
+offset_top = -470.0
 offset_right = 590.0
-offset_bottom = -312.0
+offset_bottom = -308.0
 grow_vertical = 0
-theme_override_colors/font_color = Color(0.5, 0.8, 1, 1)
-theme_override_font_sizes/font_size = 32
-autowrap_mode = 3
+clip_contents = true
+script = ExtResource("4_inf")
 
-[node name="OppInfo" type="Label" parent="." unique_id=1324770960]
+[node name="OppInfo" type="PanelContainer" parent="." unique_id=1324770960]
 layout_mode = 1
 anchors_preset = 3
 anchor_left = 1.0
@@ -105,14 +105,13 @@ anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = -590.0
-offset_top = -388.0
+offset_top = -470.0
 offset_right = -12.0
-offset_bottom = -312.0
+offset_bottom = -308.0
 grow_horizontal = 0
 grow_vertical = 0
-theme_override_colors/font_color = Color(1, 0.7, 0.5, 1)
-theme_override_font_sizes/font_size = 32
-autowrap_mode = 3
+clip_contents = true
+script = ExtResource("4_inf")
 
 [node name="ActionLog" type="ScrollContainer" parent="." unique_id=1493559683]
 layout_mode = 1
@@ -185,17 +184,19 @@ text = "取消"
 layout_mode = 1
 anchors_preset = 7
 anchor_left = 0.5
-anchor_top = 1.0
+anchor_top = 0.0
 anchor_right = 0.5
-anchor_bottom = 1.0
+anchor_bottom = 0.0
 offset_left = -300.0
-offset_top = -286.0
+offset_top = 126.0
 offset_right = 300.0
-offset_bottom = -250.0
+offset_bottom = 196.0
 grow_horizontal = 2
 grow_vertical = 0
 theme_override_colors/font_color = Color(0.6, 0.6, 0.6, 1)
-theme_override_font_sizes/font_size = 32
+theme_override_font_sizes/font_size = 30
+horizontal_alignment = 1
+autowrap_mode = 3
 horizontal_alignment = 1
 
 [node name="SkillBtn" type="Button" parent="." unique_id=2088021127]

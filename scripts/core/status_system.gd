@@ -16,6 +16,9 @@ var _modifier_handlers: Dictionary = {
 	# 近战限定加成（狂战士）：仅物理类伤害（近战/重击）生效
 	"near_up": func(buff, aspect, damage_type):
 		return buff.value if (aspect == "attack" and damage_type == Config.DamageType.PHYSICAL) else 0,
+	# 校准（寻踪者）：仅远程伤害生效，每层+1，无限叠加、永久持续（duration=-2）
+	"calibration": func(buff, aspect, damage_type):
+		return buff.value if (aspect == "attack" and damage_type == Config.DamageType.RANGED) else 0,
 	# 攻击行动点削减（时滞）：回合开始设置攻击点时应用
 	"ap_attack_down": func(buff, aspect, _damage_type):
 		return buff.value if aspect == "ap_attack" else 0,
@@ -30,7 +33,8 @@ var _stack_rules: Dictionary = {
 func _init(match):
 	match_ref = match
 
-# 添加Buff {type, value, duration} duration=-1表示回合结束清除
+# 添加Buff {type, value, duration}
+# duration: >0 = 每回合衰减；-1 = 回合结束清除；-2 = 永久持续（on_turn_end 天然跳过）
 # 按 _stack_rules 的 max_stacks 控制叠加：达上限时只刷新时长（不叠加）
 func add_buff(player_idx: int, buff_type: String, value: int, duration: int):
 	var player = match_ref.get_player(player_idx)

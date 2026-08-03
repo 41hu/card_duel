@@ -4,7 +4,7 @@ extends Control
 
 const Style = preload("res://scripts/theme/style_const.gd")
 
-@onready var content = $MainHBox/Scroll/Content
+@onready var content = $MainHBox/Scroll/Margin/Content
 
 # 角色详细技能描述（属性由角色数据自动渲染；此处补充详细说明，缺失时回退 skill_desc）
 const CHAR_DETAIL: Dictionary = {
@@ -47,20 +47,21 @@ func _show_category(cat: String):
 func _add_section(title_text: String, body: String):
 	var t = Label.new()
 	t.text = title_text
-	t.add_theme_font_size_override("font_size", 34)
+	t.add_theme_font_size_override("font_size", 42)
 	t.add_theme_color_override("font_color", Style.WIN_GOLD)
 	content.add_child(t)
 	var b = Label.new()
 	b.text = body
 	b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	b.add_theme_font_size_override("font_size", 24)
+	b.add_theme_font_size_override("font_size", 30)
+	b.add_theme_constant_override("line_spacing", 10)
 	b.add_theme_color_override("font_color", Color(0.92, 0.92, 0.92))
 	content.add_child(b)
 	content.add_child(_sep())
 
 func _sep() -> HSeparator:
 	var s = HSeparator.new()
-	s.add_theme_constant_override("separation", 8)
+	s.add_theme_constant_override("separation", 24)
 	return s
 
 # ==================== 基本规则 ====================
@@ -106,23 +107,29 @@ func _fill_mechs():
 func _fill_chars():
 	var t = Label.new()
 	t.text = "角色一览（12 名）"
-	t.add_theme_font_size_override("font_size", 34)
+	t.add_theme_font_size_override("font_size", 42)
 	t.add_theme_color_override("font_color", Style.WIN_GOLD)
 	content.add_child(t)
 	for char_id in Config.CHARACTER_IDS:
 		var cd = Config.CHARACTER_DB[char_id]
 		var p = PanelContainer.new()
+		p.add_theme_constant_override("margin_left", 24)
+		p.add_theme_constant_override("margin_right", 24)
+		p.add_theme_constant_override("margin_top", 18)
+		p.add_theme_constant_override("margin_bottom", 18)
 		var vb = VBoxContainer.new()
+		vb.add_theme_constant_override("separation", 10)
 		p.add_child(vb)
 		var head = Label.new()
 		head.text = "%s　HP%d　近%d　远%d　魔%d" % [cd.name, cd.hp, cd.near, cd.range, cd.magic]
-		head.add_theme_font_size_override("font_size", 28)
+		head.add_theme_font_size_override("font_size", 34)
 		head.add_theme_color_override("font_color", Style.SELECTED_CYAN)
 		vb.add_child(head)
 		var desc = Label.new()
 		desc.text = "技能：%s" % CHAR_DETAIL.get(char_id, cd.skill_desc)
 		desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		desc.add_theme_font_size_override("font_size", 22)
+		desc.add_theme_font_size_override("font_size", 28)
+		desc.add_theme_constant_override("line_spacing", 8)
 		desc.add_theme_color_override("font_color", Color(0.92, 0.92, 0.92))
 		vb.add_child(desc)
 		content.add_child(p)

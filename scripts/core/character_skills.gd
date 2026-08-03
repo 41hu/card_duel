@@ -176,6 +176,7 @@ func has_active_skills(player_idx: int) -> Array:
 		if turn_used >= turn_limit: continue
 		# 整局限次（数据表 skill_game_limit，默认 -1 无限）
 		var game_limit = int(cd.get("skill_game_limit", -1))
+		if game_limit < 0 and sk == "wardsmith_imbue": game_limit = 1  # 铸甲师护甲注魔限整局一次（数据缺省兜底）
 		if game_limit > 0:
 			var used = p.skill_counts.get(sk, 0)
 			if used >= game_limit: continue
@@ -206,6 +207,7 @@ func use_skill(player_idx: int, skill: String, params: Dictionary) -> Dictionary
 	#   skill_turn_limit: 每回合限次（默认 1）；skill_game_limit: 整局限次（默认 -1 无限）
 	var cd = Config.CHARACTER_DB[p.char_id]
 	var game_limit = int(cd.get("skill_game_limit", -1))
+	if game_limit < 0 and skill == "wardsmith_imbue": game_limit = 1  # 铸甲师护甲注魔限整局一次（数据缺省兜底）
 	if game_limit > 0:
 		var used = p.skill_counts.get(skill, 0)
 		if used >= game_limit: return {success=false, msg="整局已达上限(%d次)" % game_limit}

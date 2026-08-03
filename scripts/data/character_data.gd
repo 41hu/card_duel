@@ -13,7 +13,7 @@ const CHARACTER_DB = {
 	"gunslinger":  {name="快枪手", hp=26, near=2, range=6, magic=2, skill="gunslinger",   skill_desc="远程双发：固定消耗2攻击点，造成两段伤害，两段各需一次响应"},
 	"hunter":      {name="猎人",   hp=26, near=4, range=5, magic=2, skill="hunter",       skill_desc="埋伏：消耗1攻击点，将一张远程攻击牌转为捕兽夹放置（可重叠，踩上-3HP）"},
 	"tracker":     {name="寻踪者", hp=24, near=4, range=5, magic=2, skill="tracker",      skill_desc="远程/法术命中获得1层校准（每层远程伤害+1，永久叠加）；远程/法术攻击未造成伤害则校准清空"},
-	"wardsmith":   {name="铸甲师", hp=27, near=4, range=2, magic=4, skill="wardsmith",    skill_desc="护甲注魔：弃一张重击/穿心/吟唱，获得对应护甲（限一次）；护甲耐久上限+1"},
+	"wardsmith":   {name="铸甲师", hp=27, near=4, range=2, magic=4, skill="wardsmith",    skill_desc="护甲注魔：直接装备一种护甲（限一次）；修复：耗2攻击点弃匹配强化攻击卡修1点耐久；护甲耐久上限+1"},
 }
 
 const CHARACTER_IDS = ["swordsman", "archer", "mage", "paladin", "assassin", "priest", "berserker", "warlock", "gunslinger", "hunter", "tracker", "wardsmith"]

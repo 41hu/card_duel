@@ -63,7 +63,7 @@ func _card_value(player_idx: int, type_id: String) -> int:
 		"heal_3": return 4
 		"heal_5": return 6
 		"near_buf", "range_buf", "magic_buf": return 6
-		"blessing": return 4
+		"blessing": return 7  # 天赐免费抽2，资源价值高，不易被弃/不被当弃牌强化材料
 		"trap": return 5
 		"attract", "deter": return 4
 		"freeze": return 6
@@ -73,6 +73,9 @@ func _card_value(player_idx: int, type_id: String) -> int:
 
 # ---------- 真实伤害（复用战斗公式：武器/Buff/防具全算；多段×段数） ----------
 func _real_damage(player_idx: int, type_id: String) -> int:
+	# 近战/重击必须贴脸（calculate_attack 不检查距离，出牌层才拦——AI 要自己模拟"能否打出"）
+	if type_id in ["near", "heavy"] and match_ref.movement.get_distance() != 0:
+		return 0
 	var opp = 1 - player_idx
 	var calc = match_ref.combat.calculate_attack(player_idx, opp, type_id)
 	if calc.get("blocked", false):
@@ -124,12 +127,15 @@ func _count_in_discard(type_id: String) -> int:
 		if c.type_id == type_id: n += 1
 	return n
 
-# 手牌中的攻击牌数量（资源期判定用：手里有攻击牌就不是资源期）
+# 手牌中"打得出的"攻击牌数量（资源期判定用）
+# 近战型手牌全是远距离打不出的近战卡 → 攻击力 0 → 正确进入资源期攒资源
+# （与人类"保留打不出的牌制造威慑 + 过回合抽卡"的资源期行为一致）
 func _hand_attack_count(player_idx: int) -> int:
 	var n = 0
 	for c in match_ref.card_systems[player_idx].hand:
 		if c.type_id in ["near", "heavy", "range", "pierce", "magic", "chant"]:
-			n += 1
+			if _real_damage(player_idx, c.type_id) > 0:
+				n += 1
 	return n
 
 # 全局攻击牌剩余总数（资源期判定用：牌堆+双方手牌中还有几张攻击牌）
@@ -149,6 +155,24 @@ func _item_at(pos: int) -> bool:
 		if it.get("position", -1) == pos:
 			return true
 	return false
+
+# 对手闪避威胁：hard 读牌——对手用过魔法闪避且手牌多（可能有闪避牌存量）
+# 此时爆发牌大概率被闪避，应先骗响应消耗闪避再打主属性
+func _opp_dodge_threat(player_idx: int) -> bool:
+	if difficulty < DIFF_HARD: return false
+	var used = _opp_used_responses.get(1 - player_idx, [])
+	var magic_used = 0
+	for u in used:
+		if u == "magic": magic_used += 1
+	return magic_used >= 1 and match_ref.card_systems[1 - player_idx].hand.size() >= 2
+
+# 对手贴脸威胁预判：对手近战型 + 距离近（≤3）+ 手牌多（可能攒着爆发牌）
+# 近战角色"近身难"（抽不到移动卡）——对手可能憋 2-3 回合后一波贴脸爆发，AI 要提前防
+func _near_threat_imminent(player_idx: int) -> bool:
+	var opp = 1 - player_idx
+	if _current_role(opp) != "near": return false
+	var dist = match_ref.movement.get_distance()
+	return dist <= 3 and match_ref.card_systems[opp].hand.size() >= 2
 
 # 对方主要进攻类型：定位优先；hard 记牌修正——牌堆某类攻击牌剩余明显多于定位类时
 # （对方抽到该类攻击牌的概率高），防御转向该类
@@ -196,6 +220,9 @@ func _attack_score(player_idx: int, dmg: int, opp_idx: int, stance: Dictionary) 
 		var used = _opp_used_responses.get(opp_idx, [])
 		if used.size() >= 2:
 			score += 6  # 对手响应牌消耗多，攻击更安全
+		# 对手用过闪避且手牌多 → 爆发牌大概率被闪避，降低攻击预期（应先用骗卡消耗闪避）
+		if _opp_dodge_threat(player_idx):
+			score -= 8
 	# 危险/保命档：血量劣势时进攻收敛（避免送死对拼；斩杀判定兜底）
 	var s_stance = stance.get("stance", "")
 	if s_stance == "flee":
@@ -212,8 +239,8 @@ func _attack_score(player_idx: int, dmg: int, opp_idx: int, stance: Dictionary) 
 		if role == "range":
 			# 远程伤害随距离衰减 → 贴脸伤害最高。安全时可贴脸打远程，危险时保持距离
 			var safe = _range_melee_safe(player_idx)
-			if dist == 0 and not safe:
-				score -= 10
+			if dist <= 1 and not safe:
+				score -= 10  # 距离 1 也在对手贴脸范围内，危险时不冒险换血
 			elif dist == 0 and safe:
 				score += 4
 		elif role == "near" and dist > 0:
@@ -298,14 +325,23 @@ func decide_action(player_idx: int) -> Dictionary:
 			if is_role_card:
 				if my_role == "near" and distance > 0:
 					continue  # 近战型：没贴脸时近战卡留着
-				if my_role == "range" and tid in ["range", "pierce"] and distance <= 1:
-					continue  # 远程型：贴脸时远程卡留着，拉开距离再打
+				if my_role == "range" and tid in ["range", "pierce"] and distance <= 1 \
+						and not _range_melee_safe(player_idx):
+					continue  # 远程型：贴脸换血亏 → 留着拉开再打；安全时贴脸打远程（伤害最高）
 			# 保留响应牌：非斩杀时，不打最后一张可响应卡
 			if tid in ["near", "range", "magic"] and resp_count <= 1:
 				continue
-			# 危险/保命：魔法闪避牌强制保留（防被真人斩杀一波带走）
-			if tid == "magic" and stance.get("stance", "") in ["danger", "flee"]:
+			# 危险/保命/贴脸威胁：魔法闪避牌强制保留（防被真人斩杀一波带走）
+			if tid == "magic" and (stance.get("stance", "") in ["danger", "flee"]
+					or (is_norm and _near_threat_imminent(player_idx) and distance <= 2)):
 				continue
+			# 自己唯一魔法卡 + 对手闪避威胁：保留（打了会被闪避，还白送闪避牌）
+			if tid == "magic" and _opp_dodge_threat(player_idx):
+				var my_magic = 0
+				for c in hand:
+					if c.type_id == "magic": my_magic += 1
+				if my_magic <= 1:
+					continue
 		var s = _attack_score(player_idx, dmg, opp_idx, stance)
 		# 骗响应连招（normal+，每回合限一次）：手牌有主属性爆发（定位卡高伤害）时，
 		# 低价值攻击（非定位、非唯一保命牌）先手消耗对手响应牌，主属性随后爆发——
@@ -313,10 +349,13 @@ func decide_action(player_idx: int) -> Dictionary:
 		if is_norm and not can_kill and not _bait_used and _my_best_damage(player_idx) > 0:
 			var is_main_card = tid in _role_types(my_role)
 			var is_last_resp = tid in ["near", "range", "magic"] and resp_count <= 1
-			if not is_main_card and not is_last_resp and dmg * 2 < _my_best_damage(player_idx) \
-					and match_ref.card_systems[opp_idx].hand.size() >= 2:
-				# 骗响应收益：主属性爆发伤害的估算（含对手不响应时骗卡本身的消耗）
-				s += min(18, _my_best_damage(player_idx) * 2 + 6)
+			var dodge_threat = _opp_dodge_threat(player_idx)
+			# 骗响应：常规要求伤害明显低于主属性；对手闪避威胁大时放宽（接近主属性的也能当骗卡）
+			if not is_main_card and not is_last_resp and match_ref.card_systems[opp_idx].hand.size() >= 2 \
+					and (dmg * 2 < _my_best_damage(player_idx) or dodge_threat):
+				var bonus = min(18, _my_best_damage(player_idx) * 2 + 6)
+				if dodge_threat: bonus += 10  # 对手闪避存量高 → 骗卡消耗闪避的收益大
+				s += bonus
 				_bait_used = true  # 本回合只骗一次，之后直接主属性爆发
 		if s > best_score:
 			best_score = s
@@ -411,18 +450,21 @@ func decide_action(player_idx: int) -> Dictionary:
 				best_action = {"action": "play_card", "card_uid": card.uid}
 
 	# 7. 陷阱：预判放置；功能点感知
+	#   对手近战型且可能贴脸（距离近+手牌多，憋爆发）→ 防守陷阱优先（放自己前方防贴脸）
 	#   压制时放对手前方（封锁对方移动/被推踩中）；保命时放自己前方（防贴脸）
+	var near_threat = _near_threat_imminent(player_idx)
 	for card in hand:
 		if p.ap_function < 1: break
 		if card.type_id == "trap":
 			var s = 6
 			var trap_pos = -1
-			if stance.get("stance", "") == "flee":
-				trap_pos = p.position + (1 if p.position < opp.position else -1)  # 自己朝对手侧一格
+			if stance.get("stance", "") == "flee" or near_threat:
+				trap_pos = p.position + (1 if p.position < opp.position else -1)  # 自己朝对手侧一格（防贴脸）
 			else:
-				trap_pos = opp.position + (1 if opp.position < p.position else -1)  # 对手前方
+				trap_pos = opp.position + (1 if opp.position < p.position else -1)  # 对手前方封锁
 			if trap_pos >= 0 and trap_pos <= 10 and trap_pos != p.position and trap_pos != opp.position:
 				if stance.get("stance", "") == "flee": s = 14
+				elif near_threat: s = 13  # 对手可能贴脸爆发 → 防守陷阱优先（即使有攻击动作）
 				elif is_hard and opp_role == "near": s = 12  # 对手近战型 → 封锁逼近路线更值
 				if s > best_score:
 					best_score = s
@@ -443,14 +485,23 @@ func decide_action(player_idx: int) -> Dictionary:
 					# 远程伤害随距离衰减：安全时贴脸打远程（伤害最高），危险时保持距离
 					var safe = _range_melee_safe(player_idx)
 					if distance < 2 and not safe:
-						s = 12  # 对手贴脸威胁大 → 后撤
+						s = 14  # 对手贴脸威胁大 → 后撤（优先于攻击/同分动作）
 					elif distance < 2 and safe:
 						s = 2  # 安全 → 贴脸打远程（伤害最高），不急着撤
 					elif distance > 4: s = 8  # 太远 → 靠近到输出距离
 					elif distance > 3: s = 4  # 偏远 → 靠近一点
 					else: s = 2
-				elif my_role == "magic":
-					s = 4
+					# 对手近战型可能贴脸爆发（憋牌）→ 提前拉开；权衡板边：后撤目标格上限 <=2 不拉
+					if _near_threat_imminent(player_idx) and distance <= 3:
+						var back_pos = p.position - dir
+						var back_limit = (back_pos if player_idx == 0 else 10 - back_pos) + 1
+						if back_limit >= 3:
+							s = max(s, 10)
+					if _near_threat_imminent(player_idx) and distance <= 2:
+							var back_pos2 = p.position - dir
+							var back_limit2 = (back_pos2 if player_idx == 0 else 10 - back_pos2) + 1
+							if back_limit2 >= 3:
+								s = 10
 				if stance_s == "flee": s = max(s, 16)  # 防斩：拉开距离
 				if stance_s == "danger": s = max(s, 12)  # 危险档：贴脸时拉开（防止被斩杀）
 				if stance_s == "resource": s -= 4
@@ -459,10 +510,12 @@ func decide_action(player_idx: int) -> Dictionary:
 			# 贴脸时允许后撤（远程型/危险/保命拉开距离）；其余需 distance > 0
 			var can_move = distance > 0 or ((my_role == "range" or stance_s == "flee" or stance_s == "danger") and distance == 0)
 			if can_move and s > 0 and s > best_score:
-				# 保命/远程危险时朝反方向后撤，否则朝对手（安全时贴脸打远程伤害最高）
+				# 保命/远程危险/贴脸威胁预判时朝反方向后撤，否则朝对手（安全时贴脸打远程伤害最高）
 				var mdir = dir
 				if my_role == "range" and distance < 2:
 					if not _range_melee_safe(player_idx): mdir = -dir
+				if _near_threat_imminent(player_idx) and my_role in ["range", "magic"] and distance <= 3:
+					mdir = -dir  # 提前拉开方向（远离对手）
 				if (stance_s == "flee" or stance_s == "danger") and distance <= 2: mdir = -dir
 				# 板边惩罚：朝自己板边移动会降低手牌上限（操作空间减少）→ 减分；
 				# 朝中场移动保持上限 → 加分（鼓励维持操作空间）
@@ -543,6 +596,10 @@ func decide_action(player_idx: int) -> Dictionary:
 	for sk in skills:
 		match sk.id:
 			"mage_discard":
+				# 濒死/危险档不用弃牌强化：强化后的魔法攻击会被"保命留闪避"保留打不出，
+				# 弃攻击牌换的强化白费（负收益）
+				if stance.get("stance", "") in ["flee", "danger"]:
+					continue
 				var has_magic_atk = false
 				var discard_uid = -1
 				var min_val = 999
@@ -585,6 +642,24 @@ func decide_action(player_idx: int) -> Dictionary:
 						if s > best_score:
 							best_score = s
 							best_action = {"action": "use_skill", "skill": "assassin_move", "direction": dir}
+			"wardsmith_imbue":
+				# 护甲注魔：无防具且手牌有重击/穿心/吟唱 → 换护甲（铸甲师 4 耐久强生存）；
+				# 危险/保命档价值更高；换伤害最低的攻击牌（保留输出）
+				if p.armor.is_empty():
+					var imbue_uid = -1
+					var min_dmg = 99999
+					for card in hand:
+						if card.type_id in ["heavy", "pierce", "chant"]:
+							var d = _real_damage(player_idx, card.type_id)
+							if d < min_dmg:
+								min_dmg = d
+								imbue_uid = card.uid
+					if imbue_uid >= 0:
+						var s = 12
+						if stance.get("stance", "") in ["flee", "danger"]: s = 18  # 危险时防御优先
+						if s > best_score:
+							best_score = s
+							best_action = {"action": "use_skill", "skill": "wardsmith_imbue", "card_uid": imbue_uid}
 			"hunter_ambush":
 				if p.ap_attack >= 1:
 					var ambush_uid = -1
@@ -680,6 +755,9 @@ func decide_discard(player_idx: int, need: int) -> Array:
 		# 定位牌不易弃（主要输出手段）
 		if card.type_id in _role_types(role):
 			v += 3
+		# 攻击牌保值：可打出的攻击牌是输出核心，超限弃牌时优先保攻击
+		if card.type_id in ["near", "heavy", "range", "pierce", "magic", "chant"]:
+			v += 2
 		# 强化卡保值：永久+1 在适当时机打出比被弃掉划算
 		if card.type_id in ["near_buf", "range_buf", "magic_buf"]:
 			v += 2

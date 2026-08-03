@@ -159,6 +159,12 @@ func has_active_skills(player_idx: int) -> Array:
 		"hunter":
 			# 埋伏：手牌有远程攻击牌（range/pierce）时才显示
 			if _has_range_attack(player_idx): skills.append("hunter_ambush")
+		"wardsmith":
+			# 护甲注魔：手牌有重击/穿心/吟唱时才显示（整局限一次由 skill_game_limit 控制）
+			for c in _ms.card_systems[player_idx].hand:
+				if c.type_id in ["heavy", "pierce", "chant"]:
+					skills.append("wardsmith_imbue")
+					break
 	var result = []
 	for sk in skills:
 		# 每回合限次（数据表 skill_turn_limit，默认 1）
@@ -188,6 +194,7 @@ func skill_button_name(skill: String) -> String:
 		"mage_discard": return "法术强化"
 		"assassin_move": return "暗影步"
 		"hunter_ambush": return "埋伏"
+		"wardsmith_imbue": return "护甲注魔"
 	return skill
 
 func use_skill(player_idx: int, skill: String, params: Dictionary) -> Dictionary:
@@ -214,7 +221,29 @@ func use_skill(player_idx: int, skill: String, params: Dictionary) -> Dictionary
 		"mage_discard": return _mage_discard(player_idx, params)
 		"assassin_move": return _assassin_move(player_idx, params)
 		"hunter_ambush": return _hunter_ambush(player_idx, params)
+		"wardsmith_imbue": return _wardsmith_imbue(player_idx, params)
 	return {success=false, msg="未知技能"}
+
+# 护甲注魔（铸甲师，限整局一次）：弃手牌中的重击/穿心/吟唱 → 获得对应攻击属性的护甲
+# 重击→近战防具、穿心→远程防具、吟唱→法术防具（一一对应 ARMOR_DB 类型）
+func _wardsmith_imbue(player_idx: int, params: Dictionary) -> Dictionary:
+	var uid = int(params.get("card_uid", -1))
+	var cs = _ms.card_systems[player_idx]
+	var card = {}
+	for c in cs.hand:
+		if c.uid == uid: card = c; break
+	if card.is_empty() or not card.type_id in ["heavy", "pierce", "chant"]:
+		return {success=false, msg="请选择重击/穿心/吟唱"}
+	var armor_id = {"heavy": "near_armor", "pierce": "range_armor", "chant": "magic_armor"}[card.type_id]
+	cs.play_card(uid)  # 丢弃进弃牌堆
+	_ms.equipment.equip_armor(player_idx, armor_id)
+	_ms.add_log(player_idx, "护甲注魔: 装备%s" % Config.ARMOR_DB[armor_id].name)
+	return {success=true}
+
+# 被动：装备护甲耐久上限 +1（铸甲师 max_durability=4；由 equip_armor 调用）
+func armor_durability_bonus(player_idx: int) -> int:
+	if _ms.players[player_idx].char_id == "wardsmith": return 1
+	return 0
 
 func hand_limit_bonus(player_idx: int) -> int:
 	match _ms.players[player_idx].char_id:

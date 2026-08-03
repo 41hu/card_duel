@@ -31,7 +31,8 @@ func equip_armor(player_idx: int, armor_type_id: String) -> Dictionary:
 	var reject = match_ref.char_skills.can_equip(player_idx, "armor")
 	if reject != "": return {success=false, msg=reject}
 	var player = match_ref.get_player(player_idx)
-	var dur = 3
+	# 耐久上限：基础 3 + 角色被动加成（铸甲师 +1 → 4）
+	var dur = 3 + match_ref.char_skills.armor_durability_bonus(player_idx)
 	# 旧防具直接消失（防具卡打出时已进弃牌堆；若把 {id,data} 结构塞进弃牌堆会污染牌堆）
 	player.armor = {id=armor_type_id, data=Config.ARMOR_DB[armor_type_id], durability=dur, max_durability=dur}
 	return {success=true, msg="装备了" + Config.ARMOR_DB[armor_type_id].name}

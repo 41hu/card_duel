@@ -685,7 +685,33 @@ func _exec_skill(sk_id: String):
 	if sk_id == "mage_discard": _show_mage_pick()
 	elif sk_id == "assassin_move": _popup_move(-1)
 	elif sk_id == "hunter_ambush": _show_hunter_pick()
+	elif sk_id == "wardsmith_imbue": _show_wardsmith_pick()
 	else: _n().send_use_skill(sk_id)
+
+# 铸甲师护甲注魔：选一张重击/穿心/吟唱丢弃换对应护甲
+func _show_wardsmith_pick():
+	var c = Control.new()
+	c.name = "WardsmithPick"
+	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
+	var vb = _popup_box(c, 700, 460)
+	vb.add_child(_lbl("护甲注魔：选择重击/穿心/吟唱（限一次）"))
+	var me = _game_state.players[0] if _game_state.players[0].index == _player_index else _game_state.players[1]
+	var has_any = false
+	for card in me.get("hand", []):
+		if card.type_id in ["heavy", "pierce", "chant"]:
+			has_any = true
+			var armor = {"heavy": "近战防具", "pierce": "远程防具", "chant": "法术防具"}[card.type_id]
+			var b = _mkbtn("%s → %s" % [Config.card_name(card.type_id), armor])
+			b.pressed.connect(func(uid=card.uid): c.queue_free(); _n().send_use_skill("wardsmith_imbue", {"card_uid": uid}))
+			vb.add_child(b)
+	if not has_any:
+		vb.add_child(_lbl("没有可注魔的攻击牌"))
+	var close = _mkbtn("取消")
+	close.pressed.connect(func(): c.queue_free())
+	vb.add_child(close)
+	add_child(c)
 
 # 猎人埋伏：第一步选一张远程攻击牌 → 进入选格放置
 func _show_hunter_pick():

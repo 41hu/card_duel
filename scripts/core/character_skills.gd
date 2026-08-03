@@ -79,7 +79,6 @@ func on_turn_start(player_idx: int):
 	var p = _ms.players[player_idx]
 	p.skill_used_this_turn = false
 	p.free_move_used = false
-	p.damage_bonus = {}
 	p.healed_this_turn = 0
 	p.damage_reduction_used = false
 	p.pending_swordsman_skill = false
@@ -105,22 +104,33 @@ func can_attack_free(player_idx: int, card_type: String) -> bool:
 		return true
 	return false
 
-func set_damage_bonus(player_idx: int, types: Array, amount: int, label: String):
+# 法师强化 buff 当前总加成（AI 决策/伤害预览用）
+func mage_empower_value(player_idx: int) -> int:
 	var p = _ms.players[player_idx]
-	p.damage_bonus = {"types": types, "amount": amount, "label": label}
+	var total = 0
+	for b in p.buffs:
+		if b.type == "mage_empower": total += b.value
+	return total
 
 func on_attack_cast(player_idx: int, type_id: String) -> int:
 	var p = _ms.players[player_idx]
 	var opp = 1 - player_idx
-	var db = p.get("damage_bonus", {})
-	if not db.is_empty() and _ms.char_skills.is_immune(opp, "skill_damage"):
-		p.damage_bonus = {}
-		return 0
-	if db.is_empty(): return 0
-	if type_id in db.types:
-		p.damage_bonus = {}
-		_ms.add_log(player_idx, "%s: +%d伤害" % [db.label, db.amount])
-		return db.amount
+	# 释放魔法类型攻击（魔法/吟唱）→ 消耗全部法师强化层（buff 展示、可叠加）
+	if type_id in ["magic", "chant"]:
+		var total = mage_empower_value(player_idx)
+		if total > 0:
+			# 免疫检查：被免疫则只清除不加伤
+			if _ms.char_skills.is_immune(opp, "skill_damage"):
+				for i in range(p.buffs.size() - 1, -1, -1):
+					if p.buffs[i].type == "mage_empower":
+						p.buffs.remove_at(i)
+				_ms.add_log(player_idx, "法师强化被免疫，层数清空")
+				return 0
+			for i in range(p.buffs.size() - 1, -1, -1):
+				if p.buffs[i].type == "mage_empower":
+					p.buffs.remove_at(i)
+			_ms.add_log(player_idx, "魔法攻击消耗法师强化: +%d伤害" % total)
+			return total
 	return 0
 
 func on_opponent_turn_start(current_player_idx: int):
@@ -154,7 +164,8 @@ func has_active_skills(player_idx: int) -> Array:
 	var skills = []
 	match p.char_id:
 		"mage":
-			if p.damage_bonus.is_empty(): skills.append("mage_discard")
+			# 法术强化：始终可用（每回合限一次由 skill_turn_limit 控制；效果可叠加，打出魔法攻击后清除）
+			skills.append("mage_discard")
 		"assassin": skills.append("assassin_move")
 		"hunter":
 			# 埋伏：手牌有远程攻击牌（range/pierce）时才显示
@@ -376,8 +387,9 @@ func _mage_discard(player_idx: int, params: Dictionary) -> Dictionary:
 	var cs = _ms.card_systems[player_idx]
 	if not cs.has_card(uid): return {success=false, msg="没有此牌"}
 	cs.discard_card(uid)
-	set_damage_bonus(player_idx, ["magic", "chant"], 2, "法师强化")
-	_ms.add_log(player_idx, "弃牌强化:下次魔法+2")
+	# 法师强化 buff：每层+2、无限叠加、永久持续（打出魔法类型攻击后由 on_attack_cast 清除）
+	_ms.status.add_buff(player_idx, "mage_empower", 2, -2)
+	_ms.add_log(player_idx, "弃牌强化: 魔法强化+2(当前+%d)" % mage_empower_value(player_idx))
 	return {success=true}
 
 func _assassin_move(player_idx: int, params: Dictionary) -> Dictionary:

@@ -23,15 +23,12 @@ var _selected_uid: int = -1
 var _selected_type: String = ""
 var _discard_selected: Array = []
 @onready var card_info = $CardInfo
-@onready var skill_btn = $SkillBtn
-@onready var skill_confirm = $SkillConfirm
-@onready var skill_cancel = $SkillCancel
+@onready var skill_row = $SkillRow
 var _last_hp: Array = [-1, -1]
 var _last_turn: int = -1
 var _last_player: int = -1
 var _cheat_on: bool = false
 var _timer_left: int = -1
-var _skill_waiting: bool = false
 var _resp_popup: Control
 var _wpn_popup: Control
 
@@ -40,19 +37,6 @@ func _n():
 	return Network
 
 func _ready():
-	skill_cancel.pressed.connect(func():
-		skill_btn.visible = true
-		skill_confirm.visible = false
-		skill_cancel.visible = false
-		_skill_waiting = false
-	)
-	skill_btn.pressed.connect(func():
-		skill_btn.visible = false
-		skill_confirm.visible = true
-		skill_cancel.visible = true
-		_skill_waiting = false
-	)
-	skill_confirm.pressed.connect(_on_skill_use)
 	board.cell_clicked.connect(_on_board_cell_clicked)
 	me_info.status_clicked.connect(_on_status_clicked)
 	opp_info.status_clicked.connect(_on_status_clicked)
@@ -146,23 +130,15 @@ func _apply_safe_area():
 	var bottom = (win.y - sa.end.y) / sy
 	if left > 0:
 		me_info.offset_left = left + 12
-		skill_btn.offset_left += left
-		skill_btn.offset_right += left
-		skill_confirm.offset_left += left
-		skill_confirm.offset_right += left
-		skill_cancel.offset_left += left
-		skill_cancel.offset_right += left
+		skill_row.offset_left += left
+		skill_row.offset_right += left
 	if right > 0:
 		opp_info.offset_right = -(right + 12)
 	if bottom > 0:
 		end_turn_btn.offset_top -= bottom
 		end_turn_btn.offset_bottom -= bottom
-		skill_btn.offset_top -= bottom
-		skill_btn.offset_bottom -= bottom
-		skill_confirm.offset_top -= bottom
-		skill_confirm.offset_bottom -= bottom
-		skill_cancel.offset_top -= bottom
-		skill_cancel.offset_bottom -= bottom
+		skill_row.offset_top -= bottom
+		skill_row.offset_bottom -= bottom
 
 func _input(event):
 	if not OS.has_feature("editor"): return  # F12 作弊仅在编辑器运行时有效
@@ -459,10 +435,7 @@ func _refresh_all(state: Dictionary):
 		cancel_btn.visible = false
 		_status_msg_timer = 0
 		status_label.text = ""
-		var skills = me.get("active_skills", [])
-		skill_btn.visible = _is_my_turn and skills.size() > 0
-		if skills.size() > 0:
-			skill_btn.text = skills[0].name + ("…" if skills.size() > 1 else "")
+		_refresh_skill_row(me)
 		if me.get("pending_swordsman_skill", false):
 			_show_swordsman_popup()
 
@@ -773,30 +746,23 @@ func _enter_hunter_pos(card_uid: int):
 	cancel_btn.visible = true
 	status_label.text = "选择捕兽夹放置位置"
 
-func _on_skill_use():
-	var me = _game_state.players[0] if _game_state.players[0].index == _player_index else _game_state.players[1]
+# 技能按钮行：每个主动技能一个按钮直接使用（多技能角色并排显示，3+ 技能自动加宽）
+func _refresh_skill_row(me: Dictionary):
+	for c in skill_row.get_children():
+		skill_row.remove_child(c)  # 立即移除（queue_free 延迟删除，同帧多次刷新会残留重复按钮）
+		c.queue_free()
 	var skills = me.get("active_skills", [])
-	if skills.size() <= 1:
-		if skills.size() == 1:
-			_exec_skill(skills[0].id)
-	else:
-		_show_skill_select(skills)
-	skill_confirm.visible = false
-	skill_cancel.visible = false
-
-func _show_skill_select(skills: Array):
-	var c = Control.new()
-	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
-	var vb = _popup_box(c, 480, skills.size() * 90 + 120)
-	vb.add_child(_lbl("选择技能："))
+	if not _is_my_turn or skills.is_empty():
+		skill_row.visible = false
+		return
+	skill_row.visible = true
 	for sk in skills:
-		var b = _mkbtn(sk.name)
-		b.pressed.connect(func(sid=sk.id): c.queue_free(); _exec_skill(sid))
-		vb.add_child(b)
-	var cb = _mkbtn("取消"); cb.pressed.connect(func(): c.queue_free()); vb.add_child(cb)
-	add_child(c)
+		var b = Button.new()
+		b.text = sk.get("name", sk.get("id", "技能"))
+		b.add_theme_font_size_override("font_size", 28)
+		b.custom_minimum_size = Vector2(150, 110)
+		b.pressed.connect(func(sid = sk.id): _exec_skill(sid))
+		skill_row.add_child(b)
 
 func _show_mage_pick():
 	var c = Control.new()
@@ -804,7 +770,7 @@ func _show_mage_pick():
 	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
 	var vb = _popup_box(c, 700, 460)
-	vb.add_child(_lbl("选择一张要弃的牌："))
+	vb.add_child(_lbl("选择一张要弃的牌（魔法强化+2，可叠加，打出魔法攻击后清除）："))
 	var mh = (_game_state.players[0] if _game_state.players[0].index == _player_index else _game_state.players[1]).get("hand", [])
 	for card in mh:
 		var b = _mkbtn(Config.card_name(card.type_id))

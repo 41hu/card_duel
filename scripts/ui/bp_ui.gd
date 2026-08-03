@@ -35,16 +35,22 @@ func _ready():
 	if not cached.is_empty():
 		_on_bp_state(cached); _n().bp_state_cache = {}
 
-# 服务器 bp_state 中的角色集合（available + banned + picked 并集，按本地顺序优先）
+# 服务器 bp_state 中的角色集合（available + banned + picked 并集）
+# 排序固定为本地角色表顺序：角色被禁用/选择后停留在原位（仅变色+标记），
+# 不随状态重排（否则每次操作后按钮位置跳动）；服务器有而本地表没有的角色追加末尾
 func _server_char_ids() -> Array:
-	var sv := []
-	var seen := {}
+	var sv := {}
 	for cid in _bp_state.get("available_chars", []) + _bp_state.get("banned_chars", []) + _bp_state.get("picked_chars", []):
 		if str(cid) == "": continue  # picked_chars 初始占位空串，不是角色
-		if not seen.has(cid):
-			seen[cid] = true
-			sv.append(cid)
-	return sv
+		sv[cid] = true
+	var out := []
+	for cid in Config.CHARACTER_IDS:
+		if sv.has(cid):
+			out.append(cid)
+	for cid in sv:
+		if not cid in out:
+			out.append(cid)
+	return out
 
 # 本地配置有而服务器 bp_state 没有的角色（服务器未部署新角色数据）
 func _missing_chars() -> Array:

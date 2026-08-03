@@ -22,6 +22,7 @@ const _TITLE_CONDITIONS := {
 @onready var back_btn = $BackBtn
 
 var _current_title: String = ""
+var _title_owner: String = ""
 
 func _n():
 	if LocalGame.game != null: return LocalGame
@@ -73,7 +74,7 @@ func _show_title_condition():
 	title2_label.text = "条件：%s" % cond
 	await get_tree().create_timer(3.0).timeout
 	if _current_title != "":
-		title2_label.text = "称号：%s" % _current_title
+		title2_label.text = "%s获得称号：%s" % [_title_owner, _current_title]
 
 func _on_game_ended(result: Dictionary):
 	var winner = result.get("winner", -1)
@@ -82,6 +83,7 @@ func _on_game_ended(result: Dictionary):
 		title_label.add_theme_color_override("font_color", Style.WIN_GOLD)
 		title2_label.text = ""
 		_current_title = ""
+		_title_owner = ""
 		stats_label.text = ""
 		detail_label.text = "对方已断开连接"
 	else:
@@ -94,10 +96,15 @@ func _on_game_ended(result: Dictionary):
 			title_label.add_theme_color_override("font_color", Style.LOSE_RED)
 		var title = result.get("title", "")
 		_current_title = title
-		title2_label.text = "称号：%s" % title if title != "" else ""
-		if title != "":
-			title2_label.tooltip_text = "条件：%s" % _TITLE_CONDITIONS.get(title, "")
 		var names = result.get("names", ["P1", "P2"])
+		if title != "":
+			# 称号归属：显示谁获得了称号（联机=玩家名，本地=角色名）
+			_title_owner = names[winner] if winner >= 0 and winner < names.size() else "获胜者"
+			title2_label.text = "%s获得称号：%s" % [_title_owner, title]
+			title2_label.tooltip_text = "条件：%s" % _TITLE_CONDITIONS.get(title, "")
+		else:
+			_title_owner = ""
+			title2_label.text = ""
 		stats_label.text = _fmt_stats(result.get("stats", []), names)
 		# 优先显示玩家名（联机为创建房间时输入的名字），否则回退"玩家 N"
 		var wname = names[winner] if winner < names.size() else "玩家 %d" % (winner + 1)

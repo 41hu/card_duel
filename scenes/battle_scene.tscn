@@ -195,7 +195,7 @@ theme_override_font_sizes/font_size = 30
 horizontal_alignment = 1
 autowrap_mode = 3
 
-[node name="SkillBtn" type="Button" parent="." unique_id=2088021127]
+[node name="SkillRow" type="HBoxContainer" parent="." unique_id=2088021128]
 layout_mode = 1
 anchors_preset = 2
 anchor_top = 1.0
@@ -204,34 +204,6 @@ offset_left = 150.0
 offset_top = -190.0
 offset_right = 310.0
 offset_bottom = -70.0
+grow_horizontal = 0
 grow_vertical = 0
-theme_override_font_sizes/font_size = 32
-text = "技能"
-
-[node name="SkillConfirm" type="Button" parent="." unique_id=1556571759]
-visible = false
-layout_mode = 1
-anchors_preset = 2
-anchor_top = 1.0
-anchor_bottom = 1.0
-offset_left = 330.0
-offset_top = -190.0
-offset_right = 490.0
-offset_bottom = -70.0
-grow_vertical = 0
-theme_override_font_sizes/font_size = 32
-text = "确认技能"
-
-[node name="SkillCancel" type="Button" parent="." unique_id=247751449]
-visible = false
-layout_mode = 1
-anchors_preset = 2
-anchor_top = 1.0
-anchor_bottom = 1.0
-offset_left = 510.0
-offset_top = -190.0
-offset_right = 630.0
-offset_bottom = -70.0
-grow_vertical = 0
-theme_override_font_sizes/font_size = 32
-text = "取消"
+theme_override_constants/separation = 8

@@ -144,7 +144,6 @@ func _create_player(idx: int, char_id: String, char_data: Dictionary) -> Diction
 		weapon={}, armor={}, buffs=[], dots=[],
 		frozen=false, frozen_lockout=0, frozen_move=false,
 		damage_reduction_used=false, skill_used_this_turn=false, free_move_used=false,
-		damage_bonus={},
 		combo_attacks_this_turn=[],
 		upgrades={},
 		skill_counts={},

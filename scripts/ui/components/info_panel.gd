@@ -31,6 +31,7 @@ const _STATUS_ICONS := {
 	"calibration": {"icon": "准", "accent": Color(0.4, 0.85, 0.9), "name": "校准"},
 	"attack_up": {"icon": "强", "accent": Color(1.0, 0.65, 0.25), "name": "攻击强化"},
 	"attack_down": {"icon": "弱", "accent": Color(0.75, 0.75, 1.0), "name": "攻击弱化"},
+	"mage_empower": {"icon": "法", "accent": Color(0.75, 0.5, 1.0), "name": "魔法强化"},
 	"ap_attack_down": {"icon": "滞", "accent": Color(0.7, 0.6, 1.0), "name": "攻击行动点-1"},
 	"no_move": {"icon": "移", "accent": Color(0.85, 0.85, 0.85), "name": "无法移动"},
 }

@@ -82,6 +82,9 @@ func _real_damage(player_idx: int, type_id: String) -> int:
 		return 0
 	var dmg = int(calc.get("damage", 0))
 	if dmg <= 0: return 0
+	# 法师强化 buff 加成（魔法/吟唱）：叠加层全部计入（打出即消耗，由 on_attack_cast 清除）
+	if type_id in ["magic", "chant"]:
+		dmg += match_ref.char_skills.mage_empower_value(player_idx)
 	return dmg * match_ref.char_skills.get_attack_hit_count(player_idx, type_id)
 
 # 当前回合我能造成的最高真实伤害（斩杀判定用）
@@ -613,12 +616,12 @@ func decide_action(player_idx: int) -> Dictionary:
 							min_val = v
 							discard_uid = card.uid
 				if has_magic_atk and discard_uid >= 0:
+					# 放技能后伤害 = 当前真实伤害（含已有叠加层）+ 新层2
 					var buffed = 0
 					for card in hand:
-						if card.type_id == "chant":
-							buffed = max(buffed, p.magic_power + 5)
-						elif card.type_id == "magic":
-							buffed = max(buffed, p.magic_power + 2)
+						if card.type_id in ["magic", "chant"]:
+							buffed = max(buffed, _real_damage(player_idx, card.type_id))
+					buffed += 2
 					var s = _attack_score(player_idx, buffed, opp_idx, stance) + 2
 					if s > best_score:
 						best_score = s

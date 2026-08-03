@@ -96,10 +96,10 @@ func trigger_on_step(player_idx: int) -> int:
 			names.append(str(t.get("name", it.item_type)))
 		match_ref.items.remove_at(i)  # 触发即消耗（一次性道具）
 	if total > 0:
-		player.hp -= total
+		match_ref.add_log(player_idx, "踩%s-%dHP" % ["/".join(names), total])
+		match_ref._damage_player(player_idx, total)  # 统一伤害入口（内部含死亡判定）
 		match_ref.stats[player_idx]["damage_taken"] += total
 		match_ref.stats[player_idx]["damage_from_trap"] += total
-		match_ref.add_log(player_idx, "踩%s-%dHP" % ["/".join(names), total])
 	return total
 
 # ---- 摧毁 ----

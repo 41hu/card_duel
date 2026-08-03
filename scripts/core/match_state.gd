@@ -183,7 +183,6 @@ func _judgment_phase():
 				dot_types.append(dot.type)
 		var dd = combat.apply_dot_damage(current_player)
 		if dd.damage > 0:
-			player.hp -= dd.damage
 			# 伤害来源统计：DoT 计入受到伤害；施放者（source）计入造成伤害
 			stats[current_player]["damage_taken"] += dd.damage
 			stats[current_player]["damage_from_dot"] += dd.damage
@@ -192,11 +191,10 @@ func _judgment_phase():
 					stats[ds.source]["damage_dealt"] += ds.damage
 			var detail_str = "、".join(dd.details)
 			add_log(current_player, "%s共%d点伤害" % [detail_str, dd.damage])
+			_damage_player(current_player, dd.damage)  # 统一伤害入口（内部含死亡判定）
 			# 角色被动：受到 DoT 伤害后的处理（牧师清除对应 DoT）
 			char_skills.on_dot_damage(current_player, dot_types)
-			if player.hp <= 0:
-				_handle_death(current_player)
-				if phase == Config.Phase.GAME_OVER: return
+			if phase == Config.Phase.GAME_OVER: return
 	status.on_turn_start(current_player)
 	char_skills.on_opponent_turn_start(current_player)
 	_draw_phase()
@@ -470,7 +468,6 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		final_damage = char_skills.on_taking_damage(defender_idx, attacker_idx, final_damage)
 		if final_damage != before_skill:
 			formula += "-%d" % (before_skill - final_damage)
-		players[defender_idx].hp -= final_damage
 		# 对战统计：伤害（来源=攻击）
 		stats[attacker_idx]["damage_dealt"] += final_damage
 		stats[defender_idx]["damage_taken"] += final_damage
@@ -479,14 +476,15 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		var defender_name = Config.char_name(players[defender_idx].char_id)
 		var card_name = Config.card_name(pending_attack_card)
 		add_log(attacker_idx, "%s使用%s对%s造成：%s=%d点伤害" % [attacker_name, card_name, defender_name, formula, final_damage])
+		# 命中特效在死亡判定前（与重构前顺序一致：统计→日志→特效→判定）
 		combat.apply_on_hit_effects(attacker_idx, defender_idx, final_damage, attacker_last_type)
 		char_skills.on_attack_hit(attacker_idx, defender_idx, final_damage, attacker_last_type)
+		_damage_player(defender_idx, final_damage)  # 统一伤害入口（内部含死亡判定）
 	else:
 		# 0 伤害（被闪避/格挡到0等）：补充攻击方记录
 		char_skills.on_attack_failed_no_damage(attacker_idx, attacker_last_type)
 		add_log(attacker_idx, "%s使用%s攻击未造成伤害" % [Config.char_name(players[attacker_idx].char_id), Config.card_name(pending_attack_card)])
-	if players[defender_idx].hp <= 0: _handle_death(defender_idx)
-	if phase == Config.Phase.GAME_OVER: return
+	if phase == Config.Phase.GAME_OVER: return  # 死亡判定已由 _damage_player 统一处理
 	# 多段攻击：还有段则进入下一段响应窗口（每段独立结算；末段才消耗卡）
 	# 注意：_begin_attack_segment 内部会自增段号，这里不能重复自增
 	if pending_attack_segment < pending_attack_segments:
@@ -518,14 +516,13 @@ func _handle_move_card(player_idx: int, card: Dictionary) -> Dictionary:
 		return {success=false, msg="本回合无法移动"}
 	for _s in range(steps):
 		if not movement.move_player(player_idx, direction): break
+		if phase == Config.Phase.GAME_OVER: break  # 踩陷阱致死淘汰：停止后续移动
 		stats[player_idx]["moves"] += 1  # 对战统计：移动步数
 	_use_card(player_idx, card)
 	add_log(player_idx, "移动到%d" % players[player_idx].position)
 	if movement.get_distance() == 0:
 		_moved_to_adjacent_this_turn = true  # 突刺武器：移动贴脸后额外+3
-	var td = item_system.trigger_on_step(player_idx)
-	if td > 0:
-		_check_any_death()  # 移动者或被推的对方都可能踩道具致死（内部已扣血）
+	item_system.trigger_on_step(player_idx)  # 死亡判定由 _damage_player 统一处理
 	return {success=true}
 
 func _handle_destroy(player_idx: int, card: Dictionary) -> Dictionary:
@@ -625,6 +622,15 @@ func _check_any_death():
 		if players[i].hp <= 0:
 			_handle_death(i)
 			return
+
+# 统一伤害入口：所有伤害来源（攻击/DoT/陷阱等）走这里扣血，
+# 扣血后自动判定死亡（防重入：复活/结束阶段不重复判定）。
+# 彻底杜绝"新增伤害来源漏掉死亡判定"类 bug。
+func _damage_player(player_idx: int, amount: int):
+	var p = players[player_idx]
+	p.hp -= amount
+	if p.hp <= 0 and phase != Config.Phase.RESURRECTING and phase != Config.Phase.GAME_OVER:
+		_check_any_death()
 
 func _handle_death(player_idx: int):
 	add_log(player_idx, "HP归零，复活...")

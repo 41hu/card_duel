@@ -365,9 +365,7 @@ func _assassin_move(player_idx: int, params: Dictionary) -> Dictionary:
 	# 突刺武器：暗影步位移到贴脸同样触发额外+3（与移动卡一致）
 	if _ms.movement.get_distance() == 0:
 		_ms._moved_to_adjacent_this_turn = true
-	var td = _ms.item_system.trigger_on_step(player_idx)
-	if td > 0:
-		_ms._check_any_death()  # trigger_on_step 内部已扣血，这里只补死亡判定
+	_ms.item_system.trigger_on_step(player_idx)  # 死亡判定由 _damage_player 统一处理
 	_ms.add_log(player_idx, "暗影步")
 	return {success=true}
 

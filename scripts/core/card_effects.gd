@@ -47,16 +47,14 @@ func _atk_attract(player_idx: int, card: Dictionary):
 		return {success=false, msg="无法吸引（板边/位置被占）"}  # 失败不消耗卡
 	_m.card_systems[player_idx].play_card(card.uid)
 	_m.add_log(player_idx, "吸引")
-	_m._check_any_death()
-	return {success=true}
+	return {success=true}  # 死亡判定由 _damage_player 统一处理
 
 func _atk_deter(player_idx: int, card: Dictionary):
 	if not _m.movement.deter(player_idx):
 		return {success=false, msg="无法威慑（对方在板边）"}  # 失败不消耗卡
 	_m.card_systems[player_idx].play_card(card.uid)
 	_m.add_log(player_idx, "威慑")
-	_m._check_any_death()
-	return {success=true}
+	return {success=true}  # 死亡判定由 _damage_player 统一处理
 
 func _atk_freeze(player_idx: int, card: Dictionary):
 	# 冻结冷却中（不能连续冻结）：卡不消耗、明确提示

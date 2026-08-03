@@ -3,7 +3,7 @@ extends RefCounted
 
 const CHARACTER_DB = {
 	"swordsman":   {name="剑士",   hp=28, near=7, range=3, magic=2, skill="swordsman",   skill_desc="近战命中后：抽1牌或回2HP（每回合限一）"},
-	"archer":      {name="弓手",   hp=24, near=2, range=8, magic=2, skill="archer",      skill_desc="每回合首次普通远程不消耗攻击点"},
+	"archer":      {name="神射手", hp=24, near=2, range=8, magic=2, skill="archer",      skill_desc="每回合首次普通远程不消耗攻击点"},
 	"mage":        {name="法师",   hp=22, near=2, range=2, magic=8, skill="mage",         skill_desc="弃1手牌，魔法强化+2（每回合限一次，可叠加；打出魔法攻击后清除）"},
 	"paladin":     {name="圣骑士", hp=26, near=4, range=1, magic=3, skill="paladin",      skill_desc="每回合首次受伤-2（最低0）"},
 	"assassin":    {name="刺客",   hp=22, near=7, range=5, magic=1, skill="assassin",     skill_desc="每回合免费移动1格（独立于位移点）"},

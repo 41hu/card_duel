@@ -95,7 +95,7 @@ _advance_to_next_player()  # 切换到对手
 | `on_turn_start(idx)` | 回合开始 | void | 重置状态、分配AP(邪术师+1) |
 | `on_turn_end(idx)` | 回合结束 | void | 邪术师额外抽牌 |
 | `on_opponent_turn_start(curr)` | 对方回合开始 | void | 未来扩展 |
-| `can_attack_free(idx, type)` | 判断是否免费 | bool | 弓手首远程免费 |
+| `can_attack_free(idx, type)` | 判断是否免费 | bool | 神射手首远程免费 |
 | `on_attack_cast(idx, type)` | 攻击牌打出 | int(伤害加成) | 法师+2魔伤 |
 | `on_attack_hit(att, def, dmg, type)` | 攻击命中后 | void | 剑士回血 |
 | `on_taking_damage(def, att, dmg)` | 受伤前 | int(修正后伤害) | 圣骑士减伤/狂战士加攻 |

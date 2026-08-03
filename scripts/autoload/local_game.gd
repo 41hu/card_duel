@@ -74,6 +74,7 @@ func start_ai_bp(difficulty: int):
 	ai_difficulty = difficulty
 	ai_idx = 1  # 人类永远 P0，AI 是 P1
 	game = MatchStateClass.new()
+	game.ai_difficulty = difficulty  # 地狱难度：AI 高复活率（init_match 不重置该字段）
 	game.no_timeout_for = 0  # 人机 BP：人类不限时（AI 自动操作不依赖计时）
 	game.bp_state_changed.connect(_on_bp_state_changed)
 	game.bp.reset()
@@ -108,6 +109,7 @@ func start_ai_game(p1_char: String, p2_char: String, difficulty: int):
 	ai_idx = 1  # 人类永远 P0，AI 是 P1
 	last_record_path = ""
 	game = MatchStateClass.new()
+	game.ai_difficulty = difficulty  # 地狱难度：AI 高复活率（init_match 不重置该字段）
 	game.no_timeout_for = 0  # 人机对战：人类(P0)不限时，AI 保留（自动行动不影响）
 	game.state_changed.connect(_on_state)
 	game.weapon_prompt.connect(_on_weapon)

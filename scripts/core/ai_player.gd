@@ -5,12 +5,14 @@
 #   · 角色定位：基础标签 + 面板动态漂移，AI 知道自己该贴脸/中距离/自由位
 #   · 记牌：从日志统计打出/响应消耗 + 数弃牌堆，推算某类攻击牌全局剩余
 #   · 资源期：双方火力枯竭时转入攒资源模式（保留牌、打强化/天赐、不无脑出手）
-# 难度三档：easy=粗打分+大扰动+装傻 / normal=定位+真实伤害+斩杀保命 / hard=全部+记牌资源期+读牌。
+# 难度四档：easy=粗打分+大扰动+装傻 / normal=定位+真实伤害+斩杀保命 / hard=全部+记牌资源期+读牌 /
+# hell（内测）= 全部 + 全知（直接读对手手牌：响应预测/威胁评估精确化）+ 高复活率。
 extends RefCounted
 
 const DIFF_EASY = 0
 const DIFF_NORMAL = 1
 const DIFF_HARD = 2
+const DIFF_HELL = 3
 
 var match_ref
 var difficulty: int = DIFF_NORMAL
@@ -85,7 +87,16 @@ func _real_damage(player_idx: int, type_id: String) -> int:
 	# 法师强化 buff 加成（魔法/吟唱）：叠加层全部计入（打出即消耗，由 on_attack_cast 清除）
 	if type_id in ["magic", "chant"]:
 		dmg += match_ref.char_skills.mage_empower_value(player_idx)
-	return dmg * match_ref.char_skills.get_attack_hit_count(player_idx, type_id)
+	var hits = match_ref.char_skills.get_attack_hit_count(player_idx, type_id)
+	# 圣骑士被动：每回合首次受伤-2（最低0）——只读模拟（直接调 on_taking_damage 会
+	# 消耗真实 damage_reduction_used 状态导致实际攻击不减伤）；多段攻击只减免第一段
+	var opp_p = match_ref.get_player(opp)
+	if opp_p.char_id == "paladin" and not opp_p.damage_reduction_used:
+		var total = 0
+		for i in range(hits):
+			total += (max(0, dmg - 2) if i == 0 else dmg)
+		return total
+	return dmg * hits
 
 # 当前回合我能造成的最高真实伤害（斩杀判定用）
 func _my_best_damage(player_idx: int) -> int:
@@ -96,8 +107,15 @@ func _my_best_damage(player_idx: int) -> int:
 	return best
 
 # 对手当前能造成的最高真实伤害（含对手武器/Buff，防斩判定用）
+# 地狱全知：按对手手牌实际攻击牌计算（普通难度按定位理论最大值，可能高估）
 func _opp_best_damage(player_idx: int) -> int:
 	var opp = 1 - player_idx
+	if difficulty >= DIFF_HELL:
+		var best = 0
+		for c in match_ref.card_systems[opp].hand:
+			if c.get("type_id", "") in ["near", "heavy", "range", "pierce", "magic", "chant"]:
+				best = max(best, _real_damage(opp, c.type_id))
+		return best
 	var role = _current_role(opp)
 	var best = 0
 	for t in _role_types(role):
@@ -148,9 +166,45 @@ func _global_attack_left() -> int:
 		total += _global_left(t)
 	return total
 
+# ---------- 地狱全知（读对手真实手牌） ----------
+# 对手手牌中某类型牌数量（难度不足时退化调用方逻辑，不直接使用）
+func _opp_hand_count(opp_idx: int, type_id: String) -> int:
+	var n = 0
+	for c in match_ref.card_systems[opp_idx].hand:
+		if c.get("type_id", "") == type_id:
+			n += 1
+	return n
+
+# 对手手牌中攻击牌数量（地狱：响应后是否有后续威胁）
+func _opp_hand_attack_count(opp_idx: int) -> int:
+	var n = 0
+	for c in match_ref.card_systems[opp_idx].hand:
+		if c.get("type_id", "") in ["near", "heavy", "range", "pierce", "magic", "chant"]:
+			n += 1
+	return n
+
+# 地狱：打出某类型攻击的响应风险（对手手牌精确判断）
+# 魔法闪避可防所有攻击（0 伤害）风险最高；格挡（近战系）/牵制（远程系）次之
+func _hell_response_risk(opp_idx: int, type_id: String) -> int:
+	if _opp_hand_count(opp_idx, "magic") > 0:
+		return 14
+	if type_id in ["near", "heavy"] and _opp_hand_count(opp_idx, "near") > 0:
+		return 8
+	if type_id in ["range", "pierce", "magic", "chant"] and _opp_hand_count(opp_idx, "range") > 0:
+		return 6
+	return 0
+
 # 对手贴脸伤害（近战/重击最大值）——远程型评估"贴脸安不安全"用
 func _opp_near_threat(player_idx: int) -> int:
-	return max(_real_damage(1 - player_idx, "near"), _real_damage(1 - player_idx, "heavy"))
+	var opp = 1 - player_idx
+	# 地狱全知：对手手里没有近战/重击 → 贴脸威胁 0（普通难度按面板理论值估算）
+	if difficulty >= DIFF_HELL:
+		var best = 0
+		for c in match_ref.card_systems[opp].hand:
+			if c.get("type_id", "") in ["near", "heavy"]:
+				best = max(best, _real_damage(opp, c.type_id))
+		return best
+	return max(_real_damage(opp, "near"), _real_damage(opp, "heavy"))
 
 # 指定格是否有道具（陷阱/捕兽夹）——位移/暗影步踩中会受伤
 func _item_at(pos: int) -> bool:
@@ -161,7 +215,10 @@ func _item_at(pos: int) -> bool:
 
 # 对手闪避威胁：hard 读牌——对手用过魔法闪避且手牌多（可能有闪避牌存量）
 # 此时爆发牌大概率被闪避，应先骗响应消耗闪避再打主属性
+# 地狱全知：直接看对手手牌有没有魔法闪避牌（精确）
 func _opp_dodge_threat(player_idx: int) -> bool:
+	if difficulty >= DIFF_HELL:
+		return _opp_hand_count(1 - player_idx, "magic") > 0
 	if difficulty < DIFF_HARD: return false
 	var used = _opp_used_responses.get(1 - player_idx, [])
 	var magic_used = 0
@@ -294,6 +351,7 @@ func decide_action(player_idx: int) -> Dictionary:
 	var opp_role = stance.get("opp_role", "near")
 	var is_hard = difficulty >= DIFF_HARD
 	var is_norm = difficulty >= DIFF_NORMAL
+	var is_hell = difficulty >= DIFF_HELL
 
 	var best_score: int = -99999
 	var best_action: Dictionary = {}
@@ -346,6 +404,9 @@ func decide_action(player_idx: int) -> Dictionary:
 				if my_magic <= 1:
 					continue
 		var s = _attack_score(player_idx, dmg, opp_idx, stance)
+		# 地狱全知：对手手牌精确响应风险惩罚（闪避/格挡/牵制可防则攻击预期下降）
+		if is_hell:
+			s -= _hell_response_risk(opp_idx, tid)
 		# 骗响应连招（normal+，每回合限一次）：手牌有主属性爆发（定位卡高伤害）时，
 		# 低价值攻击（非定位、非唯一保命牌）先手消耗对手响应牌，主属性随后爆发——
 		# 对手不响应则骗响应卡本身也耗血，响应则消耗其响应牌（hard 记牌可读）。
@@ -353,8 +414,10 @@ func decide_action(player_idx: int) -> Dictionary:
 			var is_main_card = tid in _role_types(my_role)
 			var is_last_resp = tid in ["near", "range", "magic"] and resp_count <= 1
 			var dodge_threat = _opp_dodge_threat(player_idx)
+			# 地狱全知：对手手牌无任何响应牌 → 骗响应无意义，直接主属性爆发
+			var hell_no_resp = is_hell and (_opp_hand_count(opp_idx, "magic") + _opp_hand_count(opp_idx, "near") + _opp_hand_count(opp_idx, "range")) == 0
 			# 骗响应：常规要求伤害明显低于主属性；对手闪避威胁大时放宽（接近主属性的也能当骗卡）
-			if not is_main_card and not is_last_resp and match_ref.card_systems[opp_idx].hand.size() >= 2 \
+			if not hell_no_resp and not is_main_card and not is_last_resp and match_ref.card_systems[opp_idx].hand.size() >= 2 \
 					and (dmg * 2 < _my_best_damage(player_idx) or dodge_threat):
 				var bonus = min(18, _my_best_damage(player_idx) * 2 + 6)
 				if dodge_threat: bonus += 10  # 对手闪避存量高 → 骗卡消耗闪避的收益大
@@ -441,6 +504,11 @@ func decide_action(player_idx: int) -> Dictionary:
 				d_target = {"destroy_target": "equip", "equip_type": "armor"}
 			elif match_ref.card_systems[opp_idx].hand.size() > 0:
 				s = 8 + min(4, match_ref.card_systems[opp_idx].hand.size() * 2)  # 拆手牌（对手牌越多越值）
+				# 地狱全知：对手手牌攻击牌多 → 拆手牌价值暴涨（废掉其输出/响应资源）
+				if is_hell:
+					var opp_atk = _opp_hand_attack_count(opp_idx)
+					if opp_atk >= 2: s = max(s, 16)
+					elif opp_atk == 1: s = max(s, 10)
 				d_target = {"destroy_target": "hand"}
 			# 对手无牌无装备 → s=0 不打（避免卡消耗无效果）
 			if s > best_score:
@@ -448,6 +516,9 @@ func decide_action(player_idx: int) -> Dictionary:
 				best_action = {"action": "play_card", "card_uid": card.uid, "extra": d_target}
 		if card.type_id == "seize":
 			var s = 9 + min(6, match_ref.card_systems[opp_idx].hand.size() * 2)  # 对手手牌越多夺牌收益越大
+			# 地狱全知：对手手牌有攻击牌 → 夺取可能抢走其核心输出，价值上调
+			if is_hell and _opp_hand_attack_count(opp_idx) >= 1:
+				s += 5
 			if s > best_score:
 				best_score = s
 				best_action = {"action": "play_card", "card_uid": card.uid}
@@ -734,6 +805,9 @@ func decide_response(defender_idx: int, attack_card: String) -> Dictionary:
 	var atk_dmg = int(match_ref.attacker_last_damage)
 	var hp_safe = float(p.hp) / max(p.max_hp, 1) > 0.6
 	if difficulty >= DIFF_NORMAL and atk_dmg <= 2 and hp_safe:
+		return {respond=false, card_uid=-1}
+	# 地狱全知：攻击者手牌已无攻击牌（本次是最后威胁）→ 非斩杀伤害全部省牌
+	if difficulty >= DIFF_HELL and _opp_hand_attack_count(1 - defender_idx) == 0 and atk_dmg < p.hp:
 		return {respond=false, card_uid=-1}
 	# 闪避（魔法）价值最高：任意攻击可闪；但魔法卡同时也是自己的攻击输出，省着用
 	if magic_uid >= 0:

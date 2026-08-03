@@ -71,6 +71,10 @@ var no_timeout_for: int = -1
 var battle_record: Array = []
 var _last_rec_key: String = ""
 
+# AI 难度（人机对战由 local_game 设置；-1 = 无 AI 特权，联机/自我对战不受影响）
+# 地狱难度：P1（AI）复活高概率且不污染牌库（牌堆检索回复卡，无卡时概率复苏）
+var ai_difficulty: int = -1
+
 func _timeout_enabled(player_idx: int) -> bool:
 	if disable_timeout: return false
 	if no_timeout_for >= 0 and player_idx == no_timeout_for: return false
@@ -637,6 +641,11 @@ func _handle_death(player_idx: int):
 	_action_deadline = 0
 	_discard_deadline = 0
 	card_systems[player_idx].discard_all()
+	# 地狱难度 AI（人机 P1）：不污染牌库——不抽 4 张（会大幅扰动共享牌堆/记牌），
+	# 改为牌堆检索回复卡（仅拿走一张），检索不到则正常淘汰
+	if ai_difficulty >= Config.AI_DIFF_HELL and player_idx == 1:
+		_hell_resurrect(player_idx)
+		return
 	var drawn = card_systems[player_idx].draw_cards(4)
 	if drawn.is_empty(): _check_permanent_death(player_idx); return
 	for c in drawn:
@@ -651,6 +660,28 @@ func _handle_death(player_idx: int):
 		phase = Config.Phase.PLAYER_TURN; response_pending = false
 		state_changed.emit(get_full_state())
 	else: _check_permanent_death(player_idx)
+
+# 地狱难度 AI 复活：牌堆检索一张回复卡使用（不抽 4 张，牌库只少一张、零额外扰动）；
+# 检索不到或回复量不足 → 淘汰（与普通规则一致，不做概率复活）
+func _hell_resurrect(player_idx: int):
+	var cs = card_systems[player_idx]
+	var heal = {}
+	for i in range(cs.deck.size() - 1, -1, -1):
+		if cs.deck[i].type_id in ["heal_3", "heal_5"]:
+			heal = cs.deck.pop_at(i)
+			break
+	if not heal.is_empty():
+		cs.add_to_hand(heal)
+		while cs.has_heal_card() and players[player_idx].hp <= 0:
+			_use_heal_in_resurrection(player_idx)
+	if players[player_idx].hp <= 0:
+		_check_permanent_death(player_idx)
+		return
+	add_log(player_idx, "地狱AI复苏成功")
+	stats[player_idx]["resurrected"] += 1  # 对战统计：复活次数
+	players[player_idx].frozen = false; players[player_idx].frozen_lockout = 0
+	phase = Config.Phase.PLAYER_TURN; response_pending = false
+	state_changed.emit(get_full_state())
 
 func _use_heal_in_resurrection(player_idx: int):
 	var card = card_systems[player_idx].use_heal_card()

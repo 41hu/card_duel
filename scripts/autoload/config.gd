@@ -33,6 +33,12 @@ enum DamageType { PHYSICAL = 0, RANGED = 1, MAGICAL = 2 }
 
 enum ResponseType { BLOCK = 0, RESTRAIN = 1, DODGE = 2 }
 
+# AI 难度档位（与 ai_player.gd 常量一致；地狱=内测全知+高复活）
+const AI_DIFF_EASY = 0
+const AI_DIFF_NORMAL = 1
+const AI_DIFF_HARD = 2
+const AI_DIFF_HELL = 3
+
 # ---------- 卡牌数据（来自 card_data.gd）----------
 var CARD_DB = CardData.CARD_DB
 var CARD_COUNTS = CardData.CARD_COUNTS

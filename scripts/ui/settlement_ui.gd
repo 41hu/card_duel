@@ -55,7 +55,11 @@ func _ready():
 			var result = LocalGame.game.game_result if LocalGame.game != null else Network.last_game_result
 			var path = _export_record(result)
 			if path != "":
-				detail_label.text = "对局数据已导出：%s" % path
+				# 导出平台（APK 等）：文件在应用数据目录（用户不可见），提示已复制到剪贴板可直接粘贴分享
+				if OS.has_feature("editor"):
+					detail_label.text = "对局数据已导出：%s" % path
+				else:
+					detail_label.text = "已导出并复制到剪贴板（粘贴到聊天框即可分享）"
 				detail_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			else:
 				detail_label.text = "导出失败"
@@ -169,7 +173,10 @@ func _export_record(result: Dictionary) -> String:
 	var w = result.get("winner", -1)
 	lines.append("胜者: %s（%s）| 称号: %s" % [
 		names[w] if w >= 0 and w < names.size() else "?", result.get("reason", ""), result.get("title", "")])
-	var dir = "res://battle_records"
+	# 导出路径：编辑器写项目目录（方便直接取文件）；导出平台（APK/PC 打包）res:// 只读，
+	# 写 user:// 应用数据目录；移动端另复制到剪贴板（文件路径用户不可见，粘贴即可分享）
+	var is_editor = OS.has_feature("editor")
+	var dir = "res://battle_records" if is_editor else "user://battle_records"
 	DirAccess.make_dir_recursive_absolute(dir)
 	var ts = Time.get_datetime_string_from_system().replace(":", "-").replace(" ", "_")
 	var path = "%s/battle_%s.txt" % [dir, ts]
@@ -177,6 +184,8 @@ func _export_record(result: Dictionary) -> String:
 	if f:
 		f.store_string("\n".join(lines))
 		f.close()
+		if not is_editor:
+			DisplayServer.clipboard_set("\n".join(lines))
 		if LocalGame.game != null:
 			LocalGame.last_record_path = path
 		return path

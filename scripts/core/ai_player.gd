@@ -643,23 +643,36 @@ func decide_action(player_idx: int) -> Dictionary:
 							best_score = s
 							best_action = {"action": "use_skill", "skill": "assassin_move", "direction": dir}
 			"wardsmith_imbue":
-				# 护甲注魔：无防具且手牌有重击/穿心/吟唱 → 换护甲（铸甲师 4 耐久强生存）；
-				# 危险/保命档价值更高；换伤害最低的攻击牌（保留输出）
+				# 护甲注魔（改版）：不耗卡，直接选护甲装备（铸甲师 4 耐久强生存）；
+				# 按对方主要进攻手段选对应护甲（与防具牌同逻辑）；价值高于防具牌（免费且4耐久，
+				# 防具牌仅3耐久还要耗卡）→ 无防具时注魔优先，避免浪费核心技能；
+				# 危险/保命档价值更高
 				if p.armor.is_empty():
-					var imbue_uid = -1
-					var min_dmg = 99999
+					var imbue_atype = _opp_main_attack_type(player_idx)
+					var imbue_armor = {"near": "near_armor", "range": "range_armor", "magic": "magic_armor"}.get(imbue_atype, "near_armor")
+					var s = 20
+					if stance.get("stance", "") in ["flee", "danger"]: s = 22  # 危险时防御优先
+					if s > best_score:
+						best_score = s
+						best_action = {"action": "use_skill", "skill": "wardsmith_imbue", "armor_type": imbue_armor}
+			"wardsmith_repair":
+				# 修复：护甲破损 + 手牌有匹配强化卡 + 2攻击点 → 弃卡修复1耐久（满耐久可完全免疫对方一次攻击）
+				if not p.armor.is_empty() and p.armor.get("durability", 0) < p.armor.get("max_durability", 3):
+					var expect_type = {"near_armor": "heavy", "range_armor": "pierce", "magic_armor": "chant"}.get(p.armor.id, "")
+					var repair_uid = -1
 					for card in hand:
-						if card.type_id in ["heavy", "pierce", "chant"]:
-							var d = _real_damage(player_idx, card.type_id)
-							if d < min_dmg:
-								min_dmg = d
-								imbue_uid = card.uid
-					if imbue_uid >= 0:
-						var s = 12
-						if stance.get("stance", "") in ["flee", "danger"]: s = 18  # 危险时防御优先
+						if card.type_id == expect_type:
+							repair_uid = card.uid
+							break
+					if repair_uid >= 0 and p.ap_attack >= 2:
+						# 护甲能防住对方主要攻击才值得修；保命档破损也修（总比碎了裸奔好）
+						var atype = "near" if p.armor.id == "near_armor" else ("range" if p.armor.id == "range_armor" else "magic")
+						var s = 0
+						if atype == _opp_main_attack_type(player_idx): s = 14
+						elif stance.get("stance", "") in ["flee", "danger"]: s = 10
 						if s > best_score:
 							best_score = s
-							best_action = {"action": "use_skill", "skill": "wardsmith_imbue", "card_uid": imbue_uid}
+							best_action = {"action": "use_skill", "skill": "wardsmith_repair", "card_uid": repair_uid}
 			"hunter_ambush":
 				if p.ap_attack >= 1:
 					var ambush_uid = -1

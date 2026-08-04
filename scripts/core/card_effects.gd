@@ -102,13 +102,18 @@ func _blessing(player_idx: int, card: Dictionary):
 
 func _trap(player_idx: int, card: Dictionary):
 	var p = _m.players[player_idx]
-	var pos = card.get("trap_pos", p.position + (1 if player_idx == 1 else -1))
+	var geo = _m.movement.geometry
+	# 默认放自己朝对手方向一格（客户端未指定 trap_pos 时的兜底）
+	var default_pos = geo.step(p.position, geo.direction_between(p.position, _m.players[1 - player_idx].position))
+	var pos: Vector2i = geo.from_dict(card.get("trap_pos", {}))
+	if not geo.is_valid(pos):
+		pos = default_pos
 	# 一张通用道具卡：放什么道具由角色决定（默认陷阱，猎人=捕兽夹等）
 	var item_type = _m.char_skills.get_item_type(player_idx)
 	if _m.item_system.place_item(player_idx, item_type, pos):
 		_m.card_systems[player_idx].play_card(card.uid)
 		var it_name = _m.item_system.get_item_type(item_type).get("name", item_type)
-		_m.add_log(player_idx, "%s于%d" % [it_name, pos])
+		_m.add_log(player_idx, "%s于%s" % [it_name, geo.to_text(pos)])
 		return {success=true}
 	return {success=false, msg="无法放置"}
 

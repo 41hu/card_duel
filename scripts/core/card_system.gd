@@ -1,4 +1,7 @@
 # card_system.gd — 卡牌系统（牌堆管理、手牌、弃牌堆、抽牌、洗牌）
+# 双模式：
+#   · 共享模式（默认，人机/联机）：传入共享 deck/discard 引用，双方同一副牌
+#   · 独立模式（PVE 构筑）：各自一副牌堆/弃牌堆（duplicate + 独立洗牌）
 extends RefCounted
 
 var deck: Array = []          # [{uid, type_id}]
@@ -7,10 +10,11 @@ var discard: Array = []       # [{uid, type_id}]
 
 func _init(initial_deck: Array, shared_discard = null):
 	if shared_discard != null:
-		# 共享模式：使用外部传入的 deck 和 discard 引用
+		# 共享模式：使用外部传入的 deck 和 discard 引用（外部已洗牌）
 		deck = initial_deck
 		discard = shared_discard
 	else:
+		# 独立模式：自己的牌堆副本 + 洗牌
 		deck = initial_deck.duplicate()
 		shuffle_deck()
 

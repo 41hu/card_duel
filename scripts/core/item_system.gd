@@ -43,7 +43,7 @@ func get_items() -> Array:
 	return match_ref.items
 
 # 指定格子的道具
-func get_items_at(pos: int) -> Array:
+func get_items_at(pos: Vector2i) -> Array:
 	var out = []
 	for it in match_ref.items:
 		if it.position == pos:
@@ -52,7 +52,10 @@ func get_items_at(pos: int) -> Array:
 
 # ---- 放置 ----
 # 规则：目标格不能有单位；按道具类型的堆叠规则校验
-func place_item(player_idx: int, item_type: String, pos: int) -> bool:
+func place_item(player_idx: int, item_type: String, pos: Vector2i) -> bool:
+	var geo = match_ref.movement.geometry
+	if not geo.is_valid(pos):
+		return false
 	var p0 = match_ref.get_player(0)
 	var p1 = match_ref.get_player(1)
 	if pos == p0.position or pos == p1.position:
@@ -107,7 +110,7 @@ func trigger_on_step(player_idx: int) -> int:
 #   "one"（默认）：拆除该格一个道具（后放的先拆）
 #   "all"：一张摧毁清掉该格全部同类道具
 #   "none"：该类型道具不可被摧毁卡拆除（如某些特殊道具，免疫摧毁）
-func destroy_item_at(pos: int) -> bool:
+func destroy_item_at(pos: Vector2i) -> bool:
 	for i in range(match_ref.items.size() - 1, -1, -1):
 		var it = match_ref.items[i]
 		if it.position != pos:

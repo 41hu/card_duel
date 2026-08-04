@@ -393,8 +393,8 @@ func _mage_discard(player_idx: int, params: Dictionary) -> Dictionary:
 	return {success=true}
 
 func _assassin_move(player_idx: int, params: Dictionary) -> Dictionary:
-	var dir = params.get("direction", 0)
-	if dir == 0: return {success=false, msg="请选择方向"}
+	var dir: Vector2i = _ms.movement.geometry.from_dict(params.get("direction", {}))
+	if dir == Vector2i.ZERO: return {success=false, msg="请选择方向"}
 	# 禁移动检查统一在 movement.move_player 兜底（霜咬同样限制暗影步）
 	if not _ms.movement.move_player(player_idx, dir): return {success=false, msg="无法移动"}
 	# 突刺武器：暗影步位移到贴脸同样触发额外+3（与移动卡一致）
@@ -410,7 +410,7 @@ func _hunter_ambush(player_idx: int, params: Dictionary) -> Dictionary:
 	if p.ap_attack < 1:
 		return {success=false, msg="攻击行动点不足"}
 	var uid = int(params.get("card_uid", -1))
-	var pos = int(params.get("pos", params.get("trap_pos", -1)))
+	var pos: Vector2i = _ms.movement.geometry.from_dict(params.get("pos", params.get("trap_pos", {})))
 	var cs = _ms.card_systems[player_idx]
 	# 校验选中的卡在手牌且是远程攻击牌
 	var card = {}
@@ -423,5 +423,5 @@ func _hunter_ambush(player_idx: int, params: Dictionary) -> Dictionary:
 		return {success=false, msg="无法放置"}
 	p.ap_attack -= 1
 	cs.play_card(uid)  # 卡进弃牌堆，不触发攻击/响应
-	_ms.add_log(player_idx, "埋伏: 捕兽夹于%d" % pos)
+	_ms.add_log(player_idx, "埋伏: 捕兽夹于%s" % _ms.movement.geometry.to_text(pos))
 	return {success=true}

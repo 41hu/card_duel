@@ -132,9 +132,6 @@ func get_card_ap_cost(type_id: String) -> int:
 		return CARD_DB[type_id].cost
 	return 0
 
-func clamp_position(pos: int) -> int:
-	return clamp(pos, 0, 10)
-
 # 武器 type 是否匹配伤害类型（near→PHYSICAL, range→RANGED, magic→MAGICAL）
 func weapon_matches_damage_type(weapon_type: String, damage_type: int) -> bool:
 	match weapon_type:

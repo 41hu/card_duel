@@ -100,20 +100,29 @@ func _init():
 	char_skills = preload("res://scripts/core/character_skills.gd").new(self)
 	card_effects = preload("res://scripts/core/card_effects.gd").new(self)
 
-func init_match(p1_char_id: String, p2_char_id: String, bp_first: int = -1):
+func init_match(p1_char_id: String, p2_char_id: String, bp_first: int = -1, custom_decks: Array = [], independent_decks: bool = false):
 	var p1_char = Config.CHARACTER_DB[p1_char_id]
 	var p2_char = Config.CHARACTER_DB[p2_char_id]
 	players = [
 		_create_player(0, p1_char_id, p1_char),
 		_create_player(1, p2_char_id, p2_char),
 	]
-	var shared_deck = Config.build_initial_deck()
-	shared_deck.shuffle()
-	var shared_discard = []
-	card_systems = [
-		CardSys.new(shared_deck, shared_discard),
-		CardSys.new(shared_deck, shared_discard),
-	]
+	# 默认共享牌堆（人机/联机原行为）；independent_decks=true（PVE）双方各自一副，
+	# custom_decks[idx] = 自定义 type_id 列表（PVE 构筑）
+	self.independent_decks = independent_decks
+	if independent_decks:
+		card_systems = [
+			_build_card_system(0, custom_decks),
+			_build_card_system(1, custom_decks),
+		]
+	else:
+		var shared_deck = Config.build_initial_deck()
+		shared_deck.shuffle()
+		var shared_discard = []
+		card_systems = [
+			CardSys.new(shared_deck, shared_discard),
+			CardSys.new(shared_deck, shared_discard),
+		]
 	used_weapon_ids.clear()
 	items.clear()
 	action_log.clear()
@@ -144,7 +153,7 @@ func _create_player(idx: int, char_id: String, char_data: Dictionary) -> Diction
 		index=idx, char_id=char_id,
 		hp=char_data.hp, max_hp=char_data.hp,
 		near_power=char_data.near, range_power=char_data.range, magic_power=char_data.magic,
-		position=(3 if idx == 0 else 7),
+		position=movement.geometry.initial_position(idx),
 		weapon={}, armor={}, buffs=[], dots=[],
 		frozen=false, frozen_lockout=0, frozen_move=false,
 		damage_reduction_used=false, skill_used_this_turn=false, free_move_used=false,
@@ -155,6 +164,19 @@ func _create_player(idx: int, char_id: String, char_data: Dictionary) -> Diction
 		used_function_card=false,
 		pending_fighter_skill=false,
 	}
+
+# 牌堆模式：false = 共享牌堆（默认，人机/联机）；true = 独立牌堆（PVE 构筑）
+var independent_decks: bool = false
+
+# 构建一副卡组（默认初始构成；custom_decks[idx] 为自定义 type_id 数组时用自定义）
+func _build_card_system(idx: int, custom_decks: Array) -> CardSys:
+	var deck: Array = []
+	if custom_decks.size() > idx and custom_decks[idx] is Array and not custom_decks[idx].is_empty():
+		for i in range(custom_decks[idx].size()):
+			deck.append({"uid": i, "type_id": str(custom_decks[idx][i])})
+	else:
+		deck = Config.build_initial_deck()
+	return CardSys.new(deck)
 
 func get_player(idx: int): return players[idx]
 func get_items() -> Array: return items
@@ -509,9 +531,11 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 func skip_response(defender_idx: int): process_response(defender_idx, false)
 
 func _handle_move_card(player_idx: int, card: Dictionary) -> Dictionary:
-	var direction = int(card.get("direction", 0))
+	var direction: Vector2i = movement.geometry.from_dict(card.get("direction", {}))
 	var steps = int(card.get("steps", 1))
-	if direction != -1 and direction != 1: return {success=false, msg="无效移动方向"}
+	# 方向必须是左右两向之一（六边形地图未来扩展多方向）
+	if direction != movement.geometry.DIR_LEFT and direction != movement.geometry.DIR_RIGHT:
+		return {success=false, msg="无效移动方向"}
 	if not char_skills.move_distances(player_idx).has(steps):
 		return {success=false, msg="不支持%d步移动" % steps}
 	if status.get_move_modifier(player_idx) < 0:
@@ -522,7 +546,7 @@ func _handle_move_card(player_idx: int, card: Dictionary) -> Dictionary:
 		if phase == Config.Phase.GAME_OVER: break  # 踩陷阱致死淘汰：停止后续移动
 		# 位移统计（moves）由 movement.move_player 内部统一更新（含推人/吸引/威慑/暗影步）
 	_use_card(player_idx, card)
-	add_log(player_idx, "移动到%d" % players[player_idx].position)
+	add_log(player_idx, "移动到%s" % movement.geometry.to_text(players[player_idx].position))
 	if movement.get_distance() == 0:
 		_moved_to_adjacent_this_turn = true  # 突刺武器：移动贴脸后额外+3
 	item_system.trigger_on_step(player_idx)  # 死亡判定由 _damage_player 统一处理
@@ -535,11 +559,11 @@ func _handle_destroy(player_idx: int, card: Dictionary) -> Dictionary:
 		card_systems[opp].random_discard(1); _use_card(player_idx, card); add_log(player_idx, "摧毁手牌"); return {success=true}
 	if target == "trap":
 		# 摧毁必须指定格子（客户端走棋盘选格；无位置参数视为操作错误）
-		var pos = int(card.get("trap_pos", -1))
-		if pos < 0:
+		var pos: Vector2i = movement.geometry.from_dict(card.get("trap_pos", {}))
+		if not movement.geometry.is_valid(pos):
 			return {success=false, msg="请选择要摧毁的格子"}
 		if item_system.destroy_item_at(pos):
-			_use_card(player_idx, card); add_log(player_idx, "摧毁%d格道具" % pos); return {success=true}
+			_use_card(player_idx, card); add_log(player_idx, "摧毁%s格道具" % movement.geometry.to_text(pos)); return {success=true}
 		return {success=false, msg="该格没有道具"}
 	var et = card.get("equip_type", "weapon")
 	if et != "weapon" and et != "armor": return {success=false, msg="无效装备类型"}
@@ -812,7 +836,7 @@ func get_full_state(full: bool = false) -> Dictionary:
 		waiting_for_discard=waiting_for_discard, discard_count=discard_count,
 		action_time_left=atl, discard_time_left=dtl,
 		deck_size=card_systems[0].deck.size(), discard_size=card_systems[0].discard.size(),
-		players=[], items=items.duplicate(), action_log=action_log.duplicate(),
+		players=[], items=_serialize_items(), action_log=action_log.duplicate(),
 		distance=movement.get_distance(),
 	}
 	for i in range(2):
@@ -821,10 +845,10 @@ func get_full_state(full: bool = false) -> Dictionary:
 			index=i, char_id=p.char_id, char_name=Config.char_name(p.char_id),
 			hp=p.hp, max_hp=p.max_hp,
 			near_power=p.near_power, range_power=p.range_power, magic_power=p.magic_power,
-			position=p.position, weapon=p.weapon, armor=p.armor,
+			position=movement.geometry.to_dict(p.position), weapon=p.weapon, armor=p.armor,
 			buffs=p.buffs.duplicate(), dots=p.dots.duplicate(), frozen=p.frozen,
 			ap_attack=p.get("ap_attack",0), ap_move=p.get("ap_move",0), ap_function=p.get("ap_function",0),
-			hand_size=cs.hand.size(), deck_size=cs.deck.size(),
+			hand_size=cs.hand.size(), deck_size=cs.deck.size(), discard_size=cs.discard.size(),
 			hand=cs.hand.duplicate(), hand_limit=movement.get_hand_limit(i),
 			active_skills=_skill_list(i),
 			pending_fighter_skill=p.get("pending_fighter_skill", false),
@@ -836,6 +860,15 @@ func get_full_state(full: bool = false) -> Dictionary:
 	if full: state.bp_state = bp.get_bp_state()
 	_record_snapshot(state)
 	return state
+
+# 道具序列化（position Vector2i → {x,y}，协议/JSON 传输用）
+func _serialize_items() -> Array:
+	var out = []
+	for it in items:
+		var d = it.duplicate()
+		d["position"] = movement.geometry.to_dict(it.position)
+		out.append(d)
+	return out
 
 # 对局快照：每玩家每回合的出牌/弃牌阶段各记一次（手牌内容/血量/位置/AP/牌堆）
 func _record_snapshot(st: Dictionary):
@@ -855,6 +888,12 @@ func _record_snapshot(st: Dictionary):
 			hp=p.get("hp", 0), max_hp=p.get("max_hp", 1), pos=p.get("position", 0),
 			hand=hand_names, ap=[p.get("ap_attack", 0), p.get("ap_move", 0), p.get("ap_function", 0)],
 		}
-	rec.deck = st.get("deck_size", 0)
-	rec.discard = st.get("discard_size", 0)
+	# 独立卡组：记录当前行动玩家自己的牌堆/弃牌数（原共享牌堆时两者一致）
+	var cur_p = {}
+	for p in st.get("players", []):
+		if p.get("index", -1) == cur:
+			cur_p = p
+			break
+	rec.deck = cur_p.get("deck_size", st.get("deck_size", 0))
+	rec.discard = cur_p.get("discard_size", st.get("discard_size", 0))
 	battle_record.append(rec)

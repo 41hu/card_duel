@@ -1,32 +1,33 @@
-# movement_system.gd — 移动系统（棋盘位置、距离计算、推人、吸引/威慑）
+# movement_system.gd — 移动系统（所有位置运算委托 map_geometry 抽象层）
+# 位置 = Vector2i（当前线性地图 Vector2i(x,0)；未来六边形轴向坐标，只换 geometry 实现）
 extends RefCounted
 
 var match_ref
+var geometry: RefCounted  # BoardGeometry 实例
 
 func _init(match):
 	match_ref = match
+	geometry = load("res://scripts/core/map_geometry.gd").new()
 
-# 获取双方距离
+# 双方格距（贴脸 = 0）
 func get_distance() -> int:
-	var p1 = match_ref.get_player(0)
-	var p2 = match_ref.get_player(1)
-	return max(0, abs(p1.position - p2.position) - 1)
+	var p0 = match_ref.get_player(0)
+	var p1 = match_ref.get_player(1)
+	return geometry.distance(p0.position, p1.position)
 
-# 是否贴脸
 func is_adjacent() -> bool:
 	return get_distance() == 0
 
-# 移动玩家（统一位移入口：移动卡/暗影步都走这里）
-func move_player(player_idx: int, direction: int) -> bool:
-	# 禁移动（霜咬 frozen_move 等）统一在此兜底，所有位移路径自动受限
+# 沿方向移动一格（dir: Vector2i 方向向量；禁移动在此兜底，所有位移路径自动受限）
+func move_player(player_idx: int, dir: Vector2i) -> bool:
 	if match_ref.status.get_move_modifier(player_idx) < 0:
 		return false
 	var player = match_ref.get_player(player_idx)
 	var other_player = match_ref.get_player(1 - player_idx)
-	var new_pos = Config.clamp_position(player.position + direction)
+	var new_pos = geometry.clamp_position(geometry.step(player.position, dir))
 
 	# 贴脸时向对方方向移动可推人（先判断推人，再判断阻挡）
-	var moving_toward = (direction == (1 if player_idx == 0 else -1))
+	var moving_toward = (geometry.direction_between(player.position, other_player.position) == dir and dir != Vector2i.ZERO)
 	if moving_toward and new_pos == other_player.position:
 		if not _can_push(player_idx):
 			return false
@@ -43,29 +44,25 @@ func move_player(player_idx: int, direction: int) -> bool:
 	_add_move_stat(player_idx)
 	return true
 
-# 位移统计（马拉松冠军称号判定）：任何角色位置移动一格 +1（主动移动/推人/被推/吸引/威慑）
-func _add_move_stat(player_idx: int):
-	match_ref.stats[player_idx]["moves"] += 1
-
 # 获取到己方板边的距离（用于手牌上限计算）
 func distance_to_own_edge(player_idx: int) -> int:
-	var player = match_ref.get_player(player_idx)
-	if player_idx == 0:  # P1在左边
-		return player.position
-	else:  # P2在右边
-		return 10 - player.position
+	return geometry.edge_distance(player_idx, match_ref.get_player(player_idx).position)
 
 # 手牌上限
 func get_hand_limit(player_idx: int) -> int:
-	return distance_to_own_edge(player_idx) + 1 + match_ref.char_skills.hand_limit_bonus(player_idx)
+	return geometry.hand_limit(player_idx, match_ref.get_player(player_idx).position) + match_ref.char_skills.hand_limit_bonus(player_idx)
+
+# 位移统计（马拉松冠军称号判定）：任何角色位置移动一格 +1（主动移动/推人/被推/吸引/威慑）
+func _add_move_stat(player_idx: int):
+	match_ref.stats[player_idx]["moves"] += 1
 
 # 推人逻辑
 func _can_push(player_idx: int) -> bool:
 	if not is_adjacent():
 		return false
 	var other = match_ref.get_player(1 - player_idx)
-	var direction = 1 if player_idx == 0 else -1
-	var new_pos = Config.clamp_position(other.position + direction)
+	var dir = geometry.direction_between(match_ref.get_player(player_idx).position, other.position)
+	var new_pos = geometry.clamp_position(geometry.step(other.position, dir))
 	var my_pos = match_ref.get_player(player_idx).position
 	# 被推者必须能实际移动（板边 clamp 不动 = 推不动，避免推上去造成人物重叠）
 	if new_pos == other.position:
@@ -75,8 +72,8 @@ func _can_push(player_idx: int) -> bool:
 
 func _push_opponent(player_idx: int):
 	var other = match_ref.get_player(1 - player_idx)
-	var direction = 1 if player_idx == 0 else -1
-	other.position = Config.clamp_position(other.position + direction)
+	var dir = geometry.direction_between(match_ref.get_player(player_idx).position, other.position)
+	other.position = geometry.clamp_position(geometry.step(other.position, dir))
 	_add_move_stat(1 - player_idx)  # 被推者也位移了一格
 	_trigger_items_on_step(1 - player_idx)
 
@@ -86,11 +83,11 @@ func attract(player_idx: int) -> bool:
 	if match_ref.char_skills.is_immune(1 - player_idx, "force_move"): return false
 	var player = match_ref.get_player(player_idx)
 	var my_pos = player.position
-	var direction = 1 if other.position < my_pos else -1
-	var new_pos = Config.clamp_position(other.position + direction)
+	var dir = geometry.direction_between(other.position, my_pos)  # 对方朝我方向
+	var new_pos = geometry.clamp_position(geometry.step(other.position, dir))
 	if new_pos == my_pos:
 		# 贴脸：对方被吸引到我的位置，我沿对方方向后退一格腾出空间
-		var my_new = Config.clamp_position(my_pos + direction)
+		var my_new = geometry.clamp_position(geometry.step(my_pos, dir))
 		# 我无法实际后退（板边 clamp 不动 / 位置被占）→ 吸引失败，不位移（卡不消耗）
 		if my_new == other.position or my_new == my_pos:
 			return false
@@ -111,8 +108,8 @@ func deter(player_idx: int) -> bool:
 	var other = match_ref.get_player(1 - player_idx)
 	if match_ref.char_skills.is_immune(1 - player_idx, "force_move"): return false
 	var my_pos = match_ref.get_player(player_idx).position
-	var direction = 1 if other.position > my_pos else -1
-	var new_pos = Config.clamp_position(other.position + direction)
+	var dir = -geometry.direction_between(other.position, my_pos)  # 对方朝我方向的反向 = 推远
+	var new_pos = geometry.clamp_position(geometry.step(other.position, dir))
 	if new_pos == my_pos:
 		return false
 	# 对方在板边推不动（clamp 后原地不动）→ 威慑失败，不位移（卡不消耗）

@@ -365,7 +365,9 @@ func _refresh_all(state: Dictionary):
 		_last_turn = state.turn_number; _last_player = state.current_player
 		_flash(phase_label)
 
-	_deck_label.text = "牌堆:%d  弃牌:%d" % [state.get("deck_size", 0), state.get("discard_size", 0)]
+	# 独立卡组：显示自己视角的牌堆/弃牌数（players[idx] 各自有独立牌堆）
+	var me2 = pls[0] if pls[0].index != _player_index else pls[1]
+	_deck_label.text = "牌堆:%d  弃牌:%d" % [me2.get("deck_size", 0), me2.get("discard_size", 0)]
 	_deck_label.anchor_left = 0.5; _deck_label.anchor_right = 0.5
 	_deck_label.anchor_top = 0.05; _deck_label.anchor_bottom = 0.05
 	_deck_label.offset_left = -100; _deck_label.offset_right = 100
@@ -536,9 +538,10 @@ func _refresh_highlight():
 		if child is CardWidget:
 			child.set_selected(child.card_uid == _selected_uid)
 
-func _on_board_cell_clicked(cell_index: int):
+func _on_board_cell_clicked(cell_pos: Vector2i):
+	var pos_dict := {"x": cell_pos.x, "y": cell_pos.y}
 	if _selected_type == "hunter_ambush" and _is_my_turn:
-		_n().send_use_skill("hunter_ambush", {"card_uid": _selected_uid, "pos": cell_index})
+		_n().send_use_skill("hunter_ambush", {"card_uid": _selected_uid, "pos": pos_dict})
 		_selected_uid = -1
 		_selected_type = ""
 		confirm_btn.visible = false
@@ -547,7 +550,7 @@ func _on_board_cell_clicked(cell_index: int):
 		status_label.text = ""
 		return
 	if _selected_type == "destroy_trap" and _is_my_turn:
-		_n().send_play_card(_selected_uid, {"destroy_target": "trap", "trap_pos": cell_index})
+		_n().send_play_card(_selected_uid, {"destroy_target": "trap", "trap_pos": pos_dict})
 		_selected_uid = -1
 		_selected_type = ""
 		confirm_btn.visible = false
@@ -557,7 +560,7 @@ func _on_board_cell_clicked(cell_index: int):
 		return
 	if _selected_type != "trap" or not _is_my_turn:
 		return
-	_n().send_play_card(_selected_uid, {"trap_pos": cell_index})
+	_n().send_play_card(_selected_uid, {"trap_pos": pos_dict})
 	_selected_uid = -1
 	_selected_type = ""
 	confirm_btn.visible = false
@@ -575,15 +578,15 @@ func _popup_move(card_uid: int):
 	# 哨兵 -1 = 技能调用（暗影步）；调试发牌卡 uid 为负数（-1000 递减），必须走 play_card
 	var lb = _mkbtn("左1格")
 	if card_uid == -1:
-		lb.pressed.connect(func(): c.queue_free(); _n().send_use_skill("assassin_move", {"direction": -1}))
+		lb.pressed.connect(func(): c.queue_free(); _n().send_use_skill("assassin_move", {"direction": {"x": -1, "y": 0}}))
 	else:
-		lb.pressed.connect(func(): c.queue_free(); _n().send_play_card(card_uid, {"direction": -1, "steps": 1}))
+		lb.pressed.connect(func(): c.queue_free(); _n().send_play_card(card_uid, {"direction": {"x": -1, "y": 0}, "steps": 1}))
 	hb.add_child(lb)
 	var rb = _mkbtn("右1格")
 	if card_uid == -1:
-		rb.pressed.connect(func(): c.queue_free(); _n().send_use_skill("assassin_move", {"direction": 1}))
+		rb.pressed.connect(func(): c.queue_free(); _n().send_use_skill("assassin_move", {"direction": {"x": 1, "y": 0}}))
 	else:
-		rb.pressed.connect(func(): c.queue_free(); _n().send_play_card(card_uid, {"direction": 1, "steps": 1}))
+		rb.pressed.connect(func(): c.queue_free(); _n().send_play_card(card_uid, {"direction": {"x": 1, "y": 0}, "steps": 1}))
 	hb.add_child(rb)
 	var cb = _mkbtn("取消")
 	cb.pressed.connect(func(): c.queue_free())

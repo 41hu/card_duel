@@ -122,18 +122,31 @@ func _opp_best_damage(player_idx: int) -> int:
 		best = max(best, _real_damage(opp, t))
 	return best
 
-# ---------- 记牌系统（双方共享牌堆，初始构成 CARD_COUNTS 已知） ----------
-# 全局某类牌剩余（仍可能在牌堆或任一手牌中）= 初始 − 日志打出/响应消耗 − 弃牌堆
-func _global_left(type_id: String) -> int:
+# ---------- 记牌系统 ----------
+# 共享牌堆（默认）：全局某类牌剩余（牌堆+手牌循环中）= 初始 − 双方打出/响应消耗 − 共享弃牌堆
+# 独立牌堆（PVE）：某玩家牌堆中剩余 = 初始 − 该玩家手牌 − 该玩家弃牌 − 该玩家日志打出/响应
+func _global_left(player_idx: int, type_id: String) -> int:
 	var left = Config.CARD_COUNTS.get(type_id, 0)
-	left -= _played_from_log(type_id)
-	left -= _count_in_discard(type_id)
+	if match_ref.independent_decks:
+		left -= _count_in_hand(player_idx, type_id)
+		left -= _count_in_discard(player_idx, type_id)
+		left -= _played_from_log(player_idx, type_id)
+	else:
+		left -= _played_from_log(-1, type_id)  # -1 = 统计双方
+		left -= _count_in_discard(0, type_id)  # 共享弃牌堆
 	return max(0, left)
 
-func _played_from_log(type_id: String) -> int:
+func _count_in_hand(player_idx: int, type_id: String) -> int:
+	var n = 0
+	for c in match_ref.card_systems[player_idx].hand:
+		if c.type_id == type_id: n += 1
+	return n
+
+func _played_from_log(player_idx: int, type_id: String) -> int:
 	var n = 0
 	var cname = Config.card_name(type_id)
 	for e in match_ref.action_log:
+		if player_idx >= 0 and e.get("player", -1) != player_idx: continue
 		var msg: String = e.get("msg", "")
 		# 攻击打出："XX打出近战"；响应消耗："用近战格挡/用远程牵制/用魔法闪避"
 		if msg.contains("打出") and msg.contains(cname):
@@ -142,9 +155,9 @@ func _played_from_log(type_id: String) -> int:
 			n += 1
 	return n
 
-func _count_in_discard(type_id: String) -> int:
+func _count_in_discard(player_idx: int, type_id: String) -> int:
 	var n = 0
-	for c in match_ref.card_systems[0].discard:
+	for c in match_ref.card_systems[player_idx].discard:
 		if c.type_id == type_id: n += 1
 	return n
 
@@ -159,11 +172,11 @@ func _hand_attack_count(player_idx: int) -> int:
 				n += 1
 	return n
 
-# 全局攻击牌剩余总数（资源期判定用：牌堆+双方手牌中还有几张攻击牌）
-func _global_attack_left() -> int:
+# 自己牌组攻击牌剩余总数（资源期判定用：牌堆中还剩几张攻击牌）
+func _global_attack_left(player_idx: int) -> int:
 	var total = 0
 	for t in ["near", "heavy", "range", "pierce", "magic", "chant"]:
-		total += _global_left(t)
+		total += _global_left(player_idx, t)
 	return total
 
 # ---------- 地狱全知（读对手真实手牌） ----------
@@ -207,9 +220,9 @@ func _opp_near_threat(player_idx: int) -> int:
 	return max(_real_damage(opp, "near"), _real_damage(opp, "heavy"))
 
 # 指定格是否有道具（陷阱/捕兽夹）——位移/暗影步踩中会受伤
-func _item_at(pos: int) -> bool:
+func _item_at(pos: Vector2i) -> bool:
 	for it in match_ref.items:
-		if it.get("position", -1) == pos:
+		if it.position == pos:
 			return true
 	return false
 
@@ -234,7 +247,7 @@ func _near_threat_imminent(player_idx: int) -> bool:
 	var dist = match_ref.movement.get_distance()
 	return dist <= 3 and match_ref.card_systems[opp].hand.size() >= 2
 
-# 对方主要进攻类型：定位优先；hard 记牌修正——牌堆某类攻击牌剩余明显多于定位类时
+# 对方主要进攻类型：定位优先；hard 记牌修正——对手牌堆某类攻击牌剩余明显多于定位类时
 # （对方抽到该类攻击牌的概率高），防御转向该类
 func _opp_main_attack_type(player_idx: int) -> String:
 	var role = _current_role(1 - player_idx)
@@ -243,7 +256,7 @@ func _opp_main_attack_type(player_idx: int) -> String:
 	for t in ["near", "range", "magic"]:
 		counts[t] = 0
 		for atk in _role_types(t):
-			counts[t] += _global_left(atk)
+			counts[t] += _global_left(1 - player_idx, atk)
 	var role_count: int = counts.get(role, 0)
 	for t in ["near", "range", "magic"]:
 		if counts[t] > role_count + 3:
@@ -331,7 +344,7 @@ func _evaluate_stance(player_idx: int) -> Dictionary:
 		stance = "danger"
 	# 资源期（hard 记牌）：真的没进攻能力——我手牌攻击牌 ≤1 且全局攻击牌剩余枯竭
 	# （只看手牌+牌堆总数，避免过早进入资源期；手里有攻击牌就不是资源期）
-	elif difficulty >= DIFF_HARD and _hand_attack_count(player_idx) <= 1 and _global_attack_left() <= 6:
+	elif difficulty >= DIFF_HARD and _hand_attack_count(player_idx) <= 1 and _global_attack_left(player_idx) <= 6:
 		stance = "resource"
 	# 压制：我 HP 明显高于对手
 	elif float(p.hp) / max(p.max_hp, 1) >= float(opp.hp) / max(opp.max_hp, 1) + 0.2:
@@ -531,18 +544,19 @@ func decide_action(player_idx: int) -> Dictionary:
 		if p.ap_function < 1: break
 		if card.type_id == "trap":
 			var s = 6
-			var trap_pos = -1
+			var geo = match_ref.movement.geometry
+			var trap_pos: Vector2i = Vector2i.ZERO
 			if stance.get("stance", "") == "flee" or near_threat:
-				trap_pos = p.position + (1 if p.position < opp.position else -1)  # 自己朝对手侧一格（防贴脸）
+				trap_pos = geo.step(p.position, geo.direction_between(p.position, opp.position))  # 自己朝对手侧一格（防贴脸）
 			else:
-				trap_pos = opp.position + (1 if opp.position < p.position else -1)  # 对手前方封锁
-			if trap_pos >= 0 and trap_pos <= 10 and trap_pos != p.position and trap_pos != opp.position:
+				trap_pos = geo.step(opp.position, geo.direction_between(opp.position, p.position))  # 对手前方封锁
+			if geo.is_valid(trap_pos) and trap_pos != p.position and trap_pos != opp.position:
 				if stance.get("stance", "") == "flee": s = 14
 				elif near_threat: s = 13  # 对手可能贴脸爆发 → 防守陷阱优先（即使有攻击动作）
 				elif is_hard and opp_role == "near": s = 12  # 对手近战型 → 封锁逼近路线更值
 				if s > best_score:
 					best_score = s
-					best_action = {"action": "play_card", "card_uid": card.uid, "extra": {"trap_pos": trap_pos}}
+					best_action = {"action": "play_card", "card_uid": card.uid, "extra": {"trap_pos": geo.to_dict(trap_pos)}}
 
 	# 8. 位移：按定位控制距离（位移点感知）
 	#   近战型：逼近贴脸；远程型：保持中距离(2~4)；保命：远离
@@ -550,7 +564,8 @@ func decide_action(player_idx: int) -> Dictionary:
 		if p.ap_move < 1: break
 		if card.type_id == "move":
 			var s = 0
-			var dir = 1 if opp.position > p.position else -1
+			var geo = match_ref.movement.geometry
+			var dir: Vector2i = geo.direction_between(p.position, opp.position)
 			var stance_s = stance.get("stance", "")
 			if is_norm:
 				if my_role == "near" and distance > 0:
@@ -567,13 +582,11 @@ func decide_action(player_idx: int) -> Dictionary:
 					else: s = 2
 					# 对手近战型可能贴脸爆发（憋牌）→ 提前拉开；权衡板边：后撤目标格上限 <=2 不拉
 					if _near_threat_imminent(player_idx) and distance <= 3:
-						var back_pos = p.position - dir
-						var back_limit = (back_pos if player_idx == 0 else 10 - back_pos) + 1
+						var back_limit = geo.hand_limit(player_idx, geo.step(p.position, -dir))
 						if back_limit >= 3:
 							s = max(s, 10)
 					if _near_threat_imminent(player_idx) and distance <= 2:
-							var back_pos2 = p.position - dir
-							var back_limit2 = (back_pos2 if player_idx == 0 else 10 - back_pos2) + 1
+							var back_limit2 = geo.hand_limit(player_idx, geo.step(p.position, -dir))
 							if back_limit2 >= 3:
 								s = 10
 				if stance_s == "flee": s = max(s, 16)  # 防斩：拉开距离
@@ -593,16 +606,16 @@ func decide_action(player_idx: int) -> Dictionary:
 				if (stance_s == "flee" or stance_s == "danger") and distance <= 2: mdir = -dir
 				# 板边惩罚：朝自己板边移动会降低手牌上限（操作空间减少）→ 减分；
 				# 朝中场移动保持上限 → 加分（鼓励维持操作空间）
-				var target_pos = p.position + mdir
-				var new_limit = (target_pos if player_idx == 0 else 10 - target_pos) + 1
+				var target_pos = geo.step(p.position, mdir)
+				var new_limit = geo.hand_limit(player_idx, target_pos)
 				var cur_limit = match_ref.movement.get_hand_limit(player_idx)
 				s += (new_limit - cur_limit) * 3
 				# 避陷阱：目标格有道具（陷阱/捕兽夹）→ 按收益减分
 				#   逼近后能立刻贴脸攻击 → 踩陷阱换爆发可接受（小减分）
 				#   纯走位踩陷阱（无输出收益）→ 大减分避开
 				#   保命时移动优先，踩也认
-				if _item_at(p.position + mdir) and stance_s != "flee":
-					var new_dist = abs((p.position + mdir) - opp.position) - 1
+				if _item_at(target_pos) and stance_s != "flee":
+					var new_dist = geo.distance(target_pos, opp.position)
 					var gains_attack = false
 					if new_dist == 0:
 						for c in hand:
@@ -614,7 +627,7 @@ func decide_action(player_idx: int) -> Dictionary:
 					s -= 4 if (gains_attack or gains_safety) else 14
 				if s > best_score:
 					best_score = s
-					best_action = {"action": "play_card", "card_uid": card.uid, "extra": {"direction": mdir, "steps": 1}}
+					best_action = {"action": "play_card", "card_uid": card.uid, "extra": {"direction": geo.to_dict(mdir), "steps": 1}}
 
 	# 9. 吸引/威慑（调整距离）：近战型用吸引拉近，远程型用威慑推开；功能点感知
 	# 注意：吸引在距离 1 时触发"对方贴脸、自己后退"分支——自己会后退，对近战型是负收益，
@@ -626,7 +639,7 @@ func decide_action(player_idx: int) -> Dictionary:
 			if is_norm:
 				if card.type_id == "attract" and my_role == "near":
 					# 后退空间：吸引贴脸分支我会朝远离对方方向退 1 格
-					var back_room = (10 - p.position) if p.position > opp.position else p.position
+					var back_room = match_ref.movement.geometry.edge_distance(player_idx, p.position)
 					var not_disadvantage = hp_ratio >= float(opp.hp) / max(opp.max_hp, 1) - 0.1
 					if distance >= 2 and back_room >= 2 and not_disadvantage:
 						s = 12  # 真拉近 1 格贴脸（不触发自己后退）
@@ -705,17 +718,18 @@ func decide_action(player_idx: int) -> Dictionary:
 							has_near = true
 							break
 					if has_near:
-						var dir = 1 if opp.position > p.position else -1
+						var geo = match_ref.movement.geometry
+						var dir: Vector2i = geo.direction_between(p.position, opp.position)
 						var s = 9
 						if is_norm and my_role == "near": s = 13  # 近战型暗影步贴脸
 						# 目标格有陷阱 → 暗影步会踩中受伤，高风险低用（保命档更不该踩）
-						var step_pos = p.position + dir
+						var step_pos = geo.step(p.position, dir)
 						if _item_at(step_pos):
 							s -= 8
 							if stance.get("stance", "") == "flee": s -= 6
 						if s > best_score:
 							best_score = s
-							best_action = {"action": "use_skill", "skill": "assassin_move", "direction": dir}
+							best_action = {"action": "use_skill", "skill": "assassin_move", "direction": geo.to_dict(dir)}
 			"wardsmith_imbue":
 				# 护甲注魔（改版）：不耗卡，直接选护甲装备（铸甲师 4 耐久强生存）；
 				# 按对方主要进攻手段选对应护甲（与防具牌同逻辑）；价值高于防具牌（免费且4耐久，
@@ -756,11 +770,12 @@ func decide_action(player_idx: int) -> Dictionary:
 							rng_count += 1
 							if ambush_uid < 0: ambush_uid = card.uid
 					if ambush_uid >= 0:
-						var hpos = opp.position + (1 if opp.position < p.position else -1)
-						if hpos >= 0 and hpos <= 10 and hpos != p.position and hpos != opp.position:
+						var geo = match_ref.movement.geometry
+						var hpos: Vector2i = geo.step(opp.position, geo.direction_between(opp.position, p.position))
+						if geo.is_valid(hpos) and hpos != p.position and hpos != opp.position:
 							# 价值判断：埋伏消耗 1 张远程输出牌，火力充足才划算
 							var s = 0
-							var deck_left = _global_left("range") + _global_left("pierce")
+							var deck_left = _global_left(player_idx, "range") + _global_left(player_idx, "pierce")
 							if rng_count >= 2 or deck_left >= 4:
 								s = 9  # 远程火力充足 → 转一张不心疼
 							elif rng_count == 1 and deck_left >= 2:
@@ -770,7 +785,7 @@ func decide_action(player_idx: int) -> Dictionary:
 								s = max(s, 12)  # 保命：防守陷阱价值高
 							if s > best_score:
 								best_score = s
-								best_action = {"action": "use_skill", "skill": "hunter_ambush", "card_uid": ambush_uid, "pos": hpos}
+								best_action = {"action": "use_skill", "skill": "hunter_ambush", "card_uid": ambush_uid, "pos": geo.to_dict(hpos)}
 
 	# 13. 负分动作不执行（无有效动作就结束，不浪费牌/不送低价值攻击）
 	if best_action.is_empty() or best_score <= 0:

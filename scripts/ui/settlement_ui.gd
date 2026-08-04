@@ -173,11 +173,11 @@ func _export_record(result: Dictionary) -> String:
 		var p1: Dictionary = rec.get("p1", {})
 		var a0: Array = p0.get("ap", [0, 0, 0])
 		var a1: Array = p1.get("ap", [0, 0, 0])
-		lines.append("T%d P%d%s: P0 HP%d/%d 位%d 手[%s] AP(%d/%d/%d) | P1 HP%d/%d 位%d 手[%s] AP(%d/%d/%d) | 牌堆%d 弃牌%d" % [
+		lines.append("T%d P%d%s: P0 HP%d/%d 位%s 手[%s] AP(%d/%d/%d) | P1 HP%d/%d 位%s 手[%s] AP(%d/%d/%d) | 牌堆%d 弃牌%d" % [
 			rec.get("turn", 0), rec.get("player", 0), tag,
-			p0.get("hp", 0), p0.get("max_hp", 1), p0.get("pos", 0), "、".join(p0.get("hand", [])),
+			p0.get("hp", 0), p0.get("max_hp", 1), _pos_text(p0.get("pos", {})), "、".join(p0.get("hand", [])),
 			a0[0], a0[1], a0[2],
-			p1.get("hp", 0), p1.get("max_hp", 1), p1.get("pos", 0), "、".join(p1.get("hand", [])),
+			p1.get("hp", 0), p1.get("max_hp", 1), _pos_text(p1.get("pos", {})), "、".join(p1.get("hand", [])),
 			a1[0], a1[1], a1[2],
 			rec.get("deck", 0), rec.get("discard", 0)])
 	lines.append("")
@@ -209,6 +209,12 @@ func _export_record(result: Dictionary) -> String:
 			LocalGame.last_record_path = path
 		return path
 	return ""
+
+# 位置导出文本（协议为 {x,y} 结构；兼容旧 int）
+func _pos_text(pos) -> String:
+	if pos is Dictionary:
+		return "%d,%d" % [pos.get("x", 0), pos.get("y", 0)]
+	return str(pos)
 
 # 从出牌统计字典里找出打出最多的牌，返回 [卡名, 次数]
 func _max_card(cards: Dictionary) -> Array:

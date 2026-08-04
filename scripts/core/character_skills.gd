@@ -387,6 +387,7 @@ func get_attack_base_damage(player_idx: int, type_id: String, distance: int) -> 
 func get_item_type(player_idx: int) -> String:
 	match _ms.players[player_idx].char_id:
 		"hunter": return "snare"  # 猎人 → 捕兽夹
+		"miko": return "torii"    # 巫女 → 鸟居
 		_: return "trap"
 
 func _fighter_hit(player_idx: int, damage_type: int):

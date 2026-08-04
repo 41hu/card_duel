@@ -28,6 +28,8 @@ var _modifier_handlers: Dictionary = {
 # 例：时滞 ap_attack_down 设为 1 = 永不叠加（刷新），调大 = 允许多层，-1 = 无限
 var _stack_rules: Dictionary = {
 	"ap_attack_down": {"max_stacks": 1},
+	# 神隐（巫女鸟居）：不可叠加（已有神隐再踩只保持跳过一回合）
+	"神隐": {"max_stacks": 1},
 }
 
 func _init(match):
@@ -133,6 +135,20 @@ func query_modifier(player_idx: int, aspect: String, damage_type: int = -1) -> i
 # 获取攻击力修正（damage_type: Config.DamageType，用于区分近战限定加成）
 func get_attack_modifier(player_idx: int, damage_type: int) -> int:
 	return query_modifier(player_idx, "attack", damage_type)
+
+# 是否持有指定 buff（神隐等一次性标记用）
+func has_buff(player_idx: int, buff_type: String) -> bool:
+	for b in match_ref.get_player(player_idx).buffs:
+		if b.type == buff_type:
+			return true
+	return false
+
+# 清除指定 buff（全部层）
+func clear_buff(player_idx: int, buff_type: String):
+	var p = match_ref.get_player(player_idx)
+	for i in range(p.buffs.size() - 1, -1, -1):
+		if p.buffs[i].type == buff_type:
+			p.buffs.remove_at(i)
 
 # 获取移动修正（霜咬效果等）
 func get_move_modifier(player_idx: int) -> int:

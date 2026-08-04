@@ -223,6 +223,13 @@ func _judgment_phase():
 			if phase == Config.Phase.GAME_OVER: return
 	status.on_turn_start(current_player)
 	char_skills.on_opponent_turn_start(current_player)
+	# 神隐（巫女鸟居）：判定阶段 DoT 已结算，清除神隐并跳过本回合
+	# （不抽牌/不出牌/不弃牌，直接切换玩家；被神隐期间 buff 不衰减）
+	if status.has_buff(current_player, "神隐"):
+		status.clear_buff(current_player, "神隐")
+		add_log(current_player, "神隐：跳过本回合")
+		_advance_to_next_player()  # 内部已 emit 状态
+		return
 	_draw_phase()
 
 func _draw_phase():

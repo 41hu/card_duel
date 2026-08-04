@@ -30,7 +30,7 @@ func _init(match, diff: int = DIFF_NORMAL):
 const _BASE_ROLES := {
 	"fighter": "near", "berserker": "near", "assassin": "near", "paladin": "near",
 	"sharpshooter": "range", "hunter": "range", "gunslinger": "range", "tracker": "range",
-	"mage": "magic", "priest": "magic", "warlock": "magic",
+	"mage": "magic", "priest": "magic", "warlock": "magic", "miko": "magic",
 }
 
 func _role_types(role: String) -> Array:
@@ -223,6 +223,20 @@ func _opp_near_threat(player_idx: int) -> int:
 func _item_at(pos: Vector2i) -> bool:
 	for it in match_ref.items:
 		if it.position == pos:
+			return true
+	return false
+
+# 目标格是否有"我方放置的鸟居"（巫女踩上成长：+2HP 全属性+1；敌方踩上神隐）
+func _my_torii_at(player_idx: int, pos: Vector2i) -> bool:
+	for it in match_ref.items:
+		if it.position == pos and it.item_type == "torii" and it.owner == player_idx:
+			return true
+	return false
+
+# 目标格是否有"敌方放置的鸟居"（把敌人推入 → 神隐 combo）
+func _opp_torii_at(player_idx: int, pos: Vector2i) -> bool:
+	for it in match_ref.items:
+		if it.position == pos and it.item_type == "torii" and it.owner != player_idx:
 			return true
 	return false
 
@@ -509,13 +523,20 @@ func decide_action(player_idx: int) -> Dictionary:
 		if card.type_id == "destroy":
 			var s = 0
 			var d_target = {}
-			if not opp.weapon.is_empty():
+			# 地狱全知：场上敌方鸟居（神隐威胁）→ 拆鸟居最高优先
+			if is_hell:
+				for it in match_ref.items:
+					if it.item_type == "torii" and it.owner == opp_idx:
+						s = 16
+						d_target = {"destroy_target": "trap", "trap_pos": match_ref.movement.geometry.to_dict(it.position)}
+						break
+			if d_target.is_empty() and not opp.weapon.is_empty():
 				s = 14  # 拆武器（对方输出核心）最值
 				d_target = {"destroy_target": "equip", "equip_type": "weapon"}
-			elif not opp.armor.is_empty():
+			elif d_target.is_empty() and not opp.armor.is_empty():
 				s = 12  # 拆防具次之
 				d_target = {"destroy_target": "equip", "equip_type": "armor"}
-			elif match_ref.card_systems[opp_idx].hand.size() > 0:
+			elif d_target.is_empty() and match_ref.card_systems[opp_idx].hand.size() > 0:
 				s = 8 + min(4, match_ref.card_systems[opp_idx].hand.size() * 2)  # 拆手牌（对手牌越多越值）
 				# 地狱全知：对手手牌攻击牌多 → 拆手牌价值暴涨（废掉其输出/响应资源）
 				if is_hell:
@@ -545,15 +566,23 @@ func decide_action(player_idx: int) -> Dictionary:
 		if card.type_id == "trap":
 			var s = 6
 			var geo = match_ref.movement.geometry
+			var is_torii = match_ref.char_skills.get_item_type(player_idx) == "torii"
 			var trap_pos: Vector2i = Vector2i.ZERO
-			if stance.get("stance", "") == "flee" or near_threat:
+			if is_torii:
+				# 巫女鸟居：放自己前方一格——既是自增益点（踩上成长），也是防守地雷（敌人贴脸被推入神隐）
+				trap_pos = geo.step(p.position, geo.direction_between(p.position, opp.position))
+				s = 10
+				if near_threat or stance.get("stance", "") in ["flee", "danger"]:
+					s += 5  # 贴脸威胁/保命 → 防守地雷价值高
+			elif stance.get("stance", "") == "flee" or near_threat:
 				trap_pos = geo.step(p.position, geo.direction_between(p.position, opp.position))  # 自己朝对手侧一格（防贴脸）
 			else:
 				trap_pos = geo.step(opp.position, geo.direction_between(opp.position, p.position))  # 对手前方封锁
 			if geo.is_valid(trap_pos) and trap_pos != p.position and trap_pos != opp.position:
-				if stance.get("stance", "") == "flee": s = 14
-				elif near_threat: s = 13  # 对手可能贴脸爆发 → 防守陷阱优先（即使有攻击动作）
-				elif is_hard and opp_role == "near": s = 12  # 对手近战型 → 封锁逼近路线更值
+				if not is_torii:
+					if stance.get("stance", "") == "flee": s = 14
+					elif near_threat: s = 13  # 对手可能贴脸爆发 → 防守陷阱优先（即使有攻击动作）
+					elif is_hard and opp_role == "near": s = 12  # 对手近战型 → 封锁逼近路线更值
 				if s > best_score:
 					best_score = s
 					best_action = {"action": "play_card", "card_uid": card.uid, "extra": {"trap_pos": geo.to_dict(trap_pos)}}
@@ -614,7 +643,10 @@ func decide_action(player_idx: int) -> Dictionary:
 				#   逼近后能立刻贴脸攻击 → 踩陷阱换爆发可接受（小减分）
 				#   纯走位踩陷阱（无输出收益）→ 大减分避开
 				#   保命时移动优先，踩也认
-				if _item_at(target_pos) and stance_s != "flee":
+				# 自己的鸟居：踩上成长（+2HP 全属性+1 永久）——巫女核心收益
+				if _my_torii_at(player_idx, target_pos):
+					s += 12
+				elif _item_at(target_pos) and stance_s != "flee":
 					var new_dist = geo.distance(target_pos, opp.position)
 					var gains_attack = false
 					if new_dist == 0:
@@ -645,9 +677,16 @@ func decide_action(player_idx: int) -> Dictionary:
 						s = 12  # 真拉近 1 格贴脸（不触发自己后退）
 				if card.type_id == "deter" and my_role == "range" and distance < 2: s = 12
 				if card.type_id == "deter" and stance.get("stance", "") == "flee": s = 12
-			if s > best_score:
-				best_score = s
-				best_action = {"action": "play_card", "card_uid": card.uid}
+				# 推入神隐 combo：威慑/吸引的落点有我方鸟居 → 敌人踩上跳过回合（价值极高）
+				var geo = match_ref.movement.geometry
+				var toward: Vector2i = geo.direction_between(opp.position, p.position)
+				if card.type_id == "deter": toward = -toward  # 威慑推远、吸引拉近
+				var land = geo.clamp_position(geo.step(opp.position, toward))
+				if land != p.position and _my_torii_at(player_idx, land):
+					s += 20
+				if s > best_score:
+					best_score = s
+					best_action = {"action": "play_card", "card_uid": card.uid}
 
 	# 10. 武器牌：只装备适配自身定位的武器（类型不匹配装了无加成，还会覆盖旧武器）；功能点感知
 	for card in hand:

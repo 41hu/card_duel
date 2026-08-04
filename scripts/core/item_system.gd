@@ -29,7 +29,30 @@ var _item_types: Dictionary = {
 		"stack": "unlimited",
 		"destroy_rule": "all",
 	},
+	"torii": {
+		"name": "鸟居",
+		"desc": "巫女专属：自己踩上+2HP并全属性+1（永久）；敌人踩上进入神隐（跳过下回合）；可被摧毁卡拆除",
+		"stack": "single",
+		"destroy_rule": "one",
+		"on_step": _torii_step,
+	},
 }
+
+# 鸟居触发：自己踩（放置者=巫女）回血2+全属性+1 永久；敌人踩进入神隐（跳过下回合）
+func _torii_step(player_idx: int, item: Dictionary) -> int:
+	if item.owner == player_idx:
+		var p = match_ref.players[player_idx]
+		var before = p.hp
+		p.hp = min(p.max_hp, p.hp + 2)
+		p.near_power += 1
+		p.range_power += 1
+		p.magic_power += 1
+		match_ref.stats[player_idx]["heal_total"] += p.hp - before
+		match_ref.add_log(player_idx, "鸟居: +2HP 全属性+1")
+		return 0
+	match_ref.status.add_buff(player_idx, "神隐", 0, -2)
+	match_ref.add_log(player_idx, "踩上鸟居，进入神隐（下回合被跳过）")
+	return 0
 
 func _init(match):
 	match_ref = match

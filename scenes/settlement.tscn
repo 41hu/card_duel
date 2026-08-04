@@ -22,6 +22,7 @@ color = Color(0.08, 0.1, 0.15, 1)
 
 [node name="Title" type="Label" parent="." unique_id=1913701629]
 layout_mode = 1
+anchors_preset = 5
 anchor_left = 0.5
 anchor_right = 0.5
 offset_left = -250.0
@@ -34,6 +35,7 @@ horizontal_alignment = 1
 
 [node name="Title2" type="RichTextLabel" parent="." unique_id=1144228868]
 layout_mode = 1
+anchors_preset = 5
 anchor_left = 0.5
 anchor_right = 0.5
 offset_left = -250.0
@@ -42,12 +44,12 @@ offset_right = 250.0
 offset_bottom = 200.0
 grow_horizontal = 2
 theme_override_colors/default_color = Color(1, 0.85, 0.3, 1)
-alignment = 1
 bbcode_enabled = true
 fit_content = true
 
 [node name="StatsLabel" type="Label" parent="." unique_id=1144228869]
 layout_mode = 1
+anchors_preset = 5
 anchor_left = 0.5
 anchor_right = 0.5
 offset_left = -400.0
@@ -62,6 +64,7 @@ vertical_alignment = 1
 
 [node name="Detail" type="Label" parent="." unique_id=183571138]
 layout_mode = 1
+anchors_preset = 5
 anchor_left = 0.5
 anchor_right = 0.5
 offset_left = -200.0
@@ -75,14 +78,15 @@ horizontal_alignment = 1
 
 [node name="BackBtn" type="Button" parent="." unique_id=1049546627]
 layout_mode = 1
+anchors_preset = 7
 anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
 offset_left = -180.0
-offset_top = -140.0
+offset_top = -145.0
 offset_right = 180.0
-offset_bottom = -100.0
+offset_bottom = -26.0
 grow_horizontal = 2
 grow_vertical = 0
 theme_override_font_sizes/font_size = 36

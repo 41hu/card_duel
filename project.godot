@@ -40,6 +40,10 @@ window/stretch/aspect="expand"
 
 enabled=PackedStringArray("res://addons/hasturoperationgd/plugin.cfg")
 
+[gui]
+
+theme/custom_font="res://assets/fonts/simhei.ttf"
+
 [rendering]
 
 textures/canvas_textures/default_texture_filter=0

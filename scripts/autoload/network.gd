@@ -53,7 +53,7 @@ func _process(_delta):
 
 func connect_to_server(url: String = ""):
 	if url == "":
-		url = "ws://127.0.0.1:17890"
+		url = "ws://47.107.47.251:17890" if OS.has_feature("web") else "ws://127.0.0.1:17890"
 	if not url.begins_with("ws"):
 		url = "ws://" + url.replace("http://", "")
 

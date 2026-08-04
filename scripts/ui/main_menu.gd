@@ -27,6 +27,8 @@ func _ready():
 		get_tree().change_scene_to_file("res://scenes/wiki_scene.tscn")
 	)
 	$MainPanel/QuitBtn.pressed.connect(func(): get_tree().quit())
+	if OS.has_feature("web"):
+		$MainPanel/QuitBtn.visible = false
 	_add_server_shortcut(c_server, "本地")
 	_add_server_shortcut(c_server, "云端")
 	_add_server_shortcut(j_server, "本地")

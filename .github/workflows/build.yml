@@ -46,6 +46,40 @@ jobs:
           path: dist/
           retention-days: 30
 
+  export-web:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Godot 4.7.1
+        run: |
+          wget -q https://github.com/godotengine/godot/releases/download/4.7.1-stable/Godot_v4.7.1-stable_linux.x86_64.zip
+          unzip -q Godot_v4.7.1-stable_linux.x86_64.zip
+          chmod +x Godot_v4.7.1-stable_linux.x86_64
+
+      - name: Download Web Export Template
+        run: |
+          mkdir -p ~/.local/share/godot/export_templates/4.7.1.stable
+          wget -q https://github.com/godotengine/godot/releases/download/4.7.1-stable/Godot_v4.7.1-stable_export_templates.tpz
+          unzip -q -o Godot_v4.7.1-stable_export_templates.tpz -d ~/.local/share/godot/export_templates/4.7.1.stable/
+          mv ~/.local/share/godot/export_templates/4.7.1.stable/templates/* ~/.local/share/godot/export_templates/4.7.1.stable/ 2>/dev/null || true
+
+      - name: Export Web (HTML5)
+        run: |
+          mkdir -p web_dist
+          ./Godot_v4.7.1-stable_linux.x86_64 --headless --path . --export-release "Web" "web_dist/index.html"
+
+      - name: Deploy to Server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: 47.107.47.251
+          username: root
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          source: web_dist/*
+          target: /var/www/card_duel/
+          strip_components: 1
+
   export-android:
     needs: version
     runs-on: ubuntu-latest

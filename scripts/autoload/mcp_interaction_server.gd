@@ -17,7 +17,7 @@ var _held_keys: Dictionary = {}
 
 func _ready() -> void:
 	# 在 headless 模式下不启动 MCP 服务器（服务端不需要）
-	if OS.has_feature("server") or DisplayServer.get_name() == "headless":
+	if OS.has_feature("server") or OS.has_feature("web") or DisplayServer.get_name() == "headless":
 		return
 	# Ensure MCP server keeps processing even when game is paused
 	process_mode = Node.PROCESS_MODE_ALWAYS

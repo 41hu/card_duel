@@ -12,7 +12,8 @@ func _init(match):
 
 # ---------- 主入口：计算攻击伤害 ----------
 # 返回 {damage, blocked, msg, formula}
-func calculate_attack(attacker_idx: int, defender_idx: int, card_type_id: String) -> Dictionary:
+# ignore_distance（魔力引导等技能）：重击无视距离限制打出
+func calculate_attack(attacker_idx: int, defender_idx: int, card_type_id: String, ignore_distance: bool = false) -> Dictionary:
 	var attacker = match_ref.get_player(attacker_idx)
 	var defender = match_ref.get_player(defender_idx)
 	var distance = match_ref.movement.get_distance()
@@ -43,7 +44,7 @@ func calculate_attack(attacker_idx: int, defender_idx: int, card_type_id: String
 			base_damage = attacker.magic_power
 			formula = str(base_damage)
 		"heavy":
-			if distance != 0:
+			if distance != 0 and not ignore_distance:
 				return {damage=0, blocked=true, msg="重击必须贴脸！"}
 			base_damage = attacker.near_power + 3
 			formula = "%d+3" % attacker.near_power

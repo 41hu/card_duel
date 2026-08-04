@@ -46,6 +46,7 @@ var stats: Array = []
 var _moved_to_adjacent_this_turn: bool = false
 # 本次攻击防具是否生效（实际造成伤害时消耗耐久，闪避/0伤害不消耗）
 var _armor_hit: bool = false
+var _ignore_distance: bool = false  # 魔力引导等技能：本次攻击无视贴脸距离限制
 # 调试发牌的 uid 计数器（保证唯一，与正常卡 uid 0-77 隔离）
 var _cheat_uid_counter: int = -1000
 var char_skills
@@ -393,10 +394,12 @@ func _handle_respondable_card(player_idx: int, card: Dictionary, kind: String) -
 
 func _handle_attack_card(player_idx: int, card: Dictionary) -> Dictionary:
 	var type_id = card.type_id
-	if type_id in ["near", "heavy"] and movement.get_distance() != 0:
+	# ignore_distance（魔力引导等技能）：近战/重击无视距离限制打出
+	if type_id in ["near", "heavy"] and movement.get_distance() != 0 and not card.get("ignore_distance", false):
 		return {success=false, msg="必须贴脸"}
 	pending_attack_card = type_id
 	pending_attack_uid = card.uid
+	_ignore_distance = card.get("ignore_distance", false)  # 魔力引导等技能：近战/重击无视距离
 	# 多段攻击：总段数由角色钩子决定（默认 1 = 单段，现有行为）
 	pending_attack_segments = char_skills.get_attack_hit_count(player_idx, type_id)
 	pending_attack_segment = 0
@@ -412,7 +415,7 @@ func _begin_attack_segment(player_idx: int) -> Dictionary:
 	var player = players[player_idx]
 	attacker_last_damage = 0
 	attacker_last_type = Config.get_damage_type(type_id)
-	var calc = combat.calculate_attack(player_idx, opp, type_id)
+	var calc = combat.calculate_attack(player_idx, opp, type_id, _ignore_distance)
 	attacker_last_damage = calc.damage
 	# 技能伤害加成（法师强化等）计入实际伤害，公式同步显示（避免"8=10"）
 	var skill_bonus = char_skills.on_attack_cast(player_idx, type_id)

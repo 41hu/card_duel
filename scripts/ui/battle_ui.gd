@@ -686,6 +686,7 @@ func _exec_skill(sk_id: String):
 	elif sk_id == "hunter_ambush": _show_hunter_pick()
 	elif sk_id == "wardsmith_imbue": _show_wardsmith_imbue()
 	elif sk_id == "wardsmith_repair": _show_wardsmith_repair()
+	elif sk_id == "spellblade_channel": _show_spellblade_pick()
 	else: _n().send_use_skill(sk_id)
 
 # 铸甲师护甲注魔：直接选择一种护甲装备（限一次，不耗卡）
@@ -760,6 +761,30 @@ func _show_hunter_pick():
 			vb.add_child(b)
 	if not has_any:
 		vb.add_child(_lbl("没有远程攻击牌"))
+	var close = _mkbtn("取消")
+	close.pressed.connect(func(): c.queue_free())
+	vb.add_child(close)
+	add_child(c)
+
+# 魔剑士魔力引导：选一张魔法/吟唱卡（装备近战武器时按钮才亮）
+func _show_spellblade_pick():
+	var c = Control.new()
+	c.name = "SpellbladePick"
+	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
+	var vb = _popup_box(c, 620, 420)
+	vb.add_child(_lbl("魔力引导：选择魔法/吟唱（无视距离打出近战/重击）"))
+	var me = _game_state.players[0] if _game_state.players[0].index == _player_index else _game_state.players[1]
+	var has_any = false
+	for card in me.get("hand", []):
+		if card.type_id in ["magic", "chant"]:
+			has_any = true
+			var b = _mkbtn(Config.card_name(card.type_id))
+			b.pressed.connect(func(uid=card.uid): c.queue_free(); _n().send_use_skill("spellblade_channel", {"card_uid": uid}))
+			vb.add_child(b)
+	if not has_any:
+		vb.add_child(_lbl("没有魔法/吟唱卡"))
 	var close = _mkbtn("取消")
 	close.pressed.connect(func(): c.queue_free())
 	vb.add_child(close)

@@ -176,15 +176,19 @@ func has_active_skills(player_idx: int) -> Array:
 			# 修复：装备护甲且耐久未满时可用
 			if not p.armor.is_empty() and p.armor.durability < p.armor.get("max_durability", 3):
 				skills.append("wardsmith_repair")
+		"spellblade":
+			# 魔力引导：装备近战武器时可用（回合不限次数由 skill_turn_limit=-1 控制）
+			if not p.weapon.is_empty() and p.weapon.get("data", {}).get("type", "") == "near":
+				skills.append("spellblade_channel")
 	var result = []
 	for sk in skills:
-		# 每回合限次（数据表 skill_turn_limit，默认 1）
+		# 每回合限次（数据表 skill_turn_limit，默认 1；-1 = 不限次数）
 		var cd = Config.CHARACTER_DB[p.char_id]
 		var turn_limit = int(cd.get("skill_turn_limit", 1))
 		var turn_used = 0
 		for sku in p.skills_used:
 			if sku == sk: turn_used += 1
-		if turn_used >= turn_limit: continue
+		if turn_limit >= 0 and turn_used >= turn_limit: continue
 		# 整局限次（数据表 skill_game_limit，默认 -1 无限）
 		var game_limit = int(cd.get("skill_game_limit", -1))
 		if game_limit < 0 and sk == "wardsmith_imbue": game_limit = 1  # 铸甲师护甲注魔限整局一次（数据缺省兜底）
@@ -208,6 +212,7 @@ func skill_button_name(skill: String) -> String:
 		"hunter_ambush": return "埋伏"
 		"wardsmith_imbue": return "护甲注魔"
 		"wardsmith_repair": return "修复"
+		"spellblade_channel": return "魔力引导"
 	return skill
 
 func use_skill(player_idx: int, skill: String, params: Dictionary) -> Dictionary:
@@ -228,7 +233,7 @@ func use_skill(player_idx: int, skill: String, params: Dictionary) -> Dictionary
 	var turn_used = 0
 	for sk in p.skills_used:
 		if sk == skill: turn_used += 1
-	if turn_used >= turn_limit:
+	if turn_limit >= 0 and turn_used >= turn_limit:
 		return {success=false, msg="本回合已达次数上限"}
 	p.skills_used.append(skill)
 	match skill:
@@ -237,6 +242,7 @@ func use_skill(player_idx: int, skill: String, params: Dictionary) -> Dictionary
 		"hunter_ambush": return _hunter_ambush(player_idx, params)
 		"wardsmith_imbue": return _wardsmith_imbue(player_idx, params)
 		"wardsmith_repair": return _wardsmith_repair(player_idx, params)
+		"spellblade_channel": return _spellblade_channel(player_idx, params)
 	return {success=false, msg="未知技能"}
 
 # 护甲注魔（铸甲师，限整局一次）：直接选择一种护甲装备（不消耗卡牌）
@@ -275,6 +281,23 @@ func _wardsmith_repair(player_idx: int, params: Dictionary) -> Dictionary:
 	p.ap_attack -= 2
 	_ms.add_log(player_idx, "修复: %s耐久+1(%d/%d)" % [p.armor.data.name, p.armor.durability, max_dur])
 	return {success=true}
+
+# 魔力引导（魔剑士）：装备近战武器时，弃「魔法」卡视作打出「近战」、弃「吟唱」卡视作打出「重击」（均无视距离，可被格挡）
+func _spellblade_channel(player_idx: int, params: Dictionary) -> Dictionary:
+	var p = _ms.players[player_idx]
+	# 必须装备近战武器
+	if p.weapon.is_empty() or p.weapon.get("data", {}).get("type", "") != "near":
+		return {success=false, msg="需要装备近战武器"}
+	var uid = int(params.get("card_uid", -1))
+	var cs = _ms.card_systems[player_idx]
+	var card = {}
+	for c in cs.hand:
+		if c.uid == uid: card = c; break
+	if card.is_empty() or not card.type_id in ["magic", "chant"]:
+		return {success=false, msg="请选择魔法/吟唱卡"}
+	var as_type = "near" if card.type_id == "magic" else "heavy"
+	# 复用出牌流程：以 near/heavy 打出（对应攻击点消耗），ignore_distance 绕过贴脸限制
+	return _ms._do_play_card(player_idx, {"card_uid": uid, "extra": {"as_type": as_type, "ignore_distance": true}})
 
 # 被动：装备护甲耐久上限 +1（铸甲师 max_durability=4；由 equip_armor 调用）
 func armor_durability_bonus(player_idx: int) -> int:

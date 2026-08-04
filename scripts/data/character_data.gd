@@ -11,7 +11,7 @@ const CHARACTER_DB = {
 	"berserker":   {name="狂战士", hp=28, near=8, range=2, magic=2, skill="berserker",    skill_desc="受直接攻击后获得狂化（近战+1，持续3回合，可叠加）"},
 	"warlock":     {name="邪术师", hp=24, near=2, range=3, magic=3, skill="warlock",      skill_desc="功能点+1；未用功能牌则回合结束抽1张；自身回血效果-1"},
 	"gunslinger":  {name="快枪手", hp=26, near=2, range=6, magic=2, skill="gunslinger",   skill_desc="远程双发：固定消耗2攻击点，造成两段伤害，两段各需一次响应"},
-	"hunter":      {name="猎人",   hp=26, near=4, range=5, magic=2, skill="hunter",       skill_desc="埋伏：消耗1攻击点，将一张远程攻击牌转为捕兽夹放置（可重叠，踩上-3HP）"},
+	"hunter":      {name="猎人",   hp=26, near=4, range=5, magic=2, skill="hunter",       skill_desc="埋伏：弃「远程」卡耗1攻击点放1个捕兽夹；弃「穿心」卡耗2攻击点放2个捕兽夹（每回合限一次）"},
 	"tracker":     {name="寻踪者", hp=24, near=4, range=5, magic=2, skill="tracker",      skill_desc="远程/法术命中获得1层校准（每层远程伤害+1，永久叠加）；远程/法术攻击未造成伤害则校准清空"},
 	"wardsmith":   {name="铸甲师", hp=27, near=4, range=2, magic=4, skill="wardsmith",    skill_desc="护甲注魔：装备一种护甲（限一次）；修复：耗2攻击点+弃强化攻击卡修1耐久；护甲耐久+1"},
 }

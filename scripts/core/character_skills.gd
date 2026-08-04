@@ -407,10 +407,7 @@ func _assassin_move(player_idx: int, params: Dictionary) -> Dictionary:
 # 猎人埋伏：把一张远程攻击牌转为捕兽夹道具放置（不触发攻击）
 func _hunter_ambush(player_idx: int, params: Dictionary) -> Dictionary:
 	var p = _ms.players[player_idx]
-	if p.ap_attack < 1:
-		return {success=false, msg="攻击行动点不足"}
 	var uid = int(params.get("card_uid", -1))
-	var pos: Vector2i = _ms.movement.geometry.from_dict(params.get("pos", params.get("trap_pos", {})))
 	var cs = _ms.card_systems[player_idx]
 	# 校验选中的卡在手牌且是远程攻击牌
 	var card = {}
@@ -418,10 +415,28 @@ func _hunter_ambush(player_idx: int, params: Dictionary) -> Dictionary:
 		if c.uid == uid: card = c; break
 	if card.is_empty() or not card.type_id in ["range", "pierce"]:
 		return {success=false, msg="请选择远程攻击牌"}
-	# 放置捕兽夹（目标格无单位等校验在 place_item）；失败退还 AP
-	if not _ms.item_system.place_item(player_idx, "snare", pos):
-		return {success=false, msg="无法放置"}
-	p.ap_attack -= 1
+	# 远程卡：耗1攻击点放1个夹子；穿心卡：耗2攻击点放2个夹子
+	var cost = 1 if card.type_id == "range" else 2
+	if p.ap_attack < cost:
+		return {success=false, msg="攻击行动点不足"}
+	var geo = _ms.movement.geometry
+	var positions: Array = []
+	positions.append(geo.from_dict(params.get("pos", params.get("trap_pos", {}))))
+	if card.type_id == "pierce":
+		positions.append(geo.from_dict(params.get("pos2", {})))
+	for pos in positions:
+		if not geo.is_valid(pos):
+			return {success=false, msg="请选择放置位置"}
+	# 预校验：目标格不能有单位（捕兽夹可无限堆叠，放置校验只受单位占用影响）
+	for pos in positions:
+		if pos == _ms.players[0].position or pos == _ms.players[1].position:
+			return {success=false, msg="无法放置"}
+	for pos in positions:
+		_ms.item_system.place_item(player_idx, "snare", pos)
+	p.ap_attack -= cost
 	cs.play_card(uid)  # 卡进弃牌堆，不触发攻击/响应
-	_ms.add_log(player_idx, "埋伏: 捕兽夹于%s" % _ms.movement.geometry.to_text(pos))
+	var pos_str = geo.to_text(positions[0])
+	for i in range(1, positions.size()):
+		pos_str += "、" + geo.to_text(positions[i])
+	_ms.add_log(player_idx, "埋伏: 捕兽夹于%s" % pos_str)
 	return {success=true}

@@ -21,6 +21,7 @@ var _player_index: int = -1
 var _is_my_turn: bool = false
 var _selected_uid: int = -1
 var _selected_type: String = ""
+var _hunter_pos1: Dictionary = {}  # 猎人埋伏（穿心）：第 1 个放置位置（{x,y}），空=未选
 var _discard_selected: Array = []
 @onready var card_info = $CardInfo
 @onready var skill_row = $SkillRow
@@ -541,6 +542,28 @@ func _refresh_highlight():
 func _on_board_cell_clicked(cell_pos: Vector2i):
 	var pos_dict := {"x": cell_pos.x, "y": cell_pos.y}
 	if _selected_type == "hunter_ambush" and _is_my_turn:
+		# 穿心：已选第 1 个位置，本次为第 2 个 → 发送放置
+		if not _hunter_pos1.is_empty():
+			_n().send_use_skill("hunter_ambush", {"card_uid": _selected_uid, "pos": _hunter_pos1, "pos2": pos_dict})
+			_hunter_pos1 = {}
+			_selected_uid = -1
+			_selected_type = ""
+			confirm_btn.visible = false
+			cancel_btn.visible = false
+			card_info.text = ""
+			status_label.text = ""
+			return
+		# 判断所选卡是否为穿心（穿心需连续选 2 个放置位置）
+		var me = _game_state.players[0] if _game_state.players[0].index == _player_index else _game_state.players[1]
+		var is_pierce = false
+		for card in me.get("hand", []):
+			if card.uid == _selected_uid and card.type_id == "pierce":
+				is_pierce = true
+				break
+		if is_pierce:
+			_hunter_pos1 = pos_dict
+			status_label.text = "选择第2个捕兽夹位置"
+			return
 		_n().send_use_skill("hunter_ambush", {"card_uid": _selected_uid, "pos": pos_dict})
 		_selected_uid = -1
 		_selected_type = ""
@@ -746,6 +769,7 @@ func _show_hunter_pick():
 func _enter_hunter_pos(card_uid: int):
 	_selected_uid = card_uid
 	_selected_type = "hunter_ambush"
+	_hunter_pos1 = {}
 	cancel_btn.visible = true
 	status_label.text = "选择捕兽夹放置位置"
 

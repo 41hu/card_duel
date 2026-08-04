@@ -32,19 +32,19 @@ grow_horizontal = 2
 theme_override_font_sizes/font_size = 64
 horizontal_alignment = 1
 
-[node name="Title2" type="Button" parent="." unique_id=1144228868]
+[node name="Title2" type="RichTextLabel" parent="." unique_id=1144228868]
 layout_mode = 1
 anchor_left = 0.5
 anchor_right = 0.5
 offset_left = -250.0
 offset_top = 130.0
 offset_right = 250.0
-offset_bottom = 190.0
+offset_bottom = 200.0
 grow_horizontal = 2
-flat = true
-theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
-theme_override_font_sizes/font_size = 48
+theme_override_colors/default_color = Color(1, 0.85, 0.3, 1)
 alignment = 1
+bbcode_enabled = true
+fit_content = true
 
 [node name="StatsLabel" type="Label" parent="." unique_id=1144228869]
 layout_mode = 1
@@ -76,11 +76,14 @@ horizontal_alignment = 1
 [node name="BackBtn" type="Button" parent="." unique_id=1049546627]
 layout_mode = 1
 anchor_left = 0.5
+anchor_top = 1.0
 anchor_right = 0.5
+anchor_bottom = 1.0
 offset_left = -180.0
-offset_top = 690.0
+offset_top = -140.0
 offset_right = 180.0
-offset_bottom = 810.0
+offset_bottom = -100.0
 grow_horizontal = 2
+grow_vertical = 0
 theme_override_font_sizes/font_size = 36
 text = "返回主菜单"

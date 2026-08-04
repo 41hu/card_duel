@@ -32,6 +32,7 @@ func move_player(player_idx: int, direction: int) -> bool:
 			return false
 		_push_opponent(player_idx)
 		player.position = new_pos
+		_add_move_stat(player_idx)
 		return true
 
 	# 不能移动到对方所在格（非推人情况）
@@ -39,7 +40,12 @@ func move_player(player_idx: int, direction: int) -> bool:
 		return false
 
 	player.position = new_pos
+	_add_move_stat(player_idx)
 	return true
+
+# 位移统计（马拉松冠军称号判定）：任何角色位置移动一格 +1（主动移动/推人/被推/吸引/威慑）
+func _add_move_stat(player_idx: int):
+	match_ref.stats[player_idx]["moves"] += 1
 
 # 获取到己方板边的距离（用于手牌上限计算）
 func distance_to_own_edge(player_idx: int) -> int:
@@ -71,6 +77,7 @@ func _push_opponent(player_idx: int):
 	var other = match_ref.get_player(1 - player_idx)
 	var direction = 1 if player_idx == 0 else -1
 	other.position = Config.clamp_position(other.position + direction)
+	_add_move_stat(1 - player_idx)  # 被推者也位移了一格
 	_trigger_items_on_step(1 - player_idx)
 
 # 吸引：将对方拉向自己1格
@@ -88,11 +95,14 @@ func attract(player_idx: int) -> bool:
 		if my_new == other.position or my_new == my_pos:
 			return false
 		other.position = my_pos
+		_add_move_stat(1 - player_idx)
 		_trigger_items_on_step(1 - player_idx)
 		player.position = my_new
+		_add_move_stat(player_idx)
 		_trigger_items_on_step(player_idx)
 		return true
 	other.position = new_pos
+	_add_move_stat(1 - player_idx)
 	_trigger_items_on_step(1 - player_idx)
 	return true
 
@@ -109,6 +119,7 @@ func deter(player_idx: int) -> bool:
 	if new_pos == other.position:
 		return false
 	other.position = new_pos
+	_add_move_stat(1 - player_idx)  # 被威慑推远的位移
 	_trigger_items_on_step(1 - player_idx)
 	return true
 

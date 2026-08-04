@@ -3,25 +3,26 @@ extends Control
 
 const Style = preload("res://scripts/theme/style_const.gd")
 
-# 获胜称号 → 获得条件（与 match_state._calc_title 的判定一致）
-# 判定顺序即此表顺序：满足第一个条件即获得对应称号
+# 获胜称号 → 获得条件（与 match_state._calc_titles 的判定一致）
+# 可同时获得多个：满足条件全部计入，第一个为最亮眼主称号
 const _TITLE_CONDITIONS := {
 	"无伤传说": "全程未受到任何伤害",
-	"毁灭之王": "本局造成伤害 ≥ 25",
-	"绝对防御": "对手本局造成伤害为 0",
-	"圣光使者": "本局回复血量 ≥ 10",
-	"不死凤凰": "本局复活过",
-	"出牌大师": "本局打出卡牌 ≥ 15",
+	"毁灭之王": "本局造成伤害 ≥ 40",
+	"回春圣手": "本局恢复血量 > 25",
+	"不死凤凰": "本局复活 ≥ 2 次",
+	"马拉松冠军": "本局位移 > 10 格（含移动卡/威慑/吸引/暗影步等所有位移）",
+	"耐杀王": "本局承受伤害 > 50",
 	"征服者": "获得胜利（默认称号）",
 }
 
 @onready var title_label = $Title
-@onready var title2_label: Button = $Title2
+@onready var title2_label: RichTextLabel = $Title2
 @onready var stats_label = $StatsLabel
 @onready var detail_label = $Detail
 @onready var back_btn = $BackBtn
 
 var _current_title: String = ""
+var _current_titles: Array = []
 var _title_owner: String = ""
 
 func _n():
@@ -36,7 +37,7 @@ func _ready():
 		get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
 	)
 	# 称号悬停显示条件（PC）；点击显示条件，3 秒后恢复（移动端无 hover）
-	title2_label.pressed.connect(_show_title_condition)
+	title2_label.meta_clicked.connect(func(_meta): _show_title_condition())
 	# 对局记录导出（本地/联机都有：本地来自 game，联机由服务器随结算下发）
 	var has_record = false
 	if LocalGame.game != null:
@@ -46,10 +47,10 @@ func _ready():
 	if has_record:
 		var export_btn := Button.new()
 		export_btn.text = "导出对局数据"
+		# 位置在返回主菜单上方（调换：返回按钮沉底，导出按钮居中偏下，减少误触返回）
 		export_btn.anchor_left = 0.5; export_btn.anchor_right = 0.5
-		export_btn.anchor_top = 1.0; export_btn.anchor_bottom = 1.0
 		export_btn.offset_left = -180.0; export_btn.offset_right = 180.0
-		export_btn.offset_top = -140.0; export_btn.offset_bottom = -100.0
+		export_btn.offset_top = 690.0; export_btn.offset_bottom = 810.0
 		export_btn.add_theme_font_size_override("font_size", 30)
 		export_btn.pressed.connect(func():
 			var result = LocalGame.game.game_result if LocalGame.game != null else Network.last_game_result
@@ -75,10 +76,21 @@ func _show_title_condition():
 	if _current_title == "": return
 	var cond: String = _TITLE_CONDITIONS.get(_current_title, "")
 	if cond == "": return
-	title2_label.text = "条件：%s" % cond
+	title2_label.text = "[color=#ffd95c]条件：%s[/color]" % cond
 	await get_tree().create_timer(3.0).timeout
-	if _current_title != "":
-		title2_label.text = "%s获得称号：%s" % [_title_owner, _current_title]
+	if _current_title != "" and not _current_titles.is_empty():
+		_refresh_title_label(_current_titles)
+
+# 称号行展示：主称号（第一个，最亮眼）大字体 + 其余称号小字体，一行全部展示
+func _refresh_title_label(titles: Array):
+	_current_title = str(titles[0])
+	var cond: String = _TITLE_CONDITIONS.get(_current_title, "")
+	var bb := "%s获得称号：[url=%s][font_size=52]%s[/font_size][/url]" % [_title_owner, cond, _current_title]
+	if titles.size() > 1:
+		var rest = "、".join(titles.slice(1).map(func(t): return str(t)))
+		bb += "[font_size=30]  %s[/font_size]" % rest
+	title2_label.text = bb
+	title2_label.tooltip_text = "条件：%s" % cond
 
 func _on_game_ended(result: Dictionary):
 	var winner = result.get("winner", -1)
@@ -87,6 +99,7 @@ func _on_game_ended(result: Dictionary):
 		title_label.add_theme_color_override("font_color", Style.WIN_GOLD)
 		title2_label.text = ""
 		_current_title = ""
+		_current_titles = []
 		_title_owner = ""
 		stats_label.text = ""
 		detail_label.text = "对方已断开连接"
@@ -98,16 +111,19 @@ func _on_game_ended(result: Dictionary):
 		else:
 			title_label.text = "败北"
 			title_label.add_theme_color_override("font_color", Style.LOSE_RED)
-		var title = result.get("title", "")
-		_current_title = title
+		var titles: Array = result.get("titles", [])
+		if titles.is_empty() and result.get("title", "") != "":
+			titles = [result.get("title", "")]  # 兼容旧版结算数据
 		var names = result.get("names", ["P1", "P2"])
-		if title != "":
-			# 称号归属：显示谁获得了称号（联机=玩家名，本地=角色名）
+		if not titles.is_empty():
+			# 称号归属：显示谁获得了称号（联机=玩家名，本地=角色名）；可多称号一行展示
 			_title_owner = names[winner] if winner >= 0 and winner < names.size() else "获胜者"
-			title2_label.text = "%s获得称号：%s" % [_title_owner, title]
-			title2_label.tooltip_text = "条件：%s" % _TITLE_CONDITIONS.get(title, "")
+			_current_titles = titles
+			_refresh_title_label(titles)
 		else:
 			_title_owner = ""
+			_current_titles = []
+			_current_title = ""
 			title2_label.text = ""
 		stats_label.text = _fmt_stats(result.get("stats", []), names)
 		# 优先显示玩家名（联机为创建房间时输入的名字），否则回退"玩家 N"
@@ -171,8 +187,11 @@ func _export_record(result: Dictionary) -> String:
 	lines.append("")
 	lines.append("--- 结算 ---")
 	var w = result.get("winner", -1)
+	var titles: Array = result.get("titles", [])
+	if titles.is_empty() and result.get("title", "") != "":
+		titles = [result.get("title", "")]
 	lines.append("胜者: %s（%s）| 称号: %s" % [
-		names[w] if w >= 0 and w < names.size() else "?", result.get("reason", ""), result.get("title", "")])
+		names[w] if w >= 0 and w < names.size() else "?", result.get("reason", ""), "、".join(titles)])
 	# 导出路径：编辑器写项目目录（方便直接取文件）；导出平台（APK/PC 打包）res:// 只读，
 	# 写 user:// 应用数据目录；移动端另复制到剪贴板（文件路径用户不可见，粘贴即可分享）
 	var is_editor = OS.has_feature("editor")

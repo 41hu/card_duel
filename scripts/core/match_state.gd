@@ -520,7 +520,7 @@ func _handle_move_card(player_idx: int, card: Dictionary) -> Dictionary:
 	for _s in range(steps):
 		if not movement.move_player(player_idx, direction): break
 		if phase == Config.Phase.GAME_OVER: break  # 踩陷阱致死淘汰：停止后续移动
-		stats[player_idx]["moves"] += 1  # 对战统计：移动步数
+		# 位移统计（moves）由 movement.move_player 内部统一更新（含推人/吸引/威慑/暗影步）
 	_use_card(player_idx, card)
 	add_log(player_idx, "移动到%d" % players[player_idx].position)
 	if movement.get_distance() == 0:
@@ -700,7 +700,7 @@ func _check_permanent_death(player_idx: int):
 			winner=winner, loser=player_idx, reason="permanent_death",
 			stats=stats.duplicate(),
 			names=[Config.char_name(players[0].char_id), Config.char_name(players[1].char_id)],
-			title=_calc_title(winner),
+			titles=_calc_titles(winner),
 			battle_record=battle_record.duplicate(),
 			action_log=action_log.duplicate(),
 		}
@@ -708,17 +708,19 @@ func _check_permanent_death(player_idx: int):
 		state_changed.emit(get_full_state())
 		game_ended.emit(game_result)
 
-# 获胜者称号：根据对战统计判定
-func _calc_title(winner_idx: int) -> String:
+# 获胜者称号：可同时获得多个（满足条件全部计入），第一个为最亮眼主称号
+# 统计口径：伤害/回复/复活/位移（含威慑吸引暗影步等所有位移来源）/承受伤害
+func _calc_titles(winner_idx: int) -> Array:
 	var w = stats[winner_idx]
-	var l = stats[1 - winner_idx]
-	if w["damage_taken"] == 0: return "无伤传说"
-	if w["damage_dealt"] >= 25: return "毁灭之王"
-	if l["damage_dealt"] == 0: return "绝对防御"
-	if w["heal_total"] >= 10: return "圣光使者"
-	if w["resurrected"] > 0: return "不死凤凰"
-	if w["card_total"] >= 15: return "出牌大师"
-	return "征服者"
+	var titles = []
+	if w["damage_taken"] == 0: titles.append("无伤传说")
+	if w["damage_dealt"] >= 40: titles.append("毁灭之王")
+	if w["heal_total"] > 25: titles.append("回春圣手")
+	if w["resurrected"] >= 2: titles.append("不死凤凰")
+	if w["moves"] > 10: titles.append("马拉松冠军")
+	if w["damage_taken"] > 50: titles.append("耐杀王")
+	if titles.is_empty(): titles.append("征服者")
+	return titles
 
 func check_timers():
 	var now = Time.get_ticks_msec()

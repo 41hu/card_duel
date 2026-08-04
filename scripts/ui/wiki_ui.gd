@@ -6,20 +6,31 @@ const Style = preload("res://scripts/theme/style_const.gd")
 
 @onready var content = $MainHBox/Scroll/Margin/Content
 
-# 角色详细技能描述（属性由角色数据自动渲染；此处补充详细说明，缺失时回退 skill_desc）
-const CHAR_DETAIL: Dictionary = {
-	"swordsman": "近战或重击攻击命中目标后，可选择：抽 1 张牌，或回复 2 点 HP。每回合限一次。",
-	"archer": "每回合打出的第一张普通远程攻击卡不消耗攻击行动点（仅限\"远程\"卡，穿心不享受）。",
-	"mage": "主动技能\"法术强化\"：弃 1 张手牌，获得 2 点魔法强化——可无限叠加；打出魔法或吟唱攻击时，消耗全部强化层数，为本次攻击附加等量伤害。每回合限一次。",
-	"paladin": "每回合第一次受到的伤害减少 2 点（最低为 0）。",
-	"assassin": "主动技能\"暗影步\"：每回合可免费向任意方向移动 1 格，不消耗位移行动点。",
-	"priest": "①使用回复卡时，回复量额外 +2；②受到某类持续伤害（灼烧/中毒）后，清除自身该类持续伤害。",
-	"berserker": "受到直接攻击后获得\"狂化\"状态：近战攻击伤害 +1，持续 3 回合，可叠加。",
-	"warlock": "①功能行动点 +1（每回合 2 点）；②若本回合未打出任何功能卡，回合结束额外抽 1 张牌；③自身受到的所有回血效果 −1（回复 +1 时实际回复 0）。",
-	"gunslinger": "被动\"远程双发\"：远程/穿心攻击固定消耗 2 攻击行动点，并造成两段伤害——每段 =（对应面板 − 距离）÷ 2 向下取整（最低 0）；穿心每段 =（远程面板 + 3 − 距离）÷ 2。两段各自独立结算：敌人需打出两张响应卡才能完全抵挡；圣骑士的首伤减免只对第一段生效，武器命中特效每段触发。",
-	"hunter": "主动技能\"埋伏\"（手牌有远程攻击牌时可用）：消耗 1 攻击行动点，选择一张手牌中的远程攻击牌（远程/穿心），将其转化为捕兽夹放置到棋盘空格（该牌进入弃牌堆，不触发攻击）。捕兽夹可重叠放置，第一个到达该格的单位每个夹子受到 3 点伤害，触发后销毁。",
-	"tracker": "被动\"校准\"：远程或法术攻击命中（造成伤害）后，获得 1 层校准状态——每层使远程攻击伤害 +1，永久持续、可无限叠加。若远程或法术攻击未能造成伤害（被闪避、格挡/牵制减至 0、护甲免疫、无法打出等），全部校准清空。",
-	"wardsmith": "①主动\"护甲注魔\"（整局限一次）：直接选择装备一件近战/远程/法术护甲，不消耗卡牌；②主动\"修复\"（装备的护甲破损时可用）：消耗 2 攻击行动点，并丢弃一张与护甲类型匹配的强化攻击卡（重击→近战防具、穿心→远程防具、吟唱→法术防具），修复 1 点护甲耐久；③被动：装备的护甲耐久上限 +1（为 4 耐久）。",
+# 角色技能（[类型, 技能名, 效果]）：主动技在前、被动技在后，每个技能独立一行；属性由角色数据自动渲染
+const CHAR_SKILLS: Dictionary = {
+	"swordsman": [["被动技", "战意", "近战或重击攻击命中目标后，可选择：抽 1 张牌，或回复 2 点 HP。每回合限一次。"]],
+	"archer": [["被动技", "速射", "每回合打出的第一张普通远程攻击卡不消耗攻击行动点（仅限\"远程\"卡，穿心不享受）。"]],
+	"mage": [["主动技", "法术强化", "弃 1 张手牌，获得 2 点魔法强化——可无限叠加；打出魔法或吟唱攻击时，消耗全部强化层数，为本次攻击附加等量伤害。每回合限一次。"]],
+	"paladin": [["被动技", "圣盾", "每回合第一次受到的伤害减少 2 点（最低为 0）。"]],
+	"assassin": [["主动技", "暗影步", "每回合可免费向任意方向移动 1 格，不消耗位移行动点。"]],
+	"priest": [
+		["被动技", "神恩", "使用回复卡时，回复量额外 +2。"],
+		["被动技", "净化", "受到某类持续伤害（灼烧/中毒）后，清除自身该类持续伤害。"],
+	],
+	"berserker": [["被动技", "狂化", "受到直接攻击后，近战攻击伤害 +1，持续 3 回合，可叠加。"]],
+	"warlock": [
+		["被动技", "邪能", "功能行动点 +1（每回合 2 点）。"],
+		["被动技", "汲取", "若本回合未打出任何功能卡，回合结束额外抽 1 张牌。"],
+		["被动技", "诅咒", "自身受到的所有回血效果 −1（回复 +1 时实际回复 0）。"],
+	],
+	"gunslinger": [["被动技", "远程双发", "远程/穿心攻击固定消耗 2 攻击行动点，并造成两段伤害——每段 =（对应面板 − 距离）÷ 2 向下取整（最低 0）；穿心每段 =（远程面板 + 3 − 距离）÷ 2。两段各自独立结算：敌人需打出两张响应卡才能完全抵挡；圣骑士的首伤减免只对第一段生效，武器命中特效每段触发。"]],
+	"hunter": [["主动技", "埋伏", "手牌有远程攻击牌时可用：消耗 1 攻击行动点，选择一张手牌中的远程攻击牌（远程/穿心），将其转化为捕兽夹放置到棋盘空格（该牌进入弃牌堆，不触发攻击）。捕兽夹可重叠放置，第一个到达该格的单位每个夹子受到 3 点伤害，触发后销毁。"]],
+	"tracker": [["被动技", "校准", "远程或法术攻击命中（造成伤害）后，获得 1 层校准状态——每层使远程攻击伤害 +1，永久持续、可无限叠加。若远程或法术攻击未能造成伤害（被闪避、格挡/牵制减至 0、护甲免疫、无法打出等），全部校准清空。"]],
+	"wardsmith": [
+		["主动技", "护甲注魔", "直接选择装备一件近战/远程/法术护甲，不消耗卡牌（整局限一次）。"],
+		["主动技", "修复", "装备的护甲破损时可用：消耗 2 攻击行动点，并丢弃一张与护甲类型匹配的强化攻击卡（重击→近战防具、穿心→远程防具、吟唱→法术防具），修复 1 点护甲耐久。"],
+		["被动技", "铸甲", "装备的护甲耐久上限 +1（为 4 耐久）。"],
+	],
 }
 
 func _ready():
@@ -104,7 +115,7 @@ func _fill_rules():
 	_add_section("棋盘与位置",
 		"棋盘为 11 格横线，两名角色初始分别站在靠近己方一侧的位置（先手侧第 4 格，后手侧第 7 格）。\n距离为两名角色所在格之间的格数差；两名角色位于相邻两格时即\"贴脸\"（距离为 0）。\n角色可在格子上移动；贴脸时向对方方向移动，可推着对方一起移动。")
 	_add_section("游戏模式",
-		"· 自我对战：本地轮流操控两名角色对战，适合熟悉规则与测试\n· 人机对战：与电脑对战，可选简单 / 普通 / 困难三档难度\n· 联机对战：网络对战：创建房间（填写服务器地址 + 房间号）或加入他人房间")
+		"· 自我对战：本地轮流操控两名角色对战，适合熟悉规则与测试\n· 人机对战：与电脑对战，可选简单 / 普通 / 困难三档难度\n· 多人对战：联机对战，创建房间（填写服务器地址 + 房间号）或加入他人房间")
 	_add_section("开局流程（BP 禁选）",
 		"开局先随机决定禁选顺序，随后：\n1. 先手方（P1）禁用 1 名角色（双方都不可选）\n2. 后手方（P2）禁用 1 名角色\n3. P1 选择自己的角色\n4. P2 选择自己的角色\n5. 再随机确定本局先手，进入战斗")
 	_add_section("牌堆与手牌",
@@ -251,16 +262,27 @@ func _fill_chars():
 		vb.add_theme_constant_override("separation", 10)
 		p.add_child(vb)
 		var head = Label.new()
-		head.text = "%s　HP%d　近%d　远%d　魔%d" % [cd.name, cd.hp, cd.near, cd.range, cd.magic]
+		head.text = "%s　HP%d｜近战%d｜远程%d｜魔法%d" % [cd.name, cd.hp, cd.near, cd.range, cd.magic]
 		head.add_theme_font_size_override("font_size", 34)
 		head.add_theme_color_override("font_color", Style.SELECTED_CYAN)
 		vb.add_child(head)
-		var desc = Label.new()
-		desc.text = "技能：%s" % CHAR_DETAIL.get(char_id, cd.skill_desc)
-		desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		desc.add_theme_font_size_override("font_size", 28)
-		desc.add_theme_constant_override("line_spacing", 8)
-		desc.add_theme_color_override("font_color", Color(0.92, 0.92, 0.92))
-		vb.add_child(desc)
+		var skills = CHAR_SKILLS.get(char_id, [])
+		if skills.is_empty():
+			var d = Label.new()
+			d.text = "技能：%s" % cd.skill_desc
+			d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			d.add_theme_font_size_override("font_size", 28)
+			d.add_theme_constant_override("line_spacing", 8)
+			d.add_theme_color_override("font_color", Color(0.92, 0.92, 0.92))
+			vb.add_child(d)
+		else:
+			for sk in skills:
+				var l = Label.new()
+				l.text = "%s %s：%s" % [sk[0], sk[1], sk[2]]
+				l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+				l.add_theme_font_size_override("font_size", 28)
+				l.add_theme_constant_override("line_spacing", 8)
+				l.add_theme_color_override("font_color", Color(0.92, 0.92, 0.92))
+				vb.add_child(l)
 		content.add_child(p)
 	content.add_child(_sep())

@@ -11,7 +11,7 @@ func _init(ms):
 func on_attack_hit(attacker_idx: int, _defender_idx: int, _damage: int, damage_type: int):
 	var p = _ms.players[attacker_idx]
 	match p.char_id:
-		"swordsman": _swordsman_hit(attacker_idx, damage_type)
+		"fighter": _fighter_hit(attacker_idx, damage_type)
 		"tracker":
 			# 寻踪者：远程/法术攻击命中（伤害>0）叠 1 层校准，永久持续、无限叠加
 			if damage_type == Config.DamageType.RANGED or damage_type == Config.DamageType.MAGICAL:
@@ -81,7 +81,7 @@ func on_turn_start(player_idx: int):
 	p.free_move_used = false
 	p.healed_this_turn = 0
 	p.damage_reduction_used = false
-	p.pending_swordsman_skill = false
+	p.pending_fighter_skill = false
 	p.skills_used = []
 	p.used_function_card = false
 	p.combo_attacks_this_turn = []
@@ -100,7 +100,7 @@ func on_turn_end(player_idx: int):
 
 func can_attack_free(player_idx: int, card_type: String) -> bool:
 	var p = _ms.players[player_idx]
-	if p.char_id == "archer" and card_type == "range" and not p.skill_used_this_turn:
+	if p.char_id == "sharpshooter" and card_type == "range" and not p.skill_used_this_turn:
 		return true
 	return false
 
@@ -366,10 +366,10 @@ func get_item_type(player_idx: int) -> String:
 		"hunter": return "snare"  # 猎人 → 捕兽夹
 		_: return "trap"
 
-func _swordsman_hit(player_idx: int, damage_type: int):
+func _fighter_hit(player_idx: int, damage_type: int):
 	var p = _ms.players[player_idx]
 	if damage_type == Config.DamageType.PHYSICAL and not p.skill_used_this_turn:
-		p.pending_swordsman_skill = true
+		p.pending_fighter_skill = true
 
 func _paladin_reduce(player_idx: int, base: int) -> int:
 	var p = _ms.players[player_idx]

@@ -125,8 +125,8 @@ func send_use_skill(skill_name: String, extra: Dictionary = {}):
 	for key in extra: msg[key] = extra[key]
 	send(msg)
 
-func send_swordsman_choice(choice: String):
-	send({"t": "swordsman_choice", "choice": choice})
+func send_fighter_choice(choice: String):
+	send({"t": "fighter_choice", "choice": choice})
 
 func send_reveal_hand():
 	send({"t": "reveal_hand"})

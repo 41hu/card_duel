@@ -97,7 +97,7 @@ _advance_to_next_player()  # 切换到对手
 | `on_opponent_turn_start(curr)` | 对方回合开始 | void | 未来扩展 |
 | `can_attack_free(idx, type)` | 判断是否免费 | bool | 神射手首远程免费 |
 | `on_attack_cast(idx, type)` | 攻击牌打出 | int(伤害加成) | 法师+2魔伤 |
-| `on_attack_hit(att, def, dmg, type)` | 攻击命中后 | void | 剑士回血 |
+| `on_attack_hit(att, def, dmg, type)` | 攻击命中后 | void | 斗士回血 |
 | `on_taking_damage(def, att, dmg)` | 受伤前 | int(修正后伤害) | 圣骑士减伤/狂战士加攻 |
 | `on_heal(idx, amount)` | 回复时 | int(修正后回复量) | 牧师额外+2 |
 | `on_dot_damage(idx, dot_types)` | 受DoT伤害后 | void | 牧师清除对应DoT |
@@ -216,7 +216,7 @@ RESPONSE_BY = {
 16. **BP 超时后不广播** — `server_main.gd:49-54` 超时自动操作后双方 UI 停在旧阶段
 17. **[UI] 弃牌确认连点** — 发送后按钮不禁用，第二次发空数组；点选时全量重建手牌，双击会取消选中
 18. **[UI] 取消陷阱选择后 `_selected_type` 未清** — `battle_ui.gd:483-490` 点棋盘报"手牌中没有此卡"
-19. **[UI] 剑士弹窗堆叠** — `battle_ui.gd:350-351` 条件触发时叠多层全屏弹窗
+19. **[UI] 斗士弹窗堆叠** — `battle_ui.gd:350-351` 条件触发时叠多层全屏弹窗
 20. **[UI] 邪术师 AP 圆点硬编码** — `battle_ui.gd:388-392` 功能点 2 只显示 1 个圆
 21. **[UI] 倒计时归零 UI 冻结** — `battle_ui.gd:234-250` 永久显示"1s"
 22. **[UI] action_log `max_count` 参数被忽略** — `action_log.gd:14` 日志无限增长

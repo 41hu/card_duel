@@ -76,7 +76,7 @@ func _handle_message(peer_idx: int, raw: String):
 		"confirm_discard": _on_confirm_discard_msg(peer_idx, data)
 		"use_skill": _on_use_skill(peer_idx, data)
 		"reveal_hand": _on_reveal_hand(peer_idx)
-		"swordsman_choice": _on_swordsman_choice(peer_idx, data)
+		"fighter_choice": _on_fighter_choice(peer_idx, data)
 
 func _create_room(peer_idx: int, data: Dictionary):
 	var rid = str(_next_room_id); _next_room_id += 1
@@ -197,10 +197,10 @@ func _on_use_skill(peer_idx: int, data: Dictionary):
 	data["action"] = "use_skill"
 	room.match.process_action(peer.player_index, data)
 
-func _on_swordsman_choice(peer_idx: int, data: Dictionary):
+func _on_fighter_choice(peer_idx: int, data: Dictionary):
 	var peer = _peers[peer_idx]; var room = _find_room(peer.room_id)
 	if room == null or room.match == null: return
-	room.match.process_action(peer.player_index, {"action": "swordsman_choice", "choice": data.get("choice", "")})
+	room.match.process_action(peer.player_index, {"action": "fighter_choice", "choice": data.get("choice", "")})
 
 func _on_confirm_discard_msg(peer_idx: int, data: Dictionary):
 	var peer = _peers[peer_idx]; var room = _find_room(peer.room_id)

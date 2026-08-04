@@ -32,7 +32,7 @@ ui/        客户端界面(纯渲染+转发，不做判定)
 ### Network（`scripts/autoload/network.gd`）
 WebSocket 客户端。UI 通过它发消息、收信号。
 - 信号：`connected_to_server / server_disconnected / room_created / room_joined / game_starting / state_updated / bp_state_updated / weapon_prompt / response_needed / game_ended / hand_revealed / network_error`
-- 方法：`connect_to_server(url)`、`disconnect_from_server()`、`send_*` 系列（bp_action / play_card / response / weapon_choice / end_turn / discard_one / confirm_discard / use_skill / swordsman_choice / reveal_hand）
+- 方法：`connect_to_server(url)`、`disconnect_from_server()`、`send_*` 系列（bp_action / play_card / response / weapon_choice / end_turn / discard_one / confirm_discard / use_skill / fighter_choice / reveal_hand）
 - 缓存字段：`player_index`、`bp_state_cache`、`battle_state_cache`、`last_game_result`（结算页读取）
 
 ### LocalGame（`scripts/autoload/local_game.gd`）
@@ -52,7 +52,7 @@ func _n():
 ### MatchState（`scripts/core/match_state.gd`）— 服务端权威状态机
 - 信号：`state_changed / weapon_prompt / response_needed / game_ended / bp_state_changed`
 - **玩家操作入口**（服务端收到消息后调用）：
-  - `process_action(player_idx, {action: "play_card"|"end_turn"|"use_skill"|"swordsman_choice", ...}) -> {success, msg}`
+  - `process_action(player_idx, {action: "play_card"|"end_turn"|"use_skill"|"fighter_choice", ...}) -> {success, msg}`
   - `process_response(defender_idx, respond, card_uid)` / `skip_response(defender_idx)`
   - `confirm_weapon(player_idx, accept)`、`discard_one`、`confirm_discard`、`do_bp_action(player_idx, action, char_id)`
 - **轮询**：`check_timers()`（每秒调一次：BP 超时 / 出牌超时 / 弃牌超时；server 与 LocalGame 都在调）
@@ -153,7 +153,7 @@ func _n():
 
 ## 七、网络协议速查
 
-客户端 → 服务端（`{"t": 消息类型}`）：`create_room / join_room / ready / bp_action / play_card / end_turn / respond / weapon_choice / discard_one / confirm_discard / use_skill / reveal_hand / swordsman_choice`
+客户端 → 服务端（`{"t": 消息类型}`）：`create_room / join_room / ready / bp_action / play_card / end_turn / respond / weapon_choice / discard_one / confirm_discard / use_skill / reveal_hand / fighter_choice`
 
 服务端 → 客户端：`room_created / room_joined / game_starting / bp_state / game_state / weapon_prompt / response_needed / game_over / error / hand_revealed`
 

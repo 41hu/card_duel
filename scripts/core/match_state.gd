@@ -153,7 +153,7 @@ func _create_player(idx: int, char_id: String, char_data: Dictionary) -> Diction
 		skill_counts={},
 		skills_used=[],
 		used_function_card=false,
-		pending_swordsman_skill=false,
+		pending_fighter_skill=false,
 	}
 
 func get_player(idx: int): return players[idx]
@@ -243,7 +243,7 @@ func process_action(player_idx: int, action_data: Dictionary) -> Dictionary:
 			if action_data.get("skill", "") == "_cheat": return _cheat_card(player_idx, action_data.get("type_id", ""))
 			if action_data.get("skill", "") == "_debug_end": return _debug_end(player_idx, action_data.get("win", true))
 			return _handle_skill(player_idx, action_data.get("skill", ""), action_data)
-		"swordsman_choice": return _handle_swordsman_choice(player_idx, action_data)
+		"fighter_choice": return _handle_fighter_choice(player_idx, action_data)
 	return {success=false, msg="未知行动"}
 
 func _do_play_card(player_idx: int, data: Dictionary) -> Dictionary:
@@ -275,24 +275,24 @@ func _do_play_card(player_idx: int, data: Dictionary) -> Dictionary:
 		Config.APType.FUNCTION: ap_ok = (player.ap_function >= cost)
 		Config.APType.NONE: ap_ok = true
 	if not ap_ok: return {success=false, msg="行动点不足"}
-	var free_archer = char_skills.can_attack_free(player_idx, type_id)
+	var free_sharpshooter = char_skills.can_attack_free(player_idx, type_id)
 	if type_id == "blessing":
 		if player.free_move_used: return {success=false, msg="本回合已使用过天赐"}
 		player.free_move_used = true
-	if not free_archer and cd.ap != Config.APType.NONE:
+	if not free_sharpshooter and cd.ap != Config.APType.NONE:
 		match cd.ap:
 			Config.APType.ATTACK: player.ap_attack -= cost
 			Config.APType.MOVE: player.ap_move -= cost
 			Config.APType.FUNCTION: player.ap_function -= cost
 	var result = _execute_card_effect(player_idx, card)
 	if not result.get("success", false) and result.get("phase") != "choose":
-		if not free_archer and cd.ap != Config.APType.NONE:
+		if not free_sharpshooter and cd.ap != Config.APType.NONE:
 			match cd.ap:
 				Config.APType.ATTACK: player.ap_attack += cost
 				Config.APType.MOVE: player.ap_move += cost
 				Config.APType.FUNCTION: player.ap_function += cost
 		return result
-	if free_archer: player.skill_used_this_turn = true
+	if free_sharpshooter: player.skill_used_this_turn = true
 	if cd.ap == Config.APType.FUNCTION: player.used_function_card = true
 	state_changed.emit(get_full_state())
 	return result
@@ -323,9 +323,9 @@ func _debug_end(player_idx: int, win: bool) -> Dictionary:
 	_check_permanent_death(loser)
 	return {success=true}
 
-func _handle_swordsman_choice(player_idx: int, data: Dictionary) -> Dictionary:
+func _handle_fighter_choice(player_idx: int, data: Dictionary) -> Dictionary:
 	var p = players[player_idx]
-	if not p.get("pending_swordsman_skill", false): return {success=false, msg="无可用技能"}
+	if not p.get("pending_fighter_skill", false): return {success=false, msg="无可用技能"}
 	if p.skill_used_this_turn: return {success=false, msg="本回合已使用过"}
 	var choice = data.get("choice", "")
 	if choice == "heal":
@@ -334,14 +334,14 @@ func _handle_swordsman_choice(player_idx: int, data: Dictionary) -> Dictionary:
 		var heal_amt = char_skills.on_heal(player_idx, 2)
 		p.hp = min(p.max_hp, p.hp + heal_amt)
 		stats[player_idx]["heal_total"] += p.hp - before  # 技能回血计入统计
-		add_log(player_idx, "剑士+%dHP" % heal_amt)
+		add_log(player_idx, "斗士+%dHP" % heal_amt)
 	elif choice == "draw":
 		card_systems[player_idx].draw_cards(1)
-		add_log(player_idx, "剑士抽1张")
+		add_log(player_idx, "斗士抽1张")
 	else:
 		return {success=false, msg="无效选择"}
 	p.skill_used_this_turn = true
-	p.pending_swordsman_skill = false
+	p.pending_fighter_skill = false
 	state_changed.emit(get_full_state())
 	return {success=true}
 
@@ -827,7 +827,7 @@ func get_full_state(full: bool = false) -> Dictionary:
 			hand_size=cs.hand.size(), deck_size=cs.deck.size(),
 			hand=cs.hand.duplicate(), hand_limit=movement.get_hand_limit(i),
 			active_skills=_skill_list(i),
-			pending_swordsman_skill=p.get("pending_swordsman_skill", false),
+			pending_fighter_skill=p.get("pending_fighter_skill", false),
 			# 角色道具类型（一张通用道具卡，卡面/说明按角色道具显示）
 			item_type=char_skills.get_item_type(i),
 			item_type_name=item_system.get_item_type(char_skills.get_item_type(i)).get("name", "道具"),

@@ -436,8 +436,8 @@ func _refresh_all(state: Dictionary):
 		_status_msg_timer = 0
 		status_label.text = ""
 		_refresh_skill_row(me)
-		if me.get("pending_swordsman_skill", false):
-			_show_swordsman_popup()
+		if me.get("pending_fighter_skill", false):
+			_show_fighter_popup()
 
 func _on_card_clicked(card_uid: int, type_id: String):
 	var state = _game_state
@@ -795,7 +795,7 @@ func _on_hand_revealed(cards: Array):
 	cb.pressed.connect(func(): c.queue_free()); vb.add_child(cb)
 	add_child(c)
 
-func _show_swordsman_popup():
+func _show_fighter_popup():
 	# 场景切换/结束瞬间状态刷新会触发：battle_ui 已离树，跳过避免 get_viewport_rect 报错
 	if not is_inside_tree():
 		return
@@ -808,13 +808,13 @@ func _show_swordsman_popup():
 	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
 	var vb = _popup_box(c, 620, 320)
-	vb.add_child(_lbl("剑士技能: 近战命中后"))
+	vb.add_child(_lbl("斗士技能: 近战命中后"))
 	var hb = HBoxContainer.new(); vb.add_child(hb)
 	var hbtn = _mkbtn("回2HP")
-	hbtn.pressed.connect(func(): c.queue_free(); _n().send_swordsman_choice("heal"))
+	hbtn.pressed.connect(func(): c.queue_free(); _n().send_fighter_choice("heal"))
 	hb.add_child(hbtn)
 	var dbtn = _mkbtn("抽1张牌")
-	dbtn.pressed.connect(func(): c.queue_free(); _n().send_swordsman_choice("draw"))
+	dbtn.pressed.connect(func(): c.queue_free(); _n().send_fighter_choice("draw"))
 	hb.add_child(dbtn)
 	add_child(c)
 

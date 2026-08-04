@@ -274,9 +274,9 @@ func send_use_skill(skill_name: String, extra: Dictionary = {}):
 	for key in extra: data[key] = extra[key]
 	game.process_action(game.current_player, data)
 
-func send_swordsman_choice(choice: String):
+func send_fighter_choice(choice: String):
 	if not game: return
-	game.process_action(game.current_player, {"action": "swordsman_choice", "choice": choice})
+	game.process_action(game.current_player, {"action": "fighter_choice", "choice": choice})
 
 func send_reveal_hand():
 	if not game: return

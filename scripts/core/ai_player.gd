@@ -28,8 +28,8 @@ func _init(match, diff: int = DIFF_NORMAL):
 
 # ---------- 角色定位基础标签（新角色缺省时按面板自动判定） ----------
 const _BASE_ROLES := {
-	"swordsman": "near", "berserker": "near", "assassin": "near", "paladin": "near",
-	"archer": "range", "hunter": "range", "gunslinger": "range", "tracker": "range",
+	"fighter": "near", "berserker": "near", "assassin": "near", "paladin": "near",
+	"sharpshooter": "range", "hunter": "range", "gunslinger": "range", "tracker": "range",
 	"mage": "magic", "priest": "magic", "warlock": "magic",
 }
 

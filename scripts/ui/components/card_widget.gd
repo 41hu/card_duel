@@ -65,8 +65,8 @@ func setup(uid: int, tid: String, card_name: String, ap: int, is_discard: bool =
 	var bg_color = _card_bg_color(ap)
 	_apply_panel_style(bg_color, is_discard)
 
-	_name_label.add_theme_font_size_override("font_size", 26)
-	_ap_label.add_theme_font_size_override("font_size", 24)
+	_name_label.add_theme_font_size_override("font_size", Style.fs(26))
+	_ap_label.add_theme_font_size_override("font_size", Style.fs(24))
 	_select_mark.text = ""
 	_selected = false
 

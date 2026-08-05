@@ -38,11 +38,12 @@ func _n():
 	return Network
 
 func _ready():
+	Style.scale_node_fonts(self)  # 移动端字号适配（tscn 写死的字号）
 	board.cell_clicked.connect(_on_board_cell_clicked)
 	me_info.status_clicked.connect(_on_status_clicked)
 	opp_info.status_clicked.connect(_on_status_clicked)
 	_deck_label = Label.new()
-	_deck_label.add_theme_font_size_override("font_size", 26)
+	_deck_label.add_theme_font_size_override("font_size", Style.fs(26))
 	_deck_label.add_theme_color_override("font_color", Style.HAND_TITLE)
 	add_child(_deck_label)
 	_build_popups()
@@ -71,7 +72,7 @@ func _setup_debug_button():
 	dbg.text = "调试"
 	dbg.position = Vector2(12, 12)
 	dbg.size = Vector2(140, 70)
-	dbg.add_theme_font_size_override("font_size", 26)
+	dbg.add_theme_font_size_override("font_size", Style.fs(26))
 	dbg.pressed.connect(_show_debug_menu)
 	add_child(dbg)
 
@@ -190,7 +191,7 @@ func _show_resp_popup(atk_card: String):
 	var segs = int(_game_state.get("pending_attack_segments", 1))
 	var seg_txt = "（第%d/%d段）" % [seg, segs] if segs > 1 else ""
 	var t = _lbl("对方使用 %s 攻击%s！选择响应卡：" % [atk_card, seg_txt])
-	t.add_theme_font_size_override("font_size", 28)
+	t.add_theme_font_size_override("font_size", Style.fs(28))
 	box.add_child(t)
 	var has_any = false
 	var defender_hand = []
@@ -274,14 +275,14 @@ func _lbl(txt: String) -> Label:
 	var l = Label.new()
 	l.text = txt
 	l.add_theme_color_override("font_color", Style.LOG_TEXT)
-	l.add_theme_font_size_override("font_size", 28)
+	l.add_theme_font_size_override("font_size", Style.fs(28))
 	return l
 
 func _mkbtn(txt: String) -> Button:
 	var b = Button.new()
 	b.text = txt
 	b.custom_minimum_size = Vector2(220, 100)
-	b.add_theme_font_size_override("font_size", 32)
+	b.add_theme_font_size_override("font_size", Style.fs(32))
 	return b
 
 func _on_state_updated(state: Dictionary):
@@ -811,7 +812,7 @@ func _refresh_skill_row(me: Dictionary):
 	for sk in skills:
 		var b = Button.new()
 		b.text = sk.get("name", sk.get("id", "技能"))
-		b.add_theme_font_size_override("font_size", 28)
+		b.add_theme_font_size_override("font_size", Style.fs(28))
 		b.custom_minimum_size = Vector2(150, 110)
 		b.pressed.connect(func(sid = sk.id): _exec_skill(sid))
 		skill_row.add_child(b)

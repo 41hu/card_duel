@@ -5,6 +5,8 @@
 # 悬停显示 tooltip（PC），点击发出 clicked 信号显示详情（移动端无 hover）
 extends Button
 
+const Style = preload("res://scripts/theme/style_const.gd")
+
 signal clicked(detail_text: String)
 
 func setup(icon_text: String, value_text: String, tooltip: String, accent: Color):
@@ -35,13 +37,13 @@ func setup(icon_text: String, value_text: String, tooltip: String, accent: Color
 	else:
 		var il := Label.new()
 		il.text = icon_text
-		il.add_theme_font_size_override("font_size", 20)
+		il.add_theme_font_size_override("font_size", Style.fs(20))
 		il.add_theme_color_override("font_color", accent)
 		il.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		vb.add_child(il)
 	var vl := Label.new()
 	vl.text = value_text
-	vl.add_theme_font_size_override("font_size", 13)
+	vl.add_theme_font_size_override("font_size", Style.fs(13))
 	vl.add_theme_color_override("font_color", Color(0.9, 0.9, 0.9))
 	vl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(vl)

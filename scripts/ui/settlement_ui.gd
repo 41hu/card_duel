@@ -30,6 +30,7 @@ func _n():
 	return Network
 
 func _ready():
+	Style.scale_node_fonts(self)  # 移动端字号适配（tscn 写死的字号）
 	back_btn.pressed.connect(func():
 		# 清理本地模式残留（自我/人机对局），再开网络局不串状态
 		LocalGame.disconnect_from_server()
@@ -51,7 +52,7 @@ func _ready():
 		export_btn.anchor_left = 0.5; export_btn.anchor_right = 0.5
 		export_btn.offset_left = -180.0; export_btn.offset_right = 180.0
 		export_btn.offset_top = 690.0; export_btn.offset_bottom = 810.0
-		export_btn.add_theme_font_size_override("font_size", 30)
+		export_btn.add_theme_font_size_override("font_size", Style.fs(30))
 		export_btn.pressed.connect(func():
 			var result = LocalGame.game.game_result if LocalGame.game != null else Network.last_game_result
 			var path = _export_record(result)

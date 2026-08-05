@@ -2,6 +2,23 @@
 # 用法: const Style = preload("res://scripts/theme/style_const.gd"); Style.ATTACK_RED
 extends RefCounted
 
+# 移动端字号适配：窗口明显窄于 1920 视口基准时（手机竖屏等，内容被等比缩小），
+# 字号放大补偿（上限 1.5 倍防溢出布局）。桌面/横屏大窗返回原字号。
+# 用法: add_theme_font_size_override("font_size", Style.fs(30))
+static func fs(size: int) -> int:
+	var win = DisplayServer.window_get_size()
+	if win.x > 0 and win.x < 1630:
+		var k = clampf(1920.0 / win.x, 1.0, 1.5)
+		return int(ceil(size * k))
+	return size
+
+# 场景节点字号适配：tscn 里写死的 font_size 无法用 Style.fs，在场景脚本 _ready 调用一次，
+# 遍历子树把已有的字号 override 按移动端系数放大
+static func scale_node_fonts(root: Node):
+	for c in root.find_children("*", "Control", true, false):
+		if c.has_theme_font_size_override("font_size"):
+			c.add_theme_font_size_override("font_size", fs(c.get_theme_font_size("font_size")))
+
 # ---- 主色调 ----
 const BG_DARK       = Color(0.06, 0.08, 0.12)
 const ATTACK_RED    = Color(1.0, 0.5, 0.4)

@@ -56,11 +56,11 @@ func _ready():
 	# 角色名可点击：PC 悬停看技能效果，移动端点击显示到底部状态栏
 	_name_label = Button.new()
 	_name_label.flat = true
-	_name_label.add_theme_font_size_override("font_size", 28)
+	_name_label.add_theme_font_size_override("font_size", Style.fs(28))
 	_name_label.pressed.connect(func(): status_clicked.emit(_skill_desc))
 	head.add_child(_name_label)
 	_hp_num = Label.new()
-	_hp_num.add_theme_font_size_override("font_size", 24)
+	_hp_num.add_theme_font_size_override("font_size", Style.fs(24))
 	head.add_child(_hp_num)
 	_hp_bar = ProgressBar.new()
 	_hp_bar.show_percentage = false
@@ -74,14 +74,14 @@ func _ready():
 	head.add_child(_hp_bar)
 	# 属性行：面板 + AP + 坐标
 	_attr_label = Label.new()
-	_attr_label.add_theme_font_size_override("font_size", 22)
+	_attr_label.add_theme_font_size_override("font_size", Style.fs(22))
 	_attr_label.add_theme_color_override("font_color", Color(0.88, 0.9, 0.95))
 	vb.add_child(_attr_label)
 	# 装备行：武器/防具短信息，点击显示完整效果（PC 悬停 tooltip）
 	_equip_label = Button.new()
 	_equip_label.flat = true
 	_equip_label.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_equip_label.add_theme_font_size_override("font_size", 20)
+	_equip_label.add_theme_font_size_override("font_size", Style.fs(20))
 	_equip_label.add_theme_color_override("font_color", Color(0.75, 0.8, 0.85))
 	_equip_label.pressed.connect(func(): status_clicked.emit(_equip_detail))
 	vb.add_child(_equip_label)

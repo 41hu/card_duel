@@ -20,6 +20,7 @@ const Style = preload("res://scripts/theme/style_const.gd")
 @onready var version_label: Label
 
 func _ready():
+	Style.scale_node_fonts(self)  # 移动端字号适配（tscn 写死的字号）
 	$MainPanel/MultiBtn.pressed.connect(_on_multi_battle)
 	$MainPanel/SelfBtn.pressed.connect(_on_self_play)
 	$MainPanel/AiBtn.pressed.connect(_on_ai_battle)
@@ -37,7 +38,7 @@ func _ready():
 	version_label = Label.new()
 	version_label.name = "VersionLabel"
 	version_label.text = "v" + _get_version()
-	version_label.add_theme_font_size_override("font_size", 20)
+	version_label.add_theme_font_size_override("font_size", Style.fs(20))
 	version_label.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
 	# 安全区适配：全面屏/刘海屏上避免被裁切
 	var sa = DisplayServer.get_display_safe_area()
@@ -126,7 +127,7 @@ func _show_update_popup():
 	var t = Label.new()
 	t.name = "UpdateTitle"
 	t.text = "发现新版本 v%s\n当前 v%s" % [_latest_version, _get_version()]
-	t.add_theme_font_size_override("font_size", 30)
+	t.add_theme_font_size_override("font_size", Style.fs(30))
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(t)
 	var dl_btn = Button.new()
@@ -138,14 +139,14 @@ func _show_update_popup():
 		c.queue_free()
 	)
 	dl_btn.custom_minimum_size = Vector2(260, 90)
-	dl_btn.add_theme_font_size_override("font_size", 30)
+	dl_btn.add_theme_font_size_override("font_size", Style.fs(30))
 	vb.add_child(dl_btn)
 	var later_btn = Button.new()
 	later_btn.name = "LaterBtn"
 	later_btn.text = "稍后"
 	later_btn.pressed.connect(func(): c.queue_free())
 	later_btn.custom_minimum_size = Vector2(260, 90)
-	later_btn.add_theme_font_size_override("font_size", 30)
+	later_btn.add_theme_font_size_override("font_size", Style.fs(30))
 	vb.add_child(later_btn)
 	add_child(c)
 
@@ -157,7 +158,7 @@ func _add_server_shortcut(input: LineEdit, label: String):
 	var offset = _shortcut_offsets.get(input, 0)
 	btn.position = Vector2(input.position.x + input.size.x + 10 + offset, input.position.y)
 	_shortcut_offsets[input] = offset + 130
-	btn.add_theme_font_size_override("font_size", 26)
+	btn.add_theme_font_size_override("font_size", Style.fs(26))
 	if label == "本地":
 		btn.pressed.connect(func(): input.text = "ws://127.0.0.1:17890")
 	else:
@@ -227,7 +228,7 @@ func _make_ready_btn(parent: Control, y: float) -> Button:
 	# 右侧按钮区（原创建/加入按钮位置），左侧保留返回按钮不重叠
 	btn.position = Vector2(400, y)
 	btn.size = Vector2(320, 100)
-	btn.add_theme_font_size_override("font_size", 32)
+	btn.add_theme_font_size_override("font_size", Style.fs(32))
 	btn.add_theme_color_override("font_color", Style.READY_YELLOW)
 	parent.add_child(btn)
 	return btn
@@ -303,7 +304,7 @@ func _make_popup(title_text: String) -> Control:
 	c.add_child(vb)
 	var t = Label.new()
 	t.text = title_text
-	t.add_theme_font_size_override("font_size", 32)
+	t.add_theme_font_size_override("font_size", Style.fs(32))
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(t)
 	return c
@@ -312,7 +313,7 @@ func _popup_btn(text: String) -> Button:
 	var b = Button.new()
 	b.text = text
 	b.custom_minimum_size = Vector2(280, 80)
-	b.add_theme_font_size_override("font_size", 28)
+	b.add_theme_font_size_override("font_size", Style.fs(28))
 	return b
 
 func _on_error(msg: String):

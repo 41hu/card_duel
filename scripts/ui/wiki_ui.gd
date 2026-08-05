@@ -36,6 +36,7 @@ const CHAR_SKILLS: Dictionary = {
 }
 
 func _ready():
+	Style.scale_node_fonts(self)  # 移动端字号适配（tscn 写死的字号）
 	$MainHBox/Sidebar/BackBtn.pressed.connect(func():
 		get_tree().change_scene_to_file("res://scenes/main_menu.tscn"))
 	$MainHBox/Sidebar/RulesBtn.pressed.connect(func(): _show_category("rules"))
@@ -60,13 +61,13 @@ func _show_category(cat: String):
 func _add_section(title_text: String, body: String):
 	var t = Label.new()
 	t.text = title_text
-	t.add_theme_font_size_override("font_size", 42)
+	t.add_theme_font_size_override("font_size", Style.fs(42))
 	t.add_theme_color_override("font_color", Style.WIN_GOLD)
 	content.add_child(t)
 	var b = Label.new()
 	b.text = body
 	b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	b.add_theme_font_size_override("font_size", 30)
+	b.add_theme_font_size_override("font_size", Style.fs(30))
 	b.add_theme_constant_override("line_spacing", 10)
 	b.add_theme_color_override("font_color", Color(0.92, 0.92, 0.92))
 	content.add_child(b)
@@ -81,7 +82,7 @@ func _sep() -> HSeparator:
 func _add_group_label(text: String):
 	var t = Label.new()
 	t.text = text
-	t.add_theme_font_size_override("font_size", 36)
+	t.add_theme_font_size_override("font_size", Style.fs(36))
 	t.add_theme_color_override("font_color", Color(1, 0.85, 0.3, 1))
 	content.add_child(t)
 
@@ -97,14 +98,14 @@ func _add_card_block(name_text: String, lines: Array):
 	p.add_child(vb)
 	var n = Label.new()
 	n.text = name_text
-	n.add_theme_font_size_override("font_size", 32)
+	n.add_theme_font_size_override("font_size", Style.fs(32))
 	n.add_theme_color_override("font_color", Style.SELECTED_CYAN)
 	vb.add_child(n)
 	for line in lines:
 		var l = Label.new()
 		l.text = line
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		l.add_theme_font_size_override("font_size", 26)
+		l.add_theme_font_size_override("font_size", Style.fs(26))
 		l.add_theme_constant_override("line_spacing", 6)
 		l.add_theme_color_override("font_color", Color(0.92, 0.92, 0.92))
 		vb.add_child(l)
@@ -250,7 +251,7 @@ func _fill_mechs():
 func _fill_chars():
 	var t = Label.new()
 	t.text = "角色一览（12 名）"
-	t.add_theme_font_size_override("font_size", 42)
+	t.add_theme_font_size_override("font_size", Style.fs(42))
 	t.add_theme_color_override("font_color", Style.WIN_GOLD)
 	content.add_child(t)
 	for char_id in Config.CHARACTER_IDS:
@@ -265,7 +266,7 @@ func _fill_chars():
 		p.add_child(vb)
 		var head = Label.new()
 		head.text = "%s　HP%d｜近战%d｜远程%d｜魔法%d" % [cd.name, cd.hp, cd.near, cd.range, cd.magic]
-		head.add_theme_font_size_override("font_size", 34)
+		head.add_theme_font_size_override("font_size", Style.fs(34))
 		head.add_theme_color_override("font_color", Style.SELECTED_CYAN)
 		vb.add_child(head)
 		var skills = CHAR_SKILLS.get(char_id, [])
@@ -273,7 +274,7 @@ func _fill_chars():
 			var d = Label.new()
 			d.text = "技能：%s" % cd.skill_desc
 			d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			d.add_theme_font_size_override("font_size", 28)
+			d.add_theme_font_size_override("font_size", Style.fs(28))
 			d.add_theme_constant_override("line_spacing", 8)
 			d.add_theme_color_override("font_color", Color(0.92, 0.92, 0.92))
 			vb.add_child(d)
@@ -282,7 +283,7 @@ func _fill_chars():
 				var l = Label.new()
 				l.text = "%s %s：%s" % [sk[0], sk[1], sk[2]]
 				l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-				l.add_theme_font_size_override("font_size", 28)
+				l.add_theme_font_size_override("font_size", Style.fs(28))
 				l.add_theme_constant_override("line_spacing", 8)
 				l.add_theme_color_override("font_color", Color(0.92, 0.92, 0.92))
 				vb.add_child(l)

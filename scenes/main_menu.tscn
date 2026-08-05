@@ -131,7 +131,7 @@ offset_top = 140.0
 offset_right = 500.0
 offset_bottom = 210.0
 theme_override_font_sizes/font_size = 28
-text = "ws://127.0.0.1:17890"
+text = "ws://47.107.47.251:17890"
 
 [node name="CNameLabel" type="Label" parent="CreatePanel" unique_id=891933236]
 layout_mode = 0
@@ -219,7 +219,7 @@ offset_top = 140.0
 offset_right = 500.0
 offset_bottom = 210.0
 theme_override_font_sizes/font_size = 28
-text = "ws://127.0.0.1:17890"
+text = "ws://47.107.47.251:17890"
 
 [node name="JRoomLabel" type="Label" parent="JoinPanel" unique_id=1188673080]
 layout_mode = 0

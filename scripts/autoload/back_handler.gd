@@ -5,6 +5,8 @@
 # 实现"2 秒内再按一次才退出"，第一次按只显示提示。
 extends Node
 
+const Style = preload("res://scripts/theme/style_const.gd")
+
 const HINT_TIME_MS = 2000
 
 var _last_back_time: int = 0
@@ -70,7 +72,7 @@ func _show_hint():
 		_hint_label = Label.new()
 		_hint_label.name = "BackHint"
 		_hint_label.text = "再按一次退出游戏"
-		_hint_label.add_theme_font_size_override("font_size", 28)
+		_hint_label.add_theme_font_size_override("font_size", Style.fs(28))
 		_hint_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.9))
 		_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		get_tree().root.add_child(_hint_label)

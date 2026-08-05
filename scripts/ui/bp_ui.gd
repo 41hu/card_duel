@@ -5,6 +5,7 @@
 # 而不是显示一个永远禁用的按钮。
 extends Control
 
+const Style = preload("res://scripts/theme/style_const.gd")
 const VERSION_SCRIPT = preload("res://scripts/version.gd")
 
 @onready var phase_label = $PhaseLabel
@@ -24,6 +25,7 @@ func _n():
 	return Network
 
 func _ready():
+	Style.scale_node_fonts(self)  # 移动端字号适配（tscn 写死的字号）
 	_is_local = (LocalGame.game != null)
 	# 触摸友好的滚动条宽度
 	char_grid.get_parent().get_v_scroll_bar().custom_minimum_size = Vector2(24, 0)
@@ -107,20 +109,20 @@ func _create_char_buttons(ids: Array):
 		var st = Label.new()
 		st.name = "StateLabel"
 		st.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		st.add_theme_font_size_override("font_size", 24)
+		st.add_theme_font_size_override("font_size", Style.fs(24))
 		st.visible = false
 		vb.add_child(st)
 		var n = Label.new()
 		n.name = "NameLabel"
 		n.text = cd.name
 		n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		n.add_theme_font_size_override("font_size", 26)
+		n.add_theme_font_size_override("font_size", Style.fs(26))
 		vb.add_child(n)
 		var s = Label.new()
 		s.name = "AttrLabel"
 		s.text = "HP%d 近%d 远%d 魔%d" % [cd.hp, cd.near, cd.range, cd.magic]
 		s.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		s.add_theme_font_size_override("font_size", 20)
+		s.add_theme_font_size_override("font_size", Style.fs(20))
 		vb.add_child(s)
 		var d = Label.new()
 		d.name = "DescLabel"
@@ -128,7 +130,7 @@ func _create_char_buttons(ids: Array):
 		d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		d.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		d.add_theme_font_size_override("font_size", 18)
+		d.add_theme_font_size_override("font_size", Style.fs(18))
 		# 限制描述行数：超长描述（如快枪手）会撑高按钮 → 角色区超可视区/出现滚动条
 		# → 第 3 行按钮（快枪手）点击异常。截断省略保持按钮高度固定 190。
 		d.max_lines_visible = 2

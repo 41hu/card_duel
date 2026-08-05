@@ -16,7 +16,7 @@ func show_logs(action_log: Array, max_count: int = 200, my_index: int = -1):
 	for e in r:
 		var lb = Label.new()
 		lb.text = "[T%d] %s: %s" % [e.get("turn", 0), e.get("player_name", "?"), e.get("msg", "")]
-		lb.add_theme_font_size_override("font_size", 24)
+		lb.add_theme_font_size_override("font_size", Style.fs(24))
 		if my_index >= 0:
 			lb.add_theme_color_override("font_color", Style.ME_GREEN if e.get("player", -1) == my_index else Style.OPP_RED)
 		else:

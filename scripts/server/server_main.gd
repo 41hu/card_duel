@@ -243,6 +243,11 @@ func _broadcast_to_room(room, msg: Dictionary):
 func _on_peer_disconnected(peer_idx: int):
 	var peer = _peers[peer_idx]; var room = _find_room(peer.room_id)
 	if room != null:
+		if room.stage == "ended":
+			# 对局已正常结束：退出不再发断线结算（否则赢家退出会用"对手断线"覆盖正常结算，
+			# 导致获胜者被改成输家）
+			_rooms.erase(room)
+			return
 		# 存活方获胜：发送完整结算数据（与正常对局结束一致），结算界面可查看统计/称号
 		for p_idx in room.peer_indices:
 			if p_idx != peer_idx:

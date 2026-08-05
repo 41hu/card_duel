@@ -16,11 +16,15 @@ const DIFF_HELL = 3
 
 var match_ref
 var difficulty: int = DIFF_NORMAL
-# 记忆对手用过的响应卡类型（hard 难度读牌用）
+# 记忆对手用过的响应卡类型（hard 难度读牌用，从日志解析填充）
 var _opp_used_responses: Dictionary = {}
 # 本回合是否已用过"骗响应"低价值攻击（每回合限一次，避免连续骗卡浪费输出）
 var _bait_used: bool = false
 var _bait_turn: int = -1
+# 我方攻击被响应打断的统计（拟人化：同类型连续被挡 → 换招/骗响应）
+var _blocked_attack_counts: Dictionary = {}
+var _last_blocked_type: String = ""
+var _scan_turn: int = -1
 
 func _init(match, diff: int = DIFF_NORMAL):
 	match_ref = match
@@ -161,6 +165,49 @@ func _count_in_discard(player_idx: int, type_id: String) -> int:
 		if c.type_id == type_id: n += 1
 	return n
 
+# 从日志解析响应历史（每回合刷新一次）：
+# 1. 对手用过的响应类型（hard 读牌正式接入——remember_response 无调用点，改从日志解析）
+# 2. 我方攻击被响应打断的统计（拟人化：连续被挡后换招/骗响应）
+func _scan_response_log(player_idx: int):
+	_opp_used_responses.clear()
+	_blocked_attack_counts.clear()
+	var resp_names := {"近战": "near", "远程": "range", "魔法": "magic"}
+	var prev_was_response := false
+	var prev_resp_player := -1
+	for e in match_ref.action_log:
+		var msg: String = e.get("msg", "")
+		var ep: int = e.get("player", -1)
+		var responded := false
+		var resp_type := ""
+		for cname in resp_names:
+			if msg.contains("用" + cname) and (msg.contains("格挡") or msg.contains("牵制") or msg.contains("闪避")):
+				responded = true
+				resp_type = resp_names[cname]
+				break
+		if responded:
+			if not _opp_used_responses.has(ep):
+				_opp_used_responses[ep] = []
+			_opp_used_responses[ep].append(resp_type)
+			prev_was_response = true
+			prev_resp_player = ep
+		elif msg.contains("使用") and ((msg.contains("对") and msg.contains("造成")) or msg.contains("未造成伤害")):
+			# 攻击结算行：紧跟响应日志 → 该次攻击被挡（防具挡下不算，prev_was_response 为 false）
+			if prev_was_response and prev_resp_player == 1 - ep:
+				var atype := _attack_type_from_msg(msg)
+				if atype != "":
+					_blocked_attack_counts[atype] = _blocked_attack_counts.get(atype, 0) + 1
+					_last_blocked_type = atype
+			prev_was_response = false
+		else:
+			prev_was_response = false
+
+# 从攻击结算日志行解析攻击卡类型（"使用{卡名}对X造成/攻击未造成伤害"）
+func _attack_type_from_msg(msg: String) -> String:
+	for tid in ["near", "heavy", "range", "pierce", "magic", "chant"]:
+		if msg.contains("使用") and msg.contains(Config.card_name(tid)):
+			return tid
+	return ""
+
 # 手牌中"打得出的"攻击牌数量（资源期判定用）
 # 近战型手牌全是远距离打不出的近战卡 → 攻击力 0 → 正确进入资源期攒资源
 # （与人类"保留打不出的牌制造威慑 + 过回合抽卡"的资源期行为一致）
@@ -299,9 +346,13 @@ func _attack_score(player_idx: int, dmg: int, opp_idx: int, stance: Dictionary) 
 	# 对手手牌多 → 响应风险（对手响应牌占比约 1/3，惩罚按期望而非手牌数放大）
 	if difficulty >= DIFF_NORMAL:
 		score -= match_ref.card_systems[opp_idx].hand.size()
-	# 开局拼换血：前两回合进攻优先，抢优势保持压制（避免开局过度保守）
-	if match_ref.turn_number <= 2 and float(p.hp) / p.max_hp > 0.7:
-		score += 8
+	# 开局试探期（拟人化）：人类前两回合以布局+试探为主，不无脑全力输出——
+	# 高伤害爆发牌（≥6）开局照打（如快枪手穿心双发），小伤害攻击降分（留牌等时机）
+	if match_ref.turn_number <= 2:
+		if dmg >= 6:
+			score += 6
+		else:
+			score -= 4
 	# hard：读牌——对手用过的响应类型记忆
 	if difficulty >= DIFF_HARD:
 		var used = _opp_used_responses.get(opp_idx, [])
@@ -383,10 +434,13 @@ func decide_action(player_idx: int) -> Dictionary:
 	var best_score: int = -99999
 	var best_action: Dictionary = {}
 
-	# 回合级状态重置（骗响应每回合限一次）
+	# 回合级状态重置（骗响应每回合限一次 + 每回合刷新日志解析）
 	if match_ref.turn_number != _bait_turn:
 		_bait_turn = match_ref.turn_number
 		_bait_used = false
+	if match_ref.turn_number != _scan_turn:
+		_scan_turn = match_ref.turn_number
+		_scan_response_log(player_idx)
 
 	# 防守保留：手里至少保留 1 张响应牌（近战=格挡/远程=牵制/魔法=闪避），
 	# 斩杀（能击倒对手）时例外，全力进攻。
@@ -434,6 +488,13 @@ func decide_action(player_idx: int) -> Dictionary:
 		# 地狱全知：对手手牌精确响应风险惩罚（闪避/格挡/牵制可防则攻击预期下降）
 		if is_hell:
 			s -= _hell_response_risk(opp_idx, tid)
+		# 拟人化换招（normal+）：同类型攻击连续被响应(≥2次) → 大幅降分换招；
+		# 最近被打断的是其他类型 → 换类型打更可能命中，加分
+		if is_norm:
+			if _blocked_attack_counts.get(tid, 0) >= 2:
+				s -= 25
+			elif _last_blocked_type != "" and tid != _last_blocked_type:
+				s += 6
 		# 骗响应连招（normal+，每回合限一次）：手牌有主属性爆发（定位卡高伤害）时，
 		# 低价值攻击（非定位、非唯一保命牌）先手消耗对手响应牌，主属性随后爆发——
 		# 对手不响应则骗响应卡本身也耗血，响应则消耗其响应牌（hard 记牌可读）。
@@ -510,7 +571,7 @@ func decide_action(player_idx: int) -> Dictionary:
 			var s = 8
 			if opp.frozen_lockout == 0:
 				if match_ref.card_systems[opp_idx].hand.size() >= 4 or stance.get("stance", "") == "flee":
-					s = 20  # 对手手牌多（即将爆发）或我要被斩杀 → 冻住打断
+					s = 26  # 对手手牌多（即将爆发）或我要被斩杀 → 冻住打断（拟人化：优先于普通攻击）
 				else:
 					s = 12
 			if s > best_score:
@@ -565,6 +626,8 @@ func decide_action(player_idx: int) -> Dictionary:
 		if p.ap_function < 1: break
 		if card.type_id == "trap":
 			var s = 6
+			if match_ref.turn_number <= 2:
+				s += 5  # 开局布防习惯（拟人化）：人类前两回合就布置陷阱占位
 			var geo = match_ref.movement.geometry
 			var is_torii = match_ref.char_skills.get_item_type(player_idx) == "torii"
 			var trap_pos: Vector2i = Vector2i.ZERO
@@ -598,12 +661,25 @@ func decide_action(player_idx: int) -> Dictionary:
 			var stance_s = stance.get("stance", "")
 			if is_norm:
 				if my_role == "near" and distance > 0:
-					s = 12 + (6 if distance <= 2 else 0)  # 贴脸逼近
+					# 拟人化：手里有能打出的近战牌才积极逼近；无牌时远距离占位、近距离等牌
+					var has_melee_now = false
+					for c in hand:
+						if c.type_id in ["near", "heavy"] and _real_damage(player_idx, c.type_id) > 0:
+							has_melee_now = true
+							break
+					if has_melee_now or stance.get("stance", "") == "kill":
+						s = 12 + (6 if distance <= 2 else 0)  # 贴脸逼近（有牌/可斩杀）
+					elif distance > 3:
+						s = 8  # 远距离无牌 → 缓慢占位
+					else:
+						s = 2  # 近距离无牌 → 等牌（人类不会白走）
 				elif my_role == "range":
 					# 远程伤害随距离衰减：安全时贴脸打远程（伤害最高），危险时保持距离
 					var safe = _range_melee_safe(player_idx)
 					if distance < 2 and not safe:
 						s = 14  # 对手贴脸威胁大 → 后撤（优先于攻击/同分动作）
+						if _near_threat_imminent(player_idx):
+							s = 18  # 对手近战型可能贴脸爆发 → 坚决拉开（拟人化）
 					elif distance < 2 and safe:
 						s = 2  # 安全 → 贴脸打远程（伤害最高），不急着撤
 					elif distance > 4: s = 8  # 太远 → 靠近到输出距离
@@ -694,7 +770,7 @@ func decide_action(player_idx: int) -> Dictionary:
 		if card.type_id in ["near_weapon", "range_weapon", "magic_weapon"]:
 			var wtype = "near" if card.type_id == "near_weapon" else ("range" if card.type_id == "range_weapon" else "magic")
 			if wtype == my_role:
-				var s = 16  # 定位匹配 → 装备提升输出
+				var s = 20  # 定位匹配 → 装备提升输出（拟人化：人类装完武器当回合就用，装备优先）
 				if s > best_score:
 					best_score = s
 					best_action = {"action": "play_card", "card_uid": card.uid}
@@ -712,6 +788,8 @@ func decide_action(player_idx: int) -> Dictionary:
 				s = 16  # 针对对方主要进攻手段（3 耐久完全免疫首击，价值高）
 			elif p.armor.is_empty():
 				s = 8  # 无防具时随便装一个（有总比没有好）
+				if match_ref.turn_number <= 2:
+					s += 4  # 开局布防习惯（拟人化）：早期穿防具
 			# 已有防具且新防具不针对 → 不换（避免覆盖针对防具）
 			if s > best_score:
 				best_score = s
@@ -756,19 +834,26 @@ func decide_action(player_idx: int) -> Dictionary:
 						if card.type_id in ["near", "heavy"]:
 							has_near = true
 							break
+					var geo = match_ref.movement.geometry
+					var dir: Vector2i = geo.direction_between(p.position, opp.position)
+					var s = 0
 					if has_near:
-						var geo = match_ref.movement.geometry
-						var dir: Vector2i = geo.direction_between(p.position, opp.position)
-						var s = 9
+						s = 9
 						if is_norm and my_role == "near": s = 13  # 近战型暗影步贴脸
-						# 目标格有陷阱 → 暗影步会踩中受伤，高风险低用（保命档更不该踩）
-						var step_pos = geo.step(p.position, dir)
-						if _item_at(step_pos):
-							s -= 8
-							if stance.get("stance", "") == "flee": s -= 6
-						if s > best_score:
-							best_score = s
-							best_action = {"action": "use_skill", "skill": "assassin_move", "direction": geo.to_dict(dir)}
+					else:
+						# 拟人化：无近战牌时不无脑逼近——距离远占位，距离近等牌
+						if distance > 2:
+							s = 6
+						else:
+							s = 1
+					# 目标格有陷阱 → 暗影步会踩中受伤，高风险低用（保命档更不该踩）
+					var step_pos = geo.step(p.position, dir)
+					if _item_at(step_pos):
+						s -= 8
+						if stance.get("stance", "") == "flee": s -= 6
+					if s > best_score:
+						best_score = s
+						best_action = {"action": "use_skill", "skill": "assassin_move", "direction": geo.to_dict(dir)}
 			"wardsmith_imbue":
 				# 护甲注魔（改版）：不耗卡，直接选护甲装备（铸甲师 4 耐久强生存）；
 				# 按对方主要进攻手段选对应护甲（与防具牌同逻辑）；价值高于防具牌（免费且4耐久，
@@ -863,27 +948,33 @@ func decide_response(defender_idx: int, attack_card: String) -> Dictionary:
 	# 地狱全知：攻击者手牌已无攻击牌（本次是最后威胁）→ 非斩杀伤害全部省牌
 	if difficulty >= DIFF_HELL and _opp_hand_attack_count(1 - defender_idx) == 0 and atk_dmg < p.hp:
 		return {respond=false, card_uid=-1}
-	# 闪避（魔法）价值最高：任意攻击可闪；但魔法卡同时也是自己的攻击输出，省着用
-	if magic_uid >= 0:
-		# hard：自己攻击性魔法卡不多时，大伤害才闪（省输出）
-		var magic_count = 0
-		for c in hand:
-			if c.type_id == "magic": magic_count += 1
-		if difficulty >= DIFF_HARD and magic_count <= 1 and atk_dmg <= 3:
-			pass  # 省魔法卡，落到格挡/牵制
-		else:
-			return {respond=true, card_uid=magic_uid}
-	# 格挡（近战）：仅近战/重击
+	# 伤害分级（拟人化）：闪避留给大伤害/致死伤害，中等伤害优先格挡/牵制省魔法卡
+	var big_hit = atk_dmg >= p.hp or atk_dmg >= 6 or atk_dmg >= int(p.hp * 0.4)
+	# 低档响应：格挡（近战系）/ 牵制（远程/魔法系，减伤 = 远程面板 - 距离，连弩+2）
+	var cheap_uid = -1
 	if near_uid >= 0 and attack_card in ["near", "heavy"]:
-		return {respond=true, card_uid=near_uid}
-	# 牵制（远程）：仅远程/穿心/魔法/吟唱；减伤 = 自身远程面板 - 距离（连弩+2）
-	if range_uid >= 0 and attack_card in ["range", "pierce", "magic", "chant"]:
+		cheap_uid = near_uid
+	elif range_uid >= 0 and attack_card in ["range", "pierce", "magic", "chant"]:
 		var dist = match_ref.movement.get_distance()
 		var restrain_value = max(0, p.range_power - dist)
 		if not p.weapon.is_empty() and p.weapon.id == "repeater":
 			restrain_value += 2
 		if restrain_value > 0:
-			return {respond=true, card_uid=range_uid}
+			cheap_uid = range_uid
+	if magic_uid >= 0:
+		var magic_count = 0
+		for c in hand:
+			if c.type_id == "magic": magic_count += 1
+		if big_hit:
+			return {respond=true, card_uid=magic_uid}  # 大伤害 → 闪避（人类习惯）
+		if cheap_uid >= 0:
+			return {respond=true, card_uid=cheap_uid}  # 中等伤害 → 低档响应省闪避
+		# 中等伤害无低档响应：hard 且魔法卡不多 → 省牌；否则闪避
+		if difficulty >= DIFF_HARD and magic_count <= 1:
+			return {respond=false, card_uid=-1}
+		return {respond=true, card_uid=magic_uid}
+	if cheap_uid >= 0:
+		return {respond=true, card_uid=cheap_uid}
 	return {respond=false, card_uid=-1}
 
 # ---------- 弃牌决策（弃价值最低的；保护响应牌/定位牌） ----------

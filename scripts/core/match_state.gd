@@ -698,6 +698,10 @@ func _handle_death(player_idx: int):
 # 地狱难度 AI 复活：牌堆检索一张回复卡使用（不抽 4 张，牌库只少一张、零额外扰动）；
 # 检索不到或回复量不足 → 淘汰（与普通规则一致，不做概率复活）
 func _hell_resurrect(player_idx: int):
+	# 地狱 AI 检索复活限 2 次（超过直接淘汰，避免无限复苏拖长对局）
+	if stats[player_idx]["resurrected"] >= 2:
+		_check_permanent_death(player_idx)
+		return
 	var cs = card_systems[player_idx]
 	var heal = {}
 	for i in range(cs.deck.size() - 1, -1, -1):

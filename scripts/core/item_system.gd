@@ -102,21 +102,21 @@ func place_item(player_idx: int, item_type: String, pos: Vector2i) -> bool:
 
 # ---- 踩上触发 ----
 # 返回本次触发总伤害；道具伤害属于无来源伤害（只计入受到伤害，不计入造成伤害）
+# 结算顺序：先伤害类（陷阱/捕兽夹等固定 damage），后收益类（鸟居 on_step 回血/神隐）——
+# 同格混放时先扣血再回血，避免"先回血再扣血"的收益倒挂
 func trigger_on_step(player_idx: int) -> int:
 	var player = match_ref.get_player(player_idx)
 	var total = 0
 	var names = []
+	# 第一遍：伤害类道具（无 on_step 的固定 damage 道具），统一累计后扣血
 	for i in range(match_ref.items.size() - 1, -1, -1):
 		var it = match_ref.items[i]
 		if it.position != player.position:
 			continue
 		var t = get_item_type(it.item_type)
-		var dmg = 0
-		# 自定义触发优先（on_step handler），否则用固定 damage（开闭原则）
 		if t.has("on_step") and t.get("on_step") != null:
-			dmg = int(t["on_step"].call(player_idx, it))
-		else:
-			dmg = int(t.get("damage", 0))
+			continue  # 收益类（鸟居）第二遍处理
+		var dmg = int(t.get("damage", 0))
 		if dmg > 0:
 			total += dmg
 			names.append(str(t.get("name", it.item_type)))
@@ -126,6 +126,15 @@ func trigger_on_step(player_idx: int) -> int:
 		match_ref._damage_player(player_idx, total)  # 统一伤害入口（内部含死亡判定）
 		match_ref.stats[player_idx]["damage_taken"] += total
 		match_ref.stats[player_idx]["damage_from_trap"] += total
+	# 第二遍：收益/特殊类道具（on_step 回调：鸟居回血/神隐等）——扣血后再结算
+	for i in range(match_ref.items.size() - 1, -1, -1):
+		var it = match_ref.items[i]
+		if it.position != player.position:
+			continue
+		var t = get_item_type(it.item_type)
+		if t.has("on_step") and t.get("on_step") != null:
+			int(t["on_step"].call(player_idx, it))
+		match_ref.items.remove_at(i)  # 触发即消耗（一次性道具）
 	return total
 
 # ---- 摧毁 ----

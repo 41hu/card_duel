@@ -19,7 +19,8 @@ func is_adjacent() -> bool:
 	return get_distance() == 0
 
 # 沿方向移动一格（dir: Vector2i 方向向量；禁移动在此兜底，所有位移路径自动受限）
-func move_player(player_idx: int, dir: Vector2i) -> bool:
+# allow_push=false：该位移不能推人（暗影步等免费位移——避免免费位移附带推人收益过强）
+func move_player(player_idx: int, dir: Vector2i, allow_push: bool = true) -> bool:
 	if match_ref.status.get_move_modifier(player_idx) < 0:
 		return false
 	var player = match_ref.get_player(player_idx)
@@ -29,6 +30,8 @@ func move_player(player_idx: int, dir: Vector2i) -> bool:
 	# 贴脸时向对方方向移动可推人（先判断推人，再判断阻挡）
 	var moving_toward = (geometry.direction_between(player.position, other_player.position) == dir and dir != Vector2i.ZERO)
 	if moving_toward and new_pos == other_player.position:
+		if not allow_push:
+			return false  # 不允许推人的位移（暗影步）：贴脸朝对方移动直接失败
 		if not _can_push(player_idx):
 			return false
 		_push_opponent(player_idx)

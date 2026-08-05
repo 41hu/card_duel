@@ -26,10 +26,11 @@ func _notification(what):
 		_handle_back()
 
 func _unhandled_input(event: InputEvent):
-	# 通道 3：桌面 ESC 等输入事件
-	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
-		get_viewport().set_input_as_handled()
-		_handle_back()
+	# 通道 3：桌面 ESC / 安卓 KEY_BACK 输入事件（部分设备返回键走输入事件而非通知）
+	if event is InputEventKey and event.pressed:
+		if event.keycode == KEY_ESCAPE or event.keycode == KEY_BACK:
+			get_viewport().set_input_as_handled()
+			_handle_back()
 
 # 主菜单注册的回调：返回主面板（创建/加入房间界面返回时调用）。
 # 回调返回 true = 已处理（本次返回不退出游戏）；false = 未处理（走正常退出逻辑）

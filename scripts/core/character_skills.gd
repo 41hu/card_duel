@@ -419,8 +419,9 @@ func _mage_discard(player_idx: int, params: Dictionary) -> Dictionary:
 func _assassin_move(player_idx: int, params: Dictionary) -> Dictionary:
 	var dir: Vector2i = _ms.movement.geometry.from_dict(params.get("direction", {}))
 	if dir == Vector2i.ZERO: return {success=false, msg="请选择方向"}
-	# 禁移动检查统一在 movement.move_player 兜底（霜咬同样限制暗影步）
-	if not _ms.movement.move_player(player_idx, dir): return {success=false, msg="无法移动"}
+	# 禁移动检查统一在 movement.move_player 兜底（霜咬同样限制暗影步）；
+	# 暗影步不允许推人（免费位移不附带推人收益）
+	if not _ms.movement.move_player(player_idx, dir, false): return {success=false, msg="无法移动"}
 	# 突刺武器：暗影步位移到贴脸同样触发额外+3（与移动卡一致）
 	if _ms.movement.get_distance() == 0:
 		_ms._moved_to_adjacent_this_turn = true

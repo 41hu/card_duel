@@ -163,7 +163,7 @@ func _add_server_shortcut(input: LineEdit, label: String):
 	else:
 		# 网页版必须走 wss 反代（HTTPS 页面禁止明文 ws）；APK 直连 17890
 		if OS.has_feature("web"):
-			btn.pressed.connect(func(): input.text = "wss://47.107.47.251/ws")
+			btn.pressed.connect(func(): input.text = "wss://shiyaohu.xyz/ws")
 		else:
 			btn.pressed.connect(func(): input.text = "ws://47.107.47.251:17890")
 	input.get_parent().add_child(btn)

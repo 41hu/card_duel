@@ -55,7 +55,7 @@ func connect_to_server(url: String = ""):
 	if url == "":
 		# 网页版走 wss 反代（页面是 HTTPS，明文 ws 会被浏览器 mixed content 阻止）；
 		# 本机调试走直连
-		url = "wss://47.107.47.251/ws" if OS.has_feature("web") else "ws://127.0.0.1:17890"
+		url = "wss://shiyaohu.xyz/ws" if OS.has_feature("web") else "ws://127.0.0.1:17890"
 	if not url.begins_with("ws"):
 		url = "ws://" + url.replace("http://", "")
 

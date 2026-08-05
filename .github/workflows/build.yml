@@ -70,49 +70,6 @@ jobs:
           mkdir -p web_dist
           ./Godot_v4.7.1-stable_linux.x86_64 --headless --path . --export-release "Web" "web_dist/index.html"
 
-      - name: Add Service Worker for caching
-        run: |
-          cat > web_dist/sw.js << 'SWEOF'
-          const CACHE = 'card-duel-v1';
-          const ASSETS = [
-            '/',
-            '/index.html',
-            '/index.js',
-            '/index.wasm',
-            '/index.pck',
-            '/index.png',
-            '/index.icon.png',
-            '/index.apple-touch-icon.png',
-            '/index.audio.worklet.js',
-            '/index.audio.position.worklet.js',
-          ];
-          self.addEventListener('install', (e) => {
-            e.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)));
-            self.skipWaiting();
-          });
-          self.addEventListener('activate', (e) => {
-            e.waitUntil(caches.keys().then((keys) =>
-              Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
-            ));
-            self.clients.claim();
-          });
-          self.addEventListener('fetch', (e) => {
-            e.respondWith(
-              caches.match(e.request).then((cached) => {
-                const fetched = fetch(e.request).then((response) => {
-                  if (response.ok) {
-                    const clone = response.clone();
-                    caches.open(CACHE).then((cache) => cache.put(e.request, clone));
-                  }
-                  return response;
-                });
-                return cached || fetched;
-              })
-            );
-          });
-          SWEOF
-          sed -i 's|<script src="index.js"></script>|<script>if("serviceWorker" in navigator){navigator.serviceWorker.register("/sw.js")}</script>\n<script src="index.js"></script>|' web_dist/index.html
-
       - name: Deploy to Server
         uses: appleboy/scp-action@v0.1.7
         with:

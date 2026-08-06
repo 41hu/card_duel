@@ -43,7 +43,7 @@ enabled=PackedStringArray("res://addons/hasturoperationgd/plugin.cfg")
 
 [gui]
 
-theme/custom_font="res://assets/fonts/simhei.ttf"
+theme/custom_font="res://assets/fonts/NotoSansCJKsc-Black.otf"
 
 [rendering]
 

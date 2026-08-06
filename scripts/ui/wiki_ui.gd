@@ -55,6 +55,10 @@ func _show_category(cat: String):
 		"cards": _fill_cards()
 		"mechs": _fill_mechs()
 		"chars": _fill_chars()
+	# 触摸滚动修复：内容控件（PanelContainer 等）默认 mouse_filter=STOP 会拦截触摸，
+	# 导致手机端点住内容无法拖动滚动——统一设为 PASS 让触摸穿透给 ScrollContainer
+	for c in content.find_children("*", "Control", true, false):
+		c.mouse_filter = Control.MOUSE_FILTER_PASS
 	$MainHBox/Scroll.scroll_vertical = 0
 
 # 添加一节内容（标题 + 正文）

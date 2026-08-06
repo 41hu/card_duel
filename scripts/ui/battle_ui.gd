@@ -184,30 +184,52 @@ func _show_resp_popup(atk_card: String):
 	for child in c.get_children():
 		if child is ColorRect: continue
 		c.remove_child(child); child.queue_free()
-	var box = _box(c, 140, 100, 700, 480)
+	var box = _box(c, 140, 100, 720, 520)
 	box.name = "RespBox"
 	# 多段攻击显示段号（如 第1/2段）
 	var seg = int(_game_state.get("pending_attack_segment", 0))
 	var segs = int(_game_state.get("pending_attack_segments", 1))
 	var seg_txt = "（第%d/%d段）" % [seg, segs] if segs > 1 else ""
-	var t = _lbl("对方使用 %s 攻击%s！选择响应卡：" % [atk_card, seg_txt])
-	t.add_theme_font_size_override("font_size", Style.fs(28))
+	var t = _lbl("对方使用「%s」攻击%s！选择响应卡：" % [Config.card_name(atk_card), seg_txt])
+	t.add_theme_font_size_override("font_size", Style.fs(30))
+	t.add_theme_color_override("font_color", Color(1, 0.9, 0.6))
+	t.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+	t.add_theme_constant_override("outline_size", Style.fs(5))
 	box.add_child(t)
 	var has_any = false
 	var defender_hand = []
+	var defender = {}
 	for p in _game_state.players:
 		if p.index != _game_state.current_player:
 			defender_hand = p.get("hand", [])
+			defender = p
 			break
+	# 牵制减免值（与服务端一致：远程面板-距离，连弩+2）
+	var dist = int(_game_state.get("distance", 0))
+	var restrain_value = max(0, int(defender.get("range_power", 0)) - dist)
+	if not defender.get("weapon", {}).is_empty() and defender.weapon.id == "repeater":
+		restrain_value += 2
 	for card in defender_hand:
 		var tid = card.type_id
 		var ok = false
-		if tid in ["magic"]: ok = true
-		elif tid in ["range"] and atk_card in ["range", "pierce", "magic", "chant"]: ok = true
-		elif tid in ["near"] and atk_card in ["near", "heavy"]: ok = true
+		var effect = ""
+		if tid in ["magic"]:
+			ok = true
+			# 冻结需用魔法闪避；其他攻击闪避免疫伤害
+			effect = "闪避：免疫此次%s" % ("冻结" if atk_card == "freeze" else "伤害")
+		elif tid in ["range"] and atk_card in ["range", "pierce", "magic", "chant"]:
+			ok = true
+			effect = "牵制：减免%d伤害" % restrain_value
+		elif tid in ["near"] and atk_card in ["near", "heavy"]:
+			ok = true
+			effect = "格挡：伤害减半"
 		if ok:
 			has_any = true
-			var rb = _mkbtn("  %s  " % Config.card_name(tid))
+			var rb = _mkbtn("  %s（%s）  " % [Config.card_name(tid), effect])
+			rb.custom_minimum_size = Vector2(380, 110)
+			rb.add_theme_font_size_override("font_size", Style.fs(34))
+			rb.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+			rb.add_theme_constant_override("outline_size", Style.fs(5))
 			rb.pressed.connect(func(uid=card.uid): c.visible = false; _n().send_response(true, uid))
 			box.add_child(rb)
 	var sb = _mkbtn("不响应" if has_any else "无法响应（跳过）")

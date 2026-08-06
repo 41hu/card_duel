@@ -8,9 +8,11 @@ extends RefCounted
 static func fs(size: int) -> int:
 	var win = DisplayServer.window_get_size()
 	if win.x > 0 and win.x < 1630:
-		var k = clampf(1920.0 / win.x, 1.0, 1.5)
+		# 移动端：补偿视口缩小（上限 1.7 倍，越大越醒目）
+		var k = clampf(1920.0 / win.x, 1.0, 1.7)
 		return int(ceil(size * k))
-	return size
+	# 桌面/大窗：整体放大 10%（黑体 Bold/Black 字重下更醒目）
+	return int(ceil(size * 1.1))
 
 # 场景节点字号适配：tscn 里写死的 font_size 无法用 Style.fs，在场景脚本 _ready 调用一次，
 # 遍历子树把已有的字号 override 按移动端系数放大

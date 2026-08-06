@@ -6,7 +6,7 @@ const CHARACTER_DB = {
 	"sharpshooter":      {name="神射手", hp=24, near=2, range=8, magic=2, skill="sharpshooter",      skill_desc="每回合首次普通远程不消耗攻击点"},
 	"mage":        {name="法师",   hp=22, near=2, range=2, magic=8, skill="mage",         skill_desc="弃1手牌，魔法强化+2（每回合限一次，可叠加；打出魔法攻击后清除）"},
 	"paladin":     {name="圣骑士", hp=26, near=4, range=1, magic=3, skill="paladin",      skill_desc="每回合首次受伤-2（最低0）"},
-	"assassin":    {name="刺客",   hp=22, near=7, range=5, magic=1, skill="assassin",     skill_desc="每回合免费移动1格（独立于位移点，不能推人）"},
+	"assassin":    {name="刺客",   hp=22, near=7, range=4, magic=1, skill="assassin",     skill_desc="每回合免费移动1格（独立于位移点，不能推人）"},
 	"priest":      {name="牧师",   hp=28, near=2, range=4, magic=6, skill="priest",       skill_desc="使用回复卡额外+2；受到DoT伤害后清除该类DoT"},
 	"berserker":   {name="狂战士", hp=28, near=8, range=2, magic=2, skill="berserker",    skill_desc="受直接攻击后获得狂化（近战+1，持续3回合，可叠加）"},
 	"warlock":     {name="邪术师", hp=24, near=1, range=2, magic=3, skill="warlock",      skill_desc="功能点+1；未用功能牌则回合结束抽1张；自身回血效果-2"},

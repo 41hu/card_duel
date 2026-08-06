@@ -30,6 +30,16 @@ func _ready():
 	$MainPanel/QuitBtn.pressed.connect(func(): get_tree().quit())
 	if OS.has_feature("web"):
 		$MainPanel/QuitBtn.visible = false
+	# 新手教程入口：左下角独立按钮（不与主按钮堆一起）
+	var tbtn := Button.new()
+	tbtn.text = "新手教程"
+	tbtn.add_theme_font_size_override("font_size", Style.fs(26))
+	tbtn.anchor_top = 1.0; tbtn.anchor_bottom = 1.0
+	tbtn.offset_left = 24
+	tbtn.offset_top = -Style.fs(104); tbtn.offset_bottom = -24
+	tbtn.size = Vector2(Style.fs(180), Style.fs(80))
+	tbtn.pressed.connect(_start_tutorial)
+	add_child(tbtn)
 	_add_server_shortcut(c_server, "本地")
 	_add_server_shortcut(c_server, "云端")
 	_add_server_shortcut(j_server, "本地")
@@ -280,6 +290,11 @@ func _show_ai_difficulty():
 	back.pressed.connect(func(): c.queue_free())
 	vb.add_child(back)
 	add_child(c)
+
+# 新手教程：进入教程对局（TutorialManager 控制 9 步流程）
+func _start_tutorial():
+	LocalGame.start_tutorial()
+	get_tree().change_scene_to_file("res://scenes/battle_scene.tscn")
 
 # 人机对战：进入 BP 界面选角色（AI 自动禁选，新角色自动适配）
 func _start_ai_bp(diff: int):

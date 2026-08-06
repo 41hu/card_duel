@@ -32,6 +32,8 @@ var ai_difficulty: int = 1
 var ai_idx: int = 1
 var _ai = null
 var _ai_busy: bool = false
+# ---- 新手教程模式 ----
+var tutorial_mode: bool = false
 # AI 每步间隔（让玩家看清 AI 的出牌过程）
 const AI_STEP_DELAY_MS = 700
 var _ai_next_act_time: int = 0
@@ -56,6 +58,7 @@ func _process(delta):
 
 func start_local_game(p1_char: String, p2_char: String, bp_first: int = -1):
 	ai_mode = false  # 防残留：人机后直接进自我对战会被 _process 的 AI 驱动干扰
+	tutorial_mode = false
 	_ai = null
 	last_record_path = ""
 	game = MatchStateClass.new()
@@ -65,6 +68,23 @@ func start_local_game(p1_char: String, p2_char: String, bp_first: int = -1):
 	game.response_needed.connect(_on_response)
 	game.game_ended.connect(_on_ended)
 	game.init_match(p1_char, p2_char, bp_first)
+	game._start_game()
+	battle_state_cache = game.get_full_state()
+
+# 新手教程：开局刺客 vs 斗士（后续步骤由 TutorialManager 控制切段）
+func start_tutorial():
+	ai_mode = false
+	tutorial_mode = true
+	_ai = null
+	last_record_path = ""
+	game = MatchStateClass.new()
+	game.disable_timeout = true
+	game.state_changed.connect(_on_state)
+	game.weapon_prompt.connect(_on_weapon)
+	game.response_needed.connect(_on_response)
+	game.game_ended.connect(_on_ended)
+	game.init_match("assassin", "berserker", 0)
+	game.draw_suppressed = true  # 教程：手牌完全由教程管理器控制（不自然抽牌）
 	game._start_game()
 	battle_state_cache = game.get_full_state()
 
@@ -186,6 +206,9 @@ func _on_state(state: Dictionary):
 	state_updated.emit(state)
 
 func _on_weapon(player_idx: int, weapon: Dictionary):
+	if tutorial_mode and player_idx != 0:
+		game.confirm_weapon(player_idx, true)  # 教程：对手自动接受武器（不弹窗给玩家）
+		return
 	if ai_mode and player_idx == ai_idx:
 		# 武器类型适配自身定位才装备（不匹配装了无加成）
 		game.confirm_weapon(player_idx, _ai.decide_weapon(player_idx, weapon))

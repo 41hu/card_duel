@@ -169,6 +169,9 @@ func _create_player(idx: int, char_id: String, char_data: Dictionary) -> Diction
 # 牌堆模式：false = 共享牌堆（默认，人机/联机）；true = 独立牌堆（PVE 构筑）
 var independent_decks: bool = false
 
+# 教程模式：抑制回合自然抽牌（手牌由教程管理器完全控制）
+var draw_suppressed: bool = false
+
 # 构建一副卡组（默认初始构成；custom_decks[idx] 为自定义 type_id 数组时用自定义）
 func _build_card_system(idx: int, custom_decks: Array) -> CardSys:
 	var deck: Array = []
@@ -235,8 +238,10 @@ func _judgment_phase():
 func _draw_phase():
 	if phase == Config.Phase.GAME_OVER: return
 	turn_phase = Config.TurnPhase.DRAW
-	card_systems[current_player].draw_cards(char_skills.draw_count(current_player))
-	add_log(current_player, "抽了2张牌")
+	# 教程模式抑制自然抽牌（手牌由教程完全控制，避免混入随机牌）
+	if not draw_suppressed:
+		card_systems[current_player].draw_cards(char_skills.draw_count(current_player))
+		add_log(current_player, "抽了2张牌")
 	_action_phase()
 
 func _action_phase():
@@ -828,8 +833,9 @@ func reveal_opponent_hand(asking_player_idx: int) -> Array:
 
 func _skill_list(player_idx: int) -> Array:
 	var out = []
+	var desc = Config.CHARACTER_DB.get(players[player_idx].char_id, {}).get("skill_desc", "")
 	for sk in char_skills.has_active_skills(player_idx):
-		out.append({"id": sk, "name": char_skills.skill_button_name(sk)})
+		out.append({"id": sk, "name": char_skills.skill_button_name(sk), "desc": desc})
 	return out
 
 func get_full_state(full: bool = false) -> Dictionary:

@@ -31,6 +31,7 @@ var _last_player: int = -1
 var _cheat_on: bool = false
 var _timer_left: int = -1
 var _resp_popup: Control
+var tutorial = null  # 教程控制器（新手教程模式时非空）
 var _wpn_popup: Control
 
 func _n():
@@ -63,6 +64,13 @@ func _ready():
 		_n().battle_state_cache = {}
 	_apply_safe_area()
 	_setup_debug_button()
+	# 新手教程模式：创建教程控制器（步骤引导/脚本对手/操作限制）
+	if LocalGame.tutorial_mode:
+		var tm = load("res://scripts/ui/tutorial_manager.gd").new()
+		tm.battle = self
+		tm.g = LocalGame.game
+		add_child(tm)
+		tutorial = tm
 
 # 调试菜单按钮（仅编辑器运行时显示，导出到真机不显示）：快速结束对局/发牌
 func _setup_debug_button():
@@ -232,9 +240,16 @@ func _show_resp_popup(atk_card: String):
 			rb.add_theme_constant_override("outline_size", Style.fs(5))
 			rb.pressed.connect(func(uid=card.uid): c.visible = false; _n().send_response(true, uid))
 			box.add_child(rb)
-	var sb = _mkbtn("不响应" if has_any else "无法响应（跳过）")
-	sb.pressed.connect(func(): c.visible = false; _n().send_response(false))
-	box.add_child(sb)
+	# 教程强制响应步骤：隐藏"不响应"（引导玩家必须响应）
+	if tutorial != null and tutorial.force_response():
+		var tip = _lbl("请选择一张响应卡（教程步骤）")
+		tip.add_theme_font_size_override("font_size", Style.fs(26))
+		tip.add_theme_color_override("font_color", Color(1, 0.9, 0.5))
+		box.add_child(tip)
+	else:
+		var sb = _mkbtn("不响应" if has_any else "无法响应（跳过）")
+		sb.pressed.connect(func(): c.visible = false; _n().send_response(false))
+		box.add_child(sb)
 	c.visible = true
 
 func _make_wpn_popup() -> Control:
@@ -310,7 +325,11 @@ func _mkbtn(txt: String) -> Button:
 func _on_state_updated(state: Dictionary):
 	_game_state = state
 	if _n() == LocalGame:
-		if LocalGame.ai_mode:
+		if LocalGame.tutorial_mode:
+			# 教程：固定玩家 P0 视角（对手回合不泄露手牌）
+			_player_index = 0
+			_is_my_turn = (state.current_player == 0 and state.phase == Config.Phase.PLAYER_TURN)
+		elif LocalGame.ai_mode:
 			# 人机对战：人类固定 P0 视角（否则 AI 回合会泄露 AI 手牌）
 			_player_index = 0
 			_is_my_turn = (state.current_player == 0 and state.phase == Config.Phase.PLAYER_TURN)
@@ -473,6 +492,10 @@ func _on_card_clicked(card_uid: int, type_id: String):
 		return
 	if not _is_my_turn:
 		return
+	# 教程限制：当前步骤不允许的卡不响应点击
+	if tutorial != null and not tutorial.allow_card_click(card_uid, type_id):
+		status_label.text = "当前步骤请按引导操作"
+		return
 
 	if state.get("waiting_for_discard", false):
 		if card_uid in _discard_selected:
@@ -622,13 +645,19 @@ func _popup_move(card_uid: int):
 	var hb = HBoxContainer.new()
 	vb.add_child(hb)
 	# 哨兵 -1 = 技能调用（暗影步）；调试发牌卡 uid 为负数（-1000 递减），必须走 play_card
+	# 教程：限制可选移动方向（如只允许向对手方向）
+	var dirs = [1, -1]
+	if tutorial != null:
+		dirs = tutorial.allowed_move_dirs()
 	var lb = _mkbtn("左1格")
+	lb.visible = -1 in dirs
 	if card_uid == -1:
 		lb.pressed.connect(func(): c.queue_free(); _n().send_use_skill("assassin_move", {"direction": {"x": -1, "y": 0}}))
 	else:
 		lb.pressed.connect(func(): c.queue_free(); _n().send_play_card(card_uid, {"direction": {"x": -1, "y": 0}, "steps": 1}))
 	hb.add_child(lb)
 	var rb = _mkbtn("右1格")
+	rb.visible = 1 in dirs
 	if card_uid == -1:
 		rb.pressed.connect(func(): c.queue_free(); _n().send_use_skill("assassin_move", {"direction": {"x": 1, "y": 0}}))
 	else:
@@ -680,6 +709,9 @@ func _popup_trap(card_uid: int):
 	_selected_type = "trap"
 
 func _on_response_needed(data: Dictionary):
+	# 教程接管响应：对手自动不响应 / 复活步骤自动跳过
+	if tutorial != null and tutorial.handle_response_needed():
+		return
 	var atk = data.get("card", "")
 	status_label.text = "对方发动%s攻击！" % atk
 	_show_resp_popup(atk)
@@ -691,6 +723,8 @@ func _on_weapon_prompt(weapon: Dictionary):
 	_wpn_popup.visible = true
 
 func _on_game_ended(r: Dictionary):
+	if LocalGame.tutorial_mode:
+		return  # 教程：反杀后由教程控制器继续（切猎人段），不跳结算页
 	_n().last_game_result = r
 	get_tree().change_scene_to_file("res://scenes/settlement.tscn")
 
@@ -704,6 +738,9 @@ func _on_server_disconnected():
 		get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
 
 func _exec_skill(sk_id: String):
+	if tutorial != null and not tutorial.allow_skill(sk_id):
+		status_label.text = "当前步骤请按引导操作"
+		return
 	if sk_id == "mage_discard": _show_mage_pick()
 	elif sk_id == "assassin_move": _popup_move(-1)
 	elif sk_id == "hunter_ambush": _show_hunter_pick()
@@ -836,6 +873,7 @@ func _refresh_skill_row(me: Dictionary):
 		b.text = sk.get("name", sk.get("id", "技能"))
 		b.add_theme_font_size_override("font_size", Style.fs(28))
 		b.custom_minimum_size = Vector2(150, 110)
+		b.tooltip_text = sk.get("desc", "")  # 悬停/长按显示技能完整描述（含限制如"不能推人"）
 		b.pressed.connect(func(sid = sk.id): _exec_skill(sid))
 		skill_row.add_child(b)
 
@@ -895,6 +933,9 @@ func _show_fighter_popup():
 
 func _on_end_turn():
 	if not _is_my_turn:
+		return
+	if tutorial != null and not tutorial.allow_end_turn():
+		status_label.text = "当前步骤请按引导操作"
 		return
 	if _game_state.get("waiting_for_discard", false):
 		_n().send_confirm_discard(_discard_selected.duplicate())

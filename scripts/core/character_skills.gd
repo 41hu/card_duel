@@ -225,25 +225,33 @@ func use_skill(player_idx: int, skill: String, params: Dictionary) -> Dictionary
 	var cd = Config.CHARACTER_DB[p.char_id]
 	var game_limit = int(cd.get("skill_game_limit", -1))
 	if game_limit < 0 and skill == "wardsmith_imbue": game_limit = 1  # 铸甲师护甲注魔限整局一次（数据缺省兜底）
+	var used = 0
 	if game_limit > 0:
-		var used = p.skill_counts.get(skill, 0)
+		used = p.skill_counts.get(skill, 0)
 		if used >= game_limit: return {success=false, msg="整局已达上限(%d次)" % game_limit}
-		p.skill_counts[skill] = used + 1
 	var turn_limit = int(cd.get("skill_turn_limit", 1))
 	var turn_used = 0
 	for sk in p.skills_used:
 		if sk == skill: turn_used += 1
 	if turn_limit >= 0 and turn_used >= turn_limit:
 		return {success=false, msg="本回合已达次数上限"}
+	# 先执行技能，成功后才记账（skills_used/skill_counts）。
+	# 否则技能内部失败（如暗影步贴脸推人被拒）也会消耗回合次数/整局限次。
 	p.skills_used.append(skill)
+	if game_limit > 0: p.skill_counts[skill] = used + 1
+	var skill_result: Dictionary
 	match skill:
-		"mage_discard": return _mage_discard(player_idx, params)
-		"assassin_move": return _assassin_move(player_idx, params)
-		"hunter_ambush": return _hunter_ambush(player_idx, params)
-		"wardsmith_imbue": return _wardsmith_imbue(player_idx, params)
-		"wardsmith_repair": return _wardsmith_repair(player_idx, params)
-		"spellblade_channel": return _spellblade_channel(player_idx, params)
-	return {success=false, msg="未知技能"}
+		"mage_discard": skill_result = _mage_discard(player_idx, params)
+		"assassin_move": skill_result = _assassin_move(player_idx, params)
+		"hunter_ambush": skill_result = _hunter_ambush(player_idx, params)
+		"wardsmith_imbue": skill_result = _wardsmith_imbue(player_idx, params)
+		"wardsmith_repair": skill_result = _wardsmith_repair(player_idx, params)
+		"spellblade_channel": skill_result = _spellblade_channel(player_idx, params)
+		_: skill_result = {success=false, msg="未知技能"}
+	if not skill_result.get("success", false):
+		p.skills_used.pop_back()
+		if game_limit > 0: p.skill_counts[skill] = used
+	return skill_result
 
 # 护甲注魔（铸甲师，限整局一次）：直接选择一种护甲装备（不消耗卡牌）
 func _wardsmith_imbue(player_idx: int, params: Dictionary) -> Dictionary:
@@ -419,8 +427,13 @@ func _mage_discard(player_idx: int, params: Dictionary) -> Dictionary:
 func _assassin_move(player_idx: int, params: Dictionary) -> Dictionary:
 	var dir: Vector2i = _ms.movement.geometry.from_dict(params.get("direction", {}))
 	if dir == Vector2i.ZERO: return {success=false, msg="请选择方向"}
-	# 禁移动检查统一在 movement.move_player 兜底（霜咬同样限制暗影步）；
-	# 暗影步不允许推人（免费位移不附带推人收益）
+	# 暗影步不允许推人（免费位移不附带推人收益）：贴脸朝对方方向使用 → 明确提示
+	var p = _ms.players[player_idx]
+	var opp = _ms.players[1 - player_idx]
+	if _ms.movement.get_distance() == 0 \
+			and _ms.movement.geometry.direction_between(p.position, opp.position) == dir:
+		return {success=false, msg="暗影步不能推人"}
+	# 禁移动检查统一在 movement.move_player 兜底（霜咬同样限制暗影步）
 	if not _ms.movement.move_player(player_idx, dir, false): return {success=false, msg="无法移动"}
 	# 突刺武器：暗影步位移到贴脸同样触发额外+3（与移动卡一致）
 	if _ms.movement.get_distance() == 0:

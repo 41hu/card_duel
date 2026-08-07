@@ -539,11 +539,44 @@ func _on_confirm_card():
 		if _has_matching_armor(_selected_type):
 			_show_armor_confirm(_selected_uid, _selected_type)
 			_selected_uid = -1
+		elif _is_armor_override(_selected_type):
+			_show_armor_override_confirm(_selected_uid)
+			_selected_uid = -1
 		else:
 			_n().send_play_card(_selected_uid)
 			_selected_uid = -1
 	confirm_btn.visible = false
 	cancel_btn.visible = false
+
+# 已有防具时再装备防具卡：弹确认（旧防具会被直接覆盖消失）
+func _is_armor_override(type_id: String) -> bool:
+	if not type_id.ends_with("_armor"): return false
+	var me = _game_state.players[0] if _game_state.players[0].index == _player_index else _game_state.players[1]
+	return not me.get("armor", {}).is_empty()
+
+func _show_armor_override_confirm(card_uid: int):
+	var c = Control.new()
+	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
+	var vb = _popup_box(c, 640, 400)
+	var me = _game_state.players[0] if _game_state.players[0].index == _player_index else _game_state.players[1]
+	var old_name = me.get("armor", {}).get("data", {}).get("name", "防具")
+	vb.add_child(_lbl("已装备防具「%s」\n新防具会覆盖旧防具（旧防具直接消失），确定装备？" % old_name))
+	var hb := HBoxContainer.new()
+	hb.alignment = BoxContainer.ALIGNMENT_CENTER
+	hb.add_theme_constant_override("separation", 24)
+	var ok = _mkbtn("确定装备")
+	ok.pressed.connect(func():
+		c.queue_free()
+		_n().send_play_card(card_uid)
+	)
+	hb.add_child(ok)
+	var no = _mkbtn("取消")
+	no.pressed.connect(func(): c.queue_free())
+	hb.add_child(no)
+	vb.add_child(hb)
+	add_child(c)
 
 func _has_matching_armor(attack_type: String) -> bool:
 	var armor_needed = {"near": "physical", "heavy": "physical", "range": "ranged", "pierce": "ranged", "magic": "magical", "chant": "magical"}

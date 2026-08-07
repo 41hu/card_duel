@@ -108,7 +108,8 @@ func refresh(p: Dictionary, tag: String, accent: Color):
 	var pos = p.get("position", {})
 	var pos_x = pos.get("x", 0) if pos is Dictionary else pos
 	_attr_label.text = "近%d 远%d 魔%d | %s | 手:%d/%d 格%d" % [p.near_power, p.range_power, p.magic_power,
-		_ap_circles(p.get("ap_attack", 0), p.get("ap_move", 0), p.get("ap_function", 0)),
+		_ap_circles(p.get("ap_attack", 0), p.get("ap_move", 0), p.get("ap_function", 0),
+			2 if p.get("char_id", "") == "warlock" else 1),
 		p.get("hand_size", 0), p.get("hand_limit", 5), pos_x]
 	_refresh_equip(p)
 	_refresh_status(p)
@@ -195,11 +196,11 @@ func _dur_text(duration: int) -> String:
 	if duration == -2: return "永久持续"
 	return "剩余%d回" % duration
 
-func _ap_circles(atk: int, mov: int, fun: int) -> String:
+func _ap_circles(atk: int, mov: int, fun: int, fun_max: int = 1) -> String:
 	var a := ""; for _i in range(2): a += "●" if _i < atk else "○"
 	var m := ""; for _i in range(1): m += "●" if _i < mov else "○"
-	# 功能点按实际值显示（术士 2 圆，其他角色 1 圆）；不显示空心圆避免误解上限为 2
-	var f := ""; for _i in range(fun): f += "●"
+	# 功能点显示上限圆（术士 2、其他 1），用掉的变空心圆，与攻击/位移点一致
+	var f := ""; for _i in range(fun_max): f += "●" if _i < fun else "○"
 	return "攻%s 移%s 功%s" % [a, m, f]
 
 # HP 变化闪烁：改色 0.9 秒后恢复（低血红色由下次 refresh 覆盖）

@@ -21,6 +21,8 @@ var _guide_label: Label = null
 var _skip_btn: Button = null
 var _opp_actions: Array = []
 var _opp_turn_handled: bool = false
+const OPP_STEP_DELAY_MS = 700  # 对手每步出牌间隔（帧驱动逐步行动，玩家能看清出牌过程）
+var _opp_next_act_time: int = 0
 var _revive_hint_shown: bool = false
 var _opp_attack_count: int = 0
 var _discard_base: int = 0
@@ -31,6 +33,7 @@ var _step9_pos_base: int = 0
 var _step7_hp_base: int = 0
 var _hunter_done: bool = false
 var _finish_called: bool = false  # 防重入：GAME_OVER 后步骤9 check 每帧满足，只允许弹一次分段窗
+var _allowed_trap_pos: Array = []  # 当前步骤允许放夹子的格子（空 = 不限制），保证猎人段流程可控
 
 func _ready():
 	_build_guide_ui()
@@ -84,9 +87,10 @@ func _process(_delta):
 			and g.turn_phase == Config.TurnPhase.ACTION:
 		if not _opp_turn_handled:
 			_opp_turn_handled = true
-			_run_opp_actions()
-		elif not _opp_actions.is_empty() and not g.response_pending:
-			_run_opp_actions()  # 响应结算后继续执行剩余脚本动作
+			_opp_next_act_time = Time.get_ticks_msec() + OPP_STEP_DELAY_MS
+		elif not _opp_actions.is_empty() and not g.response_pending \
+				and Time.get_ticks_msec() >= _opp_next_act_time:
+			_run_opp_actions()  # 每步间隔出牌（响应结算后同样走间隔），玩家能看清过程
 		elif _opp_actions.is_empty() and not g.response_pending:
 			_try_end_opp_turn()  # 脚本执行完且无响应等待 → 结束回合
 	if g.current_player != opp_idx:
@@ -94,7 +98,7 @@ func _process(_delta):
 	# 步骤⑥ 特殊：玩家被打死后（复活完成）才提示复活机制
 	if _step == 5 and g.stats[0].get("resurrected", 0) > 0 and not _revive_hint_shown:
 		_revive_hint_shown = true
-		_guide_label.text = "复活成功！刚才你倒下时发生了什么？看右侧战斗日志：\nHP 归零 → 自动弃光手牌 → 抽 4 张 → 自动使用回复卡 → HP 为正则复活（否则淘汰）。\n现在对手变成木桩不会还手，用你的手牌反杀他！"
+		_guide_label.text = "复活成功！刚才你倒下时发生了什么？看下方战斗日志：\nHP 归零 → 自动弃光手牌 → 抽 4 张 → 自动使用回复卡 → HP 为正则复活（否则淘汰）。\n现在对手变成木桩不会还手，用你的手牌反杀他！"
 	# 当前步骤完成检测
 	var s: Dictionary = _steps[_step]
 	if s.get("check", Callable()).call():
@@ -218,17 +222,17 @@ func _enter_hunter_segment():
 	_start_step(0)
 
 func _run_opp_actions():
-	# 同一对手回合执行完所有脚本动作（如 ⑤ 的两刀）
-	print("[TUT] opp turn start, actions=%s" % str(_opp_actions))
-	while not _opp_actions.is_empty() and g.current_player == opp_idx \
-			and not g.response_pending and not g.waiting_for_discard:
-		var act = _opp_actions[0]
-		_opp_actions.remove_at(0)
-		var r = g.process_action(opp_idx, act)
-		print("[TUT] opp act %s -> %s" % [JSON.stringify(act), JSON.stringify(r)])
-		if not r.get("success", false):
-			break
-	_try_end_opp_turn()
+	# 每次只执行一个脚本动作（帧驱动逐步出牌，玩家能看清过程；同帧全执行体验差）
+	if _opp_actions.is_empty() or g.current_player != opp_idx \
+			or g.response_pending or g.waiting_for_discard:
+		return
+	var act = _opp_actions[0]
+	_opp_actions.remove_at(0)
+	var r = g.process_action(opp_idx, act)
+	print("[TUT] opp act %s -> %s" % [JSON.stringify(act), JSON.stringify(r)])
+	_opp_next_act_time = Time.get_ticks_msec() + OPP_STEP_DELAY_MS
+	if not r.get("success", false):
+		_try_end_opp_turn()
 
 func _try_end_opp_turn():
 	if g.current_player == opp_idx and not g.waiting_for_discard:
@@ -254,6 +258,9 @@ func allow_end_turn() -> bool:
 	if _pending_step >= 0: return true  # 步骤已完成，允许结束回合进入下一步
 	if _step < 0 or _step >= _steps.size(): return false
 	return bool(_steps[_step].get("allow_end_turn", false))  # 默认完成步骤前不能结束
+
+func allowed_trap_positions() -> Array:
+	return _allowed_trap_pos
 
 func allowed_move_dirs() -> Array:
 	if _step < 0 or _step >= _steps.size(): return [1, -1]
@@ -294,14 +301,18 @@ func add_cards(idx: int, types: Array):
 
 func battle_state_refresh():
 	if battle != null and battle.has_method("_refresh_all"):
-		battle._refresh_all(g.get_full_state())
+		# 同步 _game_state：deal_hand/add_cards 直接改手牌不发 state_changed 信号，
+		# 否则弹窗（选穿心/选卡）读的是旧手牌，看不到教程发的卡
+		var full = g.get_full_state()
+		battle._game_state = full
+		battle._refresh_all(full)
 
 # ---------------- 9 步剧本（每步=一个完整回合） ----------------
 func _build_steps():
 	_steps = [
 		# ---- ①移动（回合1）：刺客 vs 狂战士 ----
 		{
-			"guide": "第 1 步 —— 移动与距离\n点击手牌中的「移动」卡，向对手方向移动 1 格（其他牌本回合不能使用）。\n棋盘共 11 格，两人之间隔的格数就是距离；紧挨着（相邻两格）视为贴脸，距离为 0，此时近战才能打出。",
+			"guide": "第 1 步 —— 移动与距离\n点击手牌中的「移动」卡，向对手方向移动 1 格（其他牌本回合不能使用）。\n棋盘共 11 格，两人之间隔的格数就是距离；紧挨着（相邻两格）视为贴脸，距离为 0，此时近战才能打出。\n顶部角色面板的圆圈是行动点：攻 2 点、移 1 点、功 1 点——出牌消耗对应点数，回合开始重置。「移动」耗 1 位移点。",
 			"enter": func():
 				g.players[0].position = Vector2i(3, 0)
 				g.players[1].position = Vector2i(7, 0)
@@ -336,7 +347,7 @@ func _build_steps():
 		},
 		# ---- ③远程攻击（同一回合）----
 		{
-			"guide": "第 3 步 —— 远程攻击与距离衰减\n远程伤害 = 远程面板 − 距离（最低 0）。\n你现在距对手 1 格，打出「远程」：伤害 = 4 − 1 = 3。越近伤害越高，贴脸（距离 0）最高。",
+			"guide": "第 3 步 —— 远程攻击与距离衰减\n远程伤害 = 远程面板 − 距离（最低 0）。\n你现在距对手 1 格，打出「远程」：耗 1 攻击点，伤害 = 4 − 1 = 3。越近伤害越高，贴脸（距离 0）最高。",
 			"enter": func():
 				battle_state_refresh(),
 			"check": func():
@@ -362,7 +373,7 @@ func _build_steps():
 		},
 		# ---- ⑤结束回合 → 狂战士回合格挡（合并：t1 玩家结束后狂战士立即行动）----
 		{
-			"guide": "第 5 步 —— 狂战士回合\n点击「结束出牌」（弃牌阶段点「确认弃牌」）——轮到狂战士行动：远程攻击（你的「远程防具」满耐久挡掉，看右侧日志）、吸引你、装备「斩铁」、近战攻击。\n近战攻击时请用「近战」卡格挡（伤害减半）。",
+			"guide": "第 5 步 —— 狂战士回合\n点击「结束出牌」——先到弃牌阶段：手牌上限 = 你离己方板边的格数 + 1（顶部面板「手:当前/上限」），超上限必须弃到上限，再点「确认弃牌」。\n轮到狂战士行动：远程攻击（你的「远程防具」满耐久挡掉，看下方战斗日志）、吸引你、装备「斩铁」、近战攻击。\n近战攻击时请用「近战」卡格挡（伤害减半）。",
 			"enter": func():
 				deal_hand(1, ["near", "near", "attract", "range", "near_weapon"])
 				g.players[1].ap_attack = 2
@@ -386,7 +397,7 @@ func _build_steps():
 		},
 		# ---- ⑦刺客装备突刺 ----
 		{
-			"guide": "第 7 步 —— 装备突刺武器\n点击手牌中的武器卡装备「突刺」（近战+1；本回合通过移动贴脸后额外+3）。\n装备后进入下一步。",
+			"guide": "第 6 步 —— 装备突刺武器\n点击手牌中的武器卡装备「突刺」（近战+1；本回合通过移动贴脸后额外+3）。\n装备后进入下一步。",
 			"enter": func():
 				# 回合开始一次性补发武器+移动（装备后直接移动爆发，不再用一张发一张）
 				add_cards(0, ["near_weapon", "move"])
@@ -403,7 +414,7 @@ func _build_steps():
 		},
 		# ---- ⑧移动贴脸 + 突刺近战爆发 ----
 		{
-			"guide": "第 8 步 —— 突刺爆发\n先使用「移动」贴脸（本回合移动贴脸会触发突刺额外+3），再打出「近战」：\n伤害 = 7（近战）+ 1（突刺）+ 3（移动贴脸）= 11 爆发伤害！",
+			"guide": "第 7 步 —— 突刺爆发\n先使用「移动」贴脸（本回合移动贴脸会触发突刺额外+3），再打出「近战」：\n伤害 = 7（近战）+ 1（突刺）+ 3（移动贴脸）= 11 爆发伤害！",
 			"enter": func():
 				_step7_hp_base = g.players[1].hp
 				battle_state_refresh(),
@@ -418,7 +429,7 @@ func _build_steps():
 		},
 		# ---- ⑨连击后撤 → 结束回合 → 狂战士两刀复活 ----
 		{
-			"guide": "第 9 步 —— 连击与后撤\n再打一张「近战」命中（突刺加成下伤害可观），然后用「暗影步」向后撤（远离对手），点击「结束出牌」。\n轮到狂战士：他会吸引你并连打两刀近战——你手里没有能格挡的卡，只能点「无法响应（跳过）」。挨下两刀后 HP 归零——看右侧日志的复活流程。",
+			"guide": "第 8 步 —— 连击与后撤\n再打一张「近战」命中（突刺加成下伤害可观），然后用「暗影步」向后撤（远离对手），点击「结束出牌」。\n轮到狂战士：他会吸引你并连打两刀近战——你手里没有能格挡的卡，只能点「无法响应（跳过）」。挨下两刀后 HP 归零——看下方战斗日志的复活流程。",
 			"enter": func():
 				_step9_hp_base = g.players[1].hp
 				_step9_pos_base = g.players[0].position.x
@@ -452,7 +463,7 @@ func _build_steps():
 		},
 		# ---- ⑩复活检测（狂战士两刀后，等玩家复活完成）----
 		{
-			"guide": "第 10 步 —— 复活机制\nHP 归零 → 自动弃光手牌 → 抽 4 张 → 自动使用回复卡 → HP 为正则复活（否则淘汰）。\n看右侧战斗日志了解你倒下后发生了什么。",
+			"guide": "第 9 步 —— 复活机制\nHP 归零 → 自动弃光手牌 → 抽 4 张 → 自动使用回复卡 → HP 为正则复活（否则淘汰）。\n看下方战斗日志了解你倒下后发生了什么。",
 			"enter": func():
 				battle_state_refresh(),
 			"check": func():
@@ -485,9 +496,10 @@ func _build_hunter_steps():
 	_hunter_steps = [
 		# ---- ⑦捕兽夹堆叠（切猎人，回合1）----
 		{
-			"guide": "进阶 1/3 —— 道具与堆叠（猎人）\n现在你是猎人，道具卡放的是「捕兽夹」（踩上 -3HP，可堆叠放置）。\n先用「穿心」埋伏（耗2攻击点放 2 个夹子），再用手牌的道具卡同格叠放 1 个。",
+			"guide": "进阶 1/3 —— 道具与堆叠（猎人）\n现在你是猎人，道具卡放的是「捕兽夹」（踩上 -3HP，可无限堆叠）。\n先点技能「埋伏」选「穿心」：连点 4、5 两格放 2 个夹子；\n再点手牌「陷阱」卡，叠放到 4 或 5 格（同格叠放：一张摧毁卡会拆掉整格全部夹子）。",
 			"enter": func():
-				_switch_to_hunter_segment(),
+				_switch_to_hunter_segment()
+				_allowed_trap_pos = [Vector2i(4, 0), Vector2i(5, 0)],
 			"check": func():
 				return _count_snares() >= 3,
 			"allow_cards": ["trap"],
@@ -497,8 +509,9 @@ func _build_hunter_steps():
 		},
 		# ---- ⑧摧毁演示（观察）----
 		{
-			"guide": "进阶 2/3 —— 摧毁卡可以拆除道具\n点击「结束出牌」，对手会打出「摧毁」卡。\n注意：堆叠的捕兽夹会被一张摧毁卡全部拆掉——这就是堆叠的风险与道具的反制手段。",
+			"guide": "进阶 2/3 —— 摧毁卡可以拆除道具\n点击「结束出牌」，对手会打出「摧毁」卡拆掉你叠放的夹子。\n注意：一张摧毁卡会拆掉目标格的全部堆叠——这就是堆叠的风险与道具的反制手段。",
 			"enter": func():
+				_allowed_trap_pos = []
 				deal_hand(0, [])
 				deal_hand(1, ["destroy"])
 				g.players[1].ap_function = 3  # 摧毁卡耗 3 功能点
@@ -510,16 +523,27 @@ func _build_hunter_steps():
 			"allow_end_turn": true,
 			"wait_turn_end": true,
 			"opp_actions": func():
+				# 拆堆叠最多的格子（教学引导说"拆掉叠放的夹子"）
+				var best_pos = null
+				var best_count = 0
+				var counts = {}
 				for it in g.items:
-					if it.item_type == "snare":
-						return [{"action": "play_card", "card_uid": 9000,
-							"extra": {"destroy_target": "trap", "trap_pos": g.movement.geometry.to_dict(it.position)}}]
+					if it.item_type != "snare": continue
+					var key = g.movement.geometry.to_dict(it.position)
+					counts[key] = counts.get(key, 0) + 1
+					if counts[key] > best_count:
+						best_count = counts[key]
+						best_pos = key
+				if best_pos != null:
+					return [{"action": "play_card", "card_uid": 9000,
+						"extra": {"destroy_target": "trap", "trap_pos": best_pos}}]
 				return [],
 		},
 		# ---- ⑨推人 combo（回合3）----
 		{
-			"guide": "进阶 3/3 —— 推人 combo（最终演示）\n先点「陷阱」把捕兽夹放在对手身后一格（他被推去的方向），\n再点「威慑」把他推进夹子：-3HP。这就是道具 + 推人的 combo。",
+			"guide": "进阶 3/3 —— 推人 combo（最终演示）\n先点「陷阱」把捕兽夹放在对手身后那一格（第 7 格，威慑会把他推去那里），\n再点「威慑」把他推进夹子：-3HP。这就是道具 + 推人的 combo。",
 			"enter": func():
+				_allowed_trap_pos = [Vector2i(7, 0)]
 				deal_hand(0, ["trap", "deter"])
 				deal_hand(1, [])
 				g.players[0].ap_function = 3  # 威慑卡耗 3 功能点（基础只有 1）

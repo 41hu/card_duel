@@ -586,6 +586,12 @@ func _refresh_highlight():
 			child.set_selected(child.card_uid == _selected_uid)
 
 func _on_board_cell_clicked(cell_pos: Vector2i):
+	# 教程限制：当前步骤只允许特定格子放夹子（穿心/陷阱），保证教学流程可控
+	if tutorial != null and _selected_type in ["hunter_ambush", "trap"]:
+		var allowed = tutorial.allowed_trap_positions()
+		if not allowed.is_empty() and not cell_pos in allowed:
+			status_label.text = "夹子只能放在教学指定的格子"
+			return
 	var pos_dict := {"x": cell_pos.x, "y": cell_pos.y}
 	if _selected_type == "hunter_ambush" and _is_my_turn:
 		# 穿心：已选第 1 个位置，本次为第 2 个 → 发送放置
@@ -603,7 +609,8 @@ func _on_board_cell_clicked(cell_pos: Vector2i):
 		var me = _game_state.players[0] if _game_state.players[0].index == _player_index else _game_state.players[1]
 		var is_pierce = false
 		for card in me.get("hand", []):
-			if card.uid == _selected_uid and card.type_id == "pierce":
+			# _game_state 是 JSON 化状态，uid 是 float，需 int 强转后比较
+			if int(card.uid) == _selected_uid and card.type_id == "pierce":
 				is_pierce = true
 				break
 		if is_pierce:

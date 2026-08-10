@@ -221,16 +221,16 @@ func _on_join():
 func _on_connected(): status_label.text = "已连接"
 func _on_disconnected(): status_label.text = "断开连接"
 
-func _on_room_created(room_id: String):
-	c_room_label.text = "房间号: %s" % room_id
+func _on_room_created(room_id: String, rapid_mode: bool):
+	c_room_label.text = "房间号: %s  %s" % [room_id, "【快速模式】" if rapid_mode else "【标准模式】"]
 	status_label.text = "等待对手加入..."
 	# 房间已创建：隐藏创建按钮，保留返回按钮（等待时可返回主界面，断开连接）
 	c_create_btn.visible = false
 	var btn = _make_ready_btn(create_panel, 560)
 	btn.pressed.connect(func(): Network.ready_up(); btn.disabled = true; btn.text = "已准备")
 
-func _on_room_joined(room_id: String, _players: Array):
-	status_label.text = "已加入房间 %s" % room_id
+func _on_room_joined(room_id: String, _players: Array, rapid_mode: bool):
+	status_label.text = "已加入房间 %s（%s）" % [room_id, "快速模式" if rapid_mode else "标准模式"]
 	# 房间已加入：隐藏加入按钮，保留返回按钮（等待时可返回主界面，断开连接）
 	j_join_btn.visible = false
 	var btn = _make_ready_btn(join_panel, 560)

@@ -83,7 +83,7 @@ func _create_room(peer_idx: int, data: Dictionary):
 	var peer = _peers[peer_idx]
 	peer.peer_name = data.get("player_name", "Player1"); peer.room_id = rid; peer.player_index = 0; peer.ready = false
 	_rooms.append({id=rid, peer_indices=[peer_idx], peer_names=[peer.peer_name], ready=[false,false], stage="waiting", match=null, rapid_mode=bool(data.get("rapid_mode", false))})
-	_send_to(peer_idx, {"t": "room_created", "room_id": rid})
+	_send_to(peer_idx, {"t": "room_created", "room_id": rid, "rapid_mode": _rooms.back().rapid_mode})
 	log_msg("房间%s创建（%s）" % [rid, "快速模式" if _rooms.back().rapid_mode else "标准模式"])
 
 func _join_room(peer_idx: int, data: Dictionary):
@@ -92,8 +92,8 @@ func _join_room(peer_idx: int, data: Dictionary):
 	if room.peer_indices.size() >= 2: _send_to(peer_idx, {"t":"error","msg":"房间已满"}); return
 	peer.peer_name = data.get("player_name", "Player2"); peer.room_id = rid; peer.player_index = 1; peer.ready = false
 	room.peer_indices.append(peer_idx); room.peer_names.append(peer.peer_name)
-	_send_to(peer_idx, {"t":"room_joined","room_id":rid,"player_index":1,"players":room.peer_names})
-	_send_to(room.peer_indices[0], {"t":"room_joined","room_id":rid,"player_index":0,"players":room.peer_names})
+	_send_to(peer_idx, {"t":"room_joined","room_id":rid,"player_index":1,"players":room.peer_names,"rapid_mode":room.rapid_mode})
+	_send_to(room.peer_indices[0], {"t":"room_joined","room_id":rid,"player_index":0,"players":room.peer_names,"rapid_mode":room.rapid_mode})
 	log_msg("P%d加入房间%s" % [peer.player_index, rid])
 
 func _on_ready(peer_idx: int):

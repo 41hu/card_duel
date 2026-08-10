@@ -3,8 +3,8 @@ extends Node
 
 signal connected_to_server()
 signal server_disconnected()
-signal room_created(room_id: String)
-signal room_joined(room_id: String, players: Array)
+signal room_created(room_id: String, rapid_mode: bool)
+signal room_joined(room_id: String, players: Array, rapid_mode: bool)
 signal game_starting(data: Dictionary)
 signal state_updated(state: Dictionary)
 signal bp_state_updated(bp_state: Dictionary)
@@ -142,10 +142,10 @@ func _handle_packet(raw: String):
 		"room_created":
 			room_id = data.room_id
 			player_index = 0
-			room_created.emit(data.room_id)
+			room_created.emit(data.room_id, bool(data.get("rapid_mode", false)))
 		"room_joined":
 			player_index = data.player_index
-			room_joined.emit(data.room_id, data.players)
+			room_joined.emit(data.room_id, data.players, bool(data.get("rapid_mode", false)))
 		"game_starting":
 			game_starting.emit(data)
 		"bp_state":

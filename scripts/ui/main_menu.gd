@@ -11,6 +11,7 @@ const Style = preload("res://scripts/theme/style_const.gd")
 @onready var c_create_btn = $CreatePanel/CCreateBtn
 @onready var c_back_btn = $CreatePanel/CBackBtn
 @onready var c_room_label = $CreatePanel/CRoomLabel
+var _create_fast_btn: CheckButton  # 创建房间：快速模式开关
 @onready var j_server = $JoinPanel/JServerInput
 @onready var j_room = $JoinPanel/JRoomInput
 @onready var j_name = $JoinPanel/JNameInput
@@ -21,6 +22,11 @@ const Style = preload("res://scripts/theme/style_const.gd")
 
 func _ready():
 	Style.scale_node_fonts(self)  # 移动端字号适配（tscn 写死的字号）
+	# 创建房间面板：快速模式开关（CNameInput 上方）
+	_create_fast_btn = _popup_check("快速模式（无限出牌 · 冻结连续 · 天赐不限）")
+	_create_fast_btn.offset_left = 60; _create_fast_btn.offset_top = 225
+	_create_fast_btn.offset_right = 660; _create_fast_btn.offset_bottom = 285
+	create_panel.add_child(_create_fast_btn)
 	$MainPanel/MultiBtn.pressed.connect(_on_multi_battle)
 	$MainPanel/SelfBtn.pressed.connect(_on_self_play)
 	$MainPanel/AiBtn.pressed.connect(_on_ai_battle)
@@ -200,7 +206,7 @@ func _on_create():
 	await Network.connected_to_server
 	var pname = c_name.text.strip_edges()
 	if pname == "": pname = "Player1"
-	Network.create_room(pname)
+	Network.create_room(pname, _create_fast_btn.button_pressed)
 
 func _on_join():
 	var rid = j_room.text.strip_edges()
@@ -249,8 +255,22 @@ func _on_game_starting(data: Dictionary):
 	get_tree().change_scene_to_file("res://scenes/bp_scene.tscn")
 
 func _on_self_play():
-	LocalGame.start_bp()
-	get_tree().change_scene_to_file("res://scenes/bp_scene.tscn")
+	var c = _make_popup("自我对战")
+	var vb = c.get_child(1)
+	var fast = _popup_check("快速模式（无限出牌 · 冻结连续 · 天赐不限）")
+	vb.add_child(fast)
+	var start = _popup_btn("开始对战")
+	start.pressed.connect(func():
+		LocalGame.rapid_mode = fast.button_pressed
+		c.queue_free()
+		LocalGame.start_bp()
+		get_tree().change_scene_to_file("res://scenes/bp_scene.tscn")
+	)
+	vb.add_child(start)
+	var back = _popup_btn("返回")
+	back.pressed.connect(func(): c.queue_free())
+	vb.add_child(back)
+	add_child(c)
 
 # ---- 多人对战（选择创建或加入） ----
 func _on_multi_battle():
@@ -274,22 +294,32 @@ func _on_ai_battle():
 func _show_ai_difficulty():
 	var c = _make_popup("选择 AI 难度")
 	var vb = c.get_child(1)
+	var fast = _popup_check("快速模式（无限出牌 · 冻结连续 · 天赐不限）")
+	vb.add_child(fast)
 	var easy = _popup_btn("简单")
-	easy.pressed.connect(func(): c.queue_free(); _start_ai_bp(0))
+	easy.pressed.connect(func(): c.queue_free(); LocalGame.rapid_mode = fast.button_pressed; _start_ai_bp(0))
 	vb.add_child(easy)
 	var normal = _popup_btn("普通")
-	normal.pressed.connect(func(): c.queue_free(); _start_ai_bp(1))
+	normal.pressed.connect(func(): c.queue_free(); LocalGame.rapid_mode = fast.button_pressed; _start_ai_bp(1))
 	vb.add_child(normal)
 	var hard = _popup_btn("困难")
-	hard.pressed.connect(func(): c.queue_free(); _start_ai_bp(2))
+	hard.pressed.connect(func(): c.queue_free(); LocalGame.rapid_mode = fast.button_pressed; _start_ai_bp(2))
 	vb.add_child(hard)
 	var hell = _popup_btn("地狱（内测）")
-	hell.pressed.connect(func(): c.queue_free(); _start_ai_bp(3))
+	hell.pressed.connect(func(): c.queue_free(); LocalGame.rapid_mode = fast.button_pressed; _start_ai_bp(3))
 	vb.add_child(hell)
 	var back = _popup_btn("返回")
 	back.pressed.connect(func(): c.queue_free())
 	vb.add_child(back)
 	add_child(c)
+
+# 弹窗开关（快速模式等）：勾选样式与弹窗按钮统一
+func _popup_check(text: String) -> CheckButton:
+	var cb := CheckButton.new()
+	cb.text = text
+	cb.add_theme_font_size_override("font_size", Style.fs(26))
+	cb.add_theme_color_override("font_color", Color(0.9, 0.92, 0.95))
+	return cb
 
 # 新手教程：进入教程对局（TutorialManager 控制 9 步流程）
 func _start_tutorial():

@@ -34,6 +34,8 @@ var _ai = null
 var _ai_busy: bool = false
 # ---- 新手教程模式 ----
 var tutorial_mode: bool = false
+# ---- 快速模式（主菜单开关）：无限出牌/天赐不限/冻结连续 ----
+var rapid_mode: bool = false
 # AI 每步间隔（让玩家看清 AI 的出牌过程）
 const AI_STEP_DELAY_MS = 700
 var _ai_next_act_time: int = 0
@@ -63,6 +65,7 @@ func start_local_game(p1_char: String, p2_char: String, bp_first: int = -1):
 	last_record_path = ""
 	game = MatchStateClass.new()
 	game.disable_timeout = true  # 自我对战：双方不限时
+	game.rapid_mode = rapid_mode
 	game.state_changed.connect(_on_state)
 	game.weapon_prompt.connect(_on_weapon)
 	game.response_needed.connect(_on_response)
@@ -79,6 +82,7 @@ func start_tutorial():
 	last_record_path = ""
 	game = MatchStateClass.new()
 	game.disable_timeout = true
+	game.rapid_mode = false  # 教程固定标准模式
 	game.state_changed.connect(_on_state)
 	game.weapon_prompt.connect(_on_weapon)
 	game.response_needed.connect(_on_response)
@@ -131,6 +135,7 @@ func start_ai_game(p1_char: String, p2_char: String, difficulty: int):
 	game = MatchStateClass.new()
 	game.ai_difficulty = difficulty  # 地狱难度：AI 高复活率（init_match 不重置该字段）
 	game.no_timeout_for = 0  # 人机对战：人类(P0)不限时，AI 保留（自动行动不影响）
+	game.rapid_mode = rapid_mode
 	game.state_changed.connect(_on_state)
 	game.weapon_prompt.connect(_on_weapon)
 	game.response_needed.connect(_on_response)
@@ -313,6 +318,7 @@ func disconnect_from_server():
 	ai_mode = false
 	_ai = null
 	_ai_busy = false
+	rapid_mode = false
 	last_game_result = {}
 	server_disconnected.emit()
 

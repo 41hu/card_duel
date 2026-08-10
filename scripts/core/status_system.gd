@@ -81,6 +81,10 @@ func add_poison(player_idx: int, stacks: int = 2, source: int = -1):
 func freeze_player(player_idx: int) -> bool:
 	var player = match_ref.get_player(player_idx)
 	if match_ref.char_skills.is_immune(player_idx, "freeze"): return false
+	if match_ref.rapid_mode:
+		# 快速模式：冻结无冷却，可连续冻结
+		player.frozen = true
+		return true
 	if player.frozen_lockout > 0:
 		return false  # 冻结冷却中
 	player.frozen = true

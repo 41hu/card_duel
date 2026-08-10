@@ -172,6 +172,9 @@ var independent_decks: bool = false
 # 教程模式：抑制回合自然抽牌（手牌由教程管理器完全控制）
 var draw_suppressed: bool = false
 
+# 快速模式：出牌不消耗行动点（无限出牌）、天赐不限次数、冻结无冷却（可连续冻结）
+var rapid_mode: bool = false
+
 # 构建一副卡组（默认初始构成；custom_decks[idx] 为自定义 type_id 数组时用自定义）
 func _build_card_system(idx: int, custom_decks: Array) -> CardSys:
 	var deck: Array = []
@@ -303,25 +306,26 @@ func _do_play_card(player_idx: int, data: Dictionary) -> Dictionary:
 	# 角色专属消耗覆盖（如快枪手远程 2AP）；-1 = 用卡牌默认消耗
 	var cost = char_skills.get_attack_cost(player_idx, type_id)
 	if cost < 0: cost = cd.cost
-	var ap_ok = false
-	match cd.ap:
-		Config.APType.ATTACK: ap_ok = (player.ap_attack >= cost)
-		Config.APType.MOVE: ap_ok = (player.ap_move >= cost)
-		Config.APType.FUNCTION: ap_ok = (player.ap_function >= cost)
-		Config.APType.NONE: ap_ok = true
+	var ap_ok = rapid_mode  # 快速模式：无限出牌（不检查/不消耗行动点）
+	if not ap_ok:
+		match cd.ap:
+			Config.APType.ATTACK: ap_ok = (player.ap_attack >= cost)
+			Config.APType.MOVE: ap_ok = (player.ap_move >= cost)
+			Config.APType.FUNCTION: ap_ok = (player.ap_function >= cost)
+			Config.APType.NONE: ap_ok = true
 	if not ap_ok: return {success=false, msg="行动点不足"}
 	var free_sharpshooter = char_skills.can_attack_free(player_idx, type_id)
-	if type_id == "blessing":
+	if type_id == "blessing" and not rapid_mode:  # 快速模式：天赐不限次数（抽牌效果保留）
 		if player.free_move_used: return {success=false, msg="本回合已使用过天赐"}
 		player.free_move_used = true
-	if not free_sharpshooter and cd.ap != Config.APType.NONE:
+	if not rapid_mode and not free_sharpshooter and cd.ap != Config.APType.NONE:
 		match cd.ap:
 			Config.APType.ATTACK: player.ap_attack -= cost
 			Config.APType.MOVE: player.ap_move -= cost
 			Config.APType.FUNCTION: player.ap_function -= cost
 	var result = _execute_card_effect(player_idx, card)
 	if not result.get("success", false) and result.get("phase") != "choose":
-		if not free_sharpshooter and cd.ap != Config.APType.NONE:
+		if not rapid_mode and not free_sharpshooter and cd.ap != Config.APType.NONE:
 			match cd.ap:
 				Config.APType.ATTACK: player.ap_attack += cost
 				Config.APType.MOVE: player.ap_move += cost

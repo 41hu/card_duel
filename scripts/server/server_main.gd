@@ -82,9 +82,9 @@ func _create_room(peer_idx: int, data: Dictionary):
 	var rid = str(_next_room_id); _next_room_id += 1
 	var peer = _peers[peer_idx]
 	peer.peer_name = data.get("player_name", "Player1"); peer.room_id = rid; peer.player_index = 0; peer.ready = false
-	_rooms.append({id=rid, peer_indices=[peer_idx], peer_names=[peer.peer_name], ready=[false,false], stage="waiting", match=null})
+	_rooms.append({id=rid, peer_indices=[peer_idx], peer_names=[peer.peer_name], ready=[false,false], stage="waiting", match=null, rapid_mode=bool(data.get("rapid_mode", false))})
 	_send_to(peer_idx, {"t": "room_created", "room_id": rid})
-	log_msg("房间%s创建" % rid)
+	log_msg("房间%s创建（%s）" % [rid, "快速模式" if _rooms.back().rapid_mode else "标准模式"])
 
 func _join_room(peer_idx: int, data: Dictionary):
 	var rid = data.get("room_id", ""); var peer = _peers[peer_idx]; var room = _find_room(rid)
@@ -127,6 +127,7 @@ func _on_bp_timeout(_bs: Dictionary, room):
 	if room.match.bp.is_done():
 		var chars = room.match.bp.get_start_chars()
 		var bf = room.match.bp._bp_first
+		room.match.rapid_mode = room.rapid_mode  # 快速模式（房间创建时指定）
 		room.match.init_match(chars[0], chars[1], bf)
 		room.match._start_game()
 		room.stage = "game"
@@ -142,6 +143,7 @@ func _on_bp_action(peer_idx: int, data: Dictionary):
 	if room.match.bp.is_done():
 		var chars = room.match.bp.get_start_chars()
 		var bf = room.match.bp._bp_first
+		room.match.rapid_mode = room.rapid_mode  # 快速模式（房间创建时指定）
 		room.match.init_match(chars[0], chars[1], bf)
 		room.match._start_game()
 		room.stage = "game"

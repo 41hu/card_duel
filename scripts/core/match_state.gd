@@ -3,6 +3,7 @@
 # ============================================================
 extends RefCounted
 
+const MapGeometry = preload("res://scripts/core/map_geometry.gd")
 const CombatSys = preload("res://scripts/core/combat_system.gd")
 const MovementSys = preload("res://scripts/core/movement_system.gd")
 const EquipmentSys = preload("res://scripts/core/equipment_system.gd")
@@ -39,6 +40,7 @@ var pending_attack_uid: int = -1
 var pending_attack_segment: int = 0      # 多段攻击：当前段（1 起）
 var pending_attack_segments: int = 1     # 多段攻击：总段数（1 = 单段，现有行为）
 var _response_attacker: int = -1         # 响应等待的攻击者（process_response 身份校验用）
+var _pending_target: int = -1            # 当前攻击/技能的目标玩家（多人局显式指定；2 人局 -1）
 var game_result: Dictionary = {}
 # 对战统计（结算页展示 + 称号判定）：每玩家一个字典
 var stats: Array = []
@@ -102,28 +104,35 @@ func _init():
 	card_effects = preload("res://scripts/core/card_effects.gd").new(self)
 
 func init_match(p1_char_id: String, p2_char_id: String, bp_first: int = -1, custom_decks: Array = [], independent_decks: bool = false):
-	var p1_char = Config.CHARACTER_DB[p1_char_id]
-	var p2_char = Config.CHARACTER_DB[p2_char_id]
-	players = [
-		_create_player(0, p1_char_id, p1_char),
-		_create_player(1, p2_char_id, p2_char),
-	]
-	# 默认共享牌堆（人机/联机原行为）；independent_decks=true（PVE）双方各自一副，
+	_setup_match([p1_char_id, p2_char_id], bp_first, custom_decks, independent_decks)
+
+# 多人（4 人）混战开局：不走 BP 直接开战；默认独立牌堆（每角色各一副）
+func init_match_multi(char_ids: Array, custom_decks: Array = [], independent_decks: bool = true):
+	_setup_match(char_ids, randi() % char_ids.size(), custom_decks, independent_decks)
+
+func _setup_match(char_ids: Array, bp_first: int, custom_decks: Array, independent_decks: bool):
+	var n = char_ids.size()
+	# 地图模式：2 人局线性、多人局六边形。以后新增布局只改 map_geometry.gd
+	# （见该文件头注释"以后修改地图布局"），此处按人数切换即可
+	movement.geometry.set_mode(MapGeometry.MODE_HEX if n > 2 else MapGeometry.MODE_LINEAR)
+	players = []
+	for i in range(n):
+		var cd = Config.CHARACTER_DB[char_ids[i]]
+		players.append(_create_player(i, char_ids[i], cd))
+	# 默认共享牌堆（人机/联机原行为）；independent_decks=true（PVE/多人）每名玩家各自一副，
 	# custom_decks[idx] = 自定义 type_id 列表（PVE 构筑）
 	self.independent_decks = independent_decks
 	if independent_decks:
-		card_systems = [
-			_build_card_system(0, custom_decks),
-			_build_card_system(1, custom_decks),
-		]
+		card_systems = []
+		for i in range(n):
+			card_systems.append(_build_card_system(i, custom_decks))
 	else:
 		var shared_deck = Config.build_initial_deck()
 		shared_deck.shuffle()
 		var shared_discard = []
-		card_systems = [
-			CardSys.new(shared_deck, shared_discard),
-			CardSys.new(shared_deck, shared_discard),
-		]
+		card_systems = []
+		for i in range(n):
+			card_systems.append(CardSys.new(shared_deck, shared_discard))
 	used_weapon_ids.clear()
 	items.clear()
 	action_log.clear()
@@ -134,20 +143,49 @@ func init_match(p1_char_id: String, p2_char_id: String, bp_first: int = -1, cust
 	waiting_for_discard = false
 	discard_count = 0
 	game_result = {}
-	stats = [
-		{"damage_dealt": 0, "damage_taken": 0, "damage_from_attack": 0, "damage_from_trap": 0, "damage_from_dot": 0, "heal_total": 0, "moves": 0, "responses": 0, "resurrected": 0, "cards_played": {}, "card_total": 0},
-		{"damage_dealt": 0, "damage_taken": 0, "damage_from_attack": 0, "damage_from_trap": 0, "damage_from_dot": 0, "heal_total": 0, "moves": 0, "responses": 0, "resurrected": 0, "cards_played": {}, "card_total": 0},
-	]
+	stats = []
+	for i in range(n):
+		stats.append({"damage_dealt": 0, "damage_taken": 0, "damage_from_attack": 0, "damage_from_trap": 0, "damage_from_dot": 0, "heal_total": 0, "moves": 0, "responses": 0, "resurrected": 0, "cards_played": {}, "card_total": 0})
 	_action_deadline = 0
 	_discard_deadline = 0
 	_moved_to_adjacent_this_turn = false
 	_cheat_uid_counter = -1000
-	first_player = bp_first if bp_first >= 0 else randi() % 2
+	first_player = bp_first if bp_first >= 0 else randi() % n
 	current_player = first_player
 	phase = Config.Phase.BP_PHASE
 	bp.reset()
-	for i in range(2):
+	for i in range(n):
 		card_systems[i].draw_cards(4)
+
+# 玩家数（2 人标准 / 4 人多人混战）
+func player_count() -> int:
+	return players.size()
+
+# 目标解析：target >= 0 显式指定（多人局点选）；2 人局自动返回唯一对手
+func get_opponent(player_idx: int, target: int = -1) -> int:
+	if target >= 0 and target < players.size() and target != player_idx:
+		return target
+	if players.size() == 2:
+		return 1 - player_idx
+	return -1
+
+# 目标玩家名（日志显示用）：指定索引，无效时兜底"对手"
+func _target_name(target: int) -> String:
+	if target >= 0 and target < players.size():
+		return Config.char_name(players[target].char_id)
+	return "对手"
+
+# 最近的存活对手（多人局距离显示/默认目标）
+func _nearest_alive_opponent(player_idx: int) -> int:
+	var best = -1
+	var best_d = 999999
+	for i in range(players.size()):
+		if i == player_idx or players[i].get("eliminated", false): continue
+		var d = movement.geometry.distance(players[player_idx].position, players[i].position)
+		if d < best_d:
+			best_d = d
+			best = i
+	return best
 
 func _create_player(idx: int, char_id: String, char_data: Dictionary) -> Dictionary:
 	return {
@@ -156,6 +194,7 @@ func _create_player(idx: int, char_id: String, char_data: Dictionary) -> Diction
 		near_power=char_data.near, range_power=char_data.range, magic_power=char_data.magic,
 		position=movement.geometry.initial_position(idx),
 		weapon={}, armor={}, buffs=[], dots=[],
+		eliminated=false,  # 多人混战：淘汰标记（2 人局不使用）
 		frozen=false, frozen_lockout=0, frozen_move=false,
 		damage_reduction_used=false, skill_used_this_turn=false, free_move_used=false,
 		combo_attacks_this_turn=[],
@@ -398,20 +437,24 @@ func _use_card(player_idx: int, card: Dictionary):
 	s["card_total"] += 1
 
 func _handle_respondable_card(player_idx: int, card: Dictionary, kind: String) -> Dictionary:
-	var opp = 1 - player_idx
+	var opp = get_opponent(player_idx, int(card.get("target", -1)))
+	if opp < 0: return {success=false, msg="请选择目标"}
+	_pending_target = opp
 	pending_attack_card = kind
 	pending_attack_uid = card.uid
 	_response_attacker = player_idx
 	attacker_last_damage = 1
 	phase = Config.Phase.RESPONSE_WINDOW
 	response_pending = true
-	response_needed.emit(opp, {attacker=player_idx, card=kind, damage=0, distance=0})
+	response_needed.emit(opp, {attacker=player_idx, card=kind, damage=0, distance=0, target=opp})
 	return {success=true, phase="response"}
 
 func _handle_attack_card(player_idx: int, card: Dictionary) -> Dictionary:
 	var type_id = card.type_id
+	_pending_target = get_opponent(player_idx, int(card.get("target", -1)))
+	if _pending_target < 0: return {success=false, msg="请选择目标"}
 	# ignore_distance（魔力引导等技能）：近战/重击无视距离限制打出
-	if type_id in ["near", "heavy"] and movement.get_distance() != 0 and not card.get("ignore_distance", false):
+	if type_id in ["near", "heavy"] and movement.get_distance(_pending_target) != 0 and not card.get("ignore_distance", false):
 		return {success=false, msg="必须贴脸"}
 	pending_attack_card = type_id
 	pending_attack_uid = card.uid
@@ -426,8 +469,8 @@ func _handle_attack_card(player_idx: int, card: Dictionary) -> Dictionary:
 func _begin_attack_segment(player_idx: int) -> Dictionary:
 	pending_attack_segment += 1
 	var type_id = pending_attack_card
-	var opp = 1 - player_idx
-	var distance = movement.get_distance()
+	var opp = _pending_target
+	var distance = movement.get_distance(opp)
 	var player = players[player_idx]
 	attacker_last_damage = 0
 	attacker_last_type = Config.get_damage_type(type_id)
@@ -474,10 +517,10 @@ func _begin_attack_segment(player_idx: int) -> Dictionary:
 
 func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 	if not response_pending: return
-	# 身份校验：只有被攻击方（攻击者的对手）可以响应，防止攻击方对自己"响应"
-	if _response_attacker < 0 or defender_idx != 1 - _response_attacker:
+	# 身份校验：只有被攻击方（攻击者的目标）可以响应，防止攻击方对自己"响应"
+	if _response_attacker < 0 or defender_idx != _pending_target:
 		return
-	var attacker_idx = 1 - defender_idx
+	var attacker_idx = _response_attacker
 	response_pending = false
 	phase = Config.Phase.PLAYER_TURN
 	var final_damage = attacker_last_damage
@@ -501,7 +544,7 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 			add_log(attacker_idx, "冻结被闪避")
 		else:
 			status.freeze_player(defender_idx)
-			add_log(attacker_idx, "冻结")
+			add_log(attacker_idx, "冻结: %s" % _target_name(defender_idx))
 		state_changed.emit(get_full_state())
 		return
 	if final_damage > 0:
@@ -544,6 +587,7 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 	if _reveal_to >= 0:
 		st["revealed_hand"] = card_systems[_reveal_from].get_hand_type_ids()
 		st["revealed_to"] = _reveal_to
+		st["revealed_from"] = _reveal_from  # 被查看手牌的目标玩家（弹窗显示"谁"）
 		_reveal_to = -1; _reveal_from = -1
 	state_changed.emit(st)
 
@@ -552,9 +596,15 @@ func skip_response(defender_idx: int): process_response(defender_idx, false)
 func _handle_move_card(player_idx: int, card: Dictionary) -> Dictionary:
 	var direction: Vector2i = movement.geometry.from_dict(card.get("direction", {}))
 	var steps = int(card.get("steps", 1))
-	# 方向必须是左右两向之一（六边形地图未来扩展多方向）
-	if direction != movement.geometry.DIR_LEFT and direction != movement.geometry.DIR_RIGHT:
-		return {success=false, msg="无效移动方向"}
+	# 方向校验：线性只认左右；六边形（多人局）认 6 个轴向方向。
+	# 以后加新布局：把该布局的方向表加入 HEX_DIRS 同级的常量并在校验里引用
+	var geo = movement.geometry
+	if geo._mode == MapGeometry.MODE_HEX:
+		if not direction in geo.HEX_DIRS:
+			return {success=false, msg="无效移动方向"}
+	else:
+		if direction != geo.DIR_LEFT and direction != geo.DIR_RIGHT:
+			return {success=false, msg="无效移动方向"}
 	if not char_skills.move_distances(player_idx).has(steps):
 		return {success=false, msg="不支持%d步移动" % steps}
 	if status.get_move_modifier(player_idx) < 0:
@@ -572,10 +622,11 @@ func _handle_move_card(player_idx: int, card: Dictionary) -> Dictionary:
 	return {success=true}
 
 func _handle_destroy(player_idx: int, card: Dictionary) -> Dictionary:
-	var opp = 1 - player_idx
+	var opp = get_opponent(player_idx, int(card.get("target", -1)))
+	if opp < 0: return {success=false, msg="请选择目标"}
 	var target = card.get("destroy_target", "hand")
 	if target == "hand":
-		card_systems[opp].random_discard(1); _use_card(player_idx, card); add_log(player_idx, "摧毁手牌"); return {success=true}
+		card_systems[opp].random_discard(1); _use_card(player_idx, card); add_log(player_idx, "摧毁手牌: %s" % _target_name(opp)); return {success=true}
 	if target == "trap":
 		# 摧毁必须指定格子（客户端走棋盘选格；无位置参数视为操作错误）
 		var pos: Vector2i = movement.geometry.from_dict(card.get("trap_pos", {}))
@@ -592,11 +643,12 @@ func _handle_destroy(player_idx: int, card: Dictionary) -> Dictionary:
 	_use_card(player_idx, card); add_log(player_idx, msg); return {success=true}
 
 func _handle_seize(player_idx: int, card: Dictionary) -> Dictionary:
-	var opp = 1 - player_idx
+	var opp = get_opponent(player_idx, int(card.get("target", -1)))
+	if opp < 0: return {success=false, msg="请选择目标"}
 	var taken = card_systems[opp].random_take(); _use_card(player_idx, card)
 	if taken.is_empty(): add_log(player_idx, "夺取空"); return {success=true}
 	card_systems[player_idx].add_to_hand(taken)
-	add_log(player_idx, "夺取：%s" % Config.card_name(taken.type_id))
+	add_log(player_idx, "夺取%s的：%s" % [_target_name(opp), Config.card_name(taken.type_id)])
 	return {success=true}
 
 func _handle_heal(player_idx: int, card: Dictionary, amount: int) -> Dictionary:
@@ -657,15 +709,21 @@ func _finish_discard():
 
 func _advance_to_next_player():
 	if phase == Config.Phase.GAME_OVER: return
-	current_player = 1 - current_player
+	var n = players.size()
+	var next = (current_player + 1) % n
+	var guard = 0
+	while players[next].get("eliminated", false) and guard < n:
+		next = (next + 1) % n
+		guard += 1
+	current_player = next
 	if current_player == first_player: turn_number += 1
 	_judgment_phase()
 	state_changed.emit(get_full_state())
 
-# 位移/陷阱类效果后检查双方死亡（吸引/威慑可能让任一方踩陷阱）
+# 位移/陷阱类效果后检查死亡（吸引/威慑可能让任一方踩陷阱）
 func _check_any_death():
-	for i in range(2):
-		if players[i].hp <= 0:
+	for i in range(players.size()):
+		if players[i].hp <= 0 and not players[i].get("eliminated", false):
 			_handle_death(i)
 			return
 
@@ -679,6 +737,16 @@ func _damage_player(player_idx: int, amount: int):
 		_check_any_death()
 
 func _handle_death(player_idx: int):
+	# 多人（4 人）混战：死亡直接淘汰（无复活），最后存活者胜
+	if players.size() > 2:
+		players[player_idx].eliminated = true
+		players[player_idx].hp = 0
+		discard_count = 0
+		add_log(player_idx, "淘汰")
+		_check_multi_winner()
+		if phase != Config.Phase.GAME_OVER:
+			state_changed.emit(get_full_state())  # 淘汰也要广播（UI 显示"已淘汰"）
+		return
 	add_log(player_idx, "HP归零，复活...")
 	phase = Config.Phase.RESURRECTING
 	_action_deadline = 0
@@ -746,7 +814,7 @@ func _check_permanent_death(player_idx: int):
 		game_result = {
 			winner=winner, loser=player_idx, reason="permanent_death",
 			stats=stats.duplicate(),
-			names=[Config.char_name(players[0].char_id), Config.char_name(players[1].char_id)],
+			names=_player_names(),
 			titles=_calc_titles(winner),
 			battle_record=battle_record.duplicate(),
 			action_log=action_log.duplicate(),
@@ -754,6 +822,32 @@ func _check_permanent_death(player_idx: int):
 		add_log(player_idx, "淘汰")
 		state_changed.emit(get_full_state())
 		game_ended.emit(game_result)
+
+# 多人混战：每淘汰一人检查存活数，只剩 1 人时结束对局
+func _check_multi_winner():
+	var alive: Array = []
+	for i in range(players.size()):
+		if not players[i].get("eliminated", false): alive.append(i)
+	if alive.size() <= 1:
+		var winner = alive[0] if alive.size() == 1 else -1
+		phase = Config.Phase.GAME_OVER
+		response_pending = false
+		game_result = {
+			winner=winner, loser=-1, reason="last_alive",
+			stats=stats.duplicate(),
+			names=_player_names(),
+			titles=_calc_titles(winner) if winner >= 0 else [],
+			battle_record=battle_record.duplicate(),
+			action_log=action_log.duplicate(),
+		}
+		state_changed.emit(get_full_state())
+		game_ended.emit(game_result)
+
+func _player_names() -> Array:
+	var names: Array = []
+	for p in players:
+		names.append(Config.char_name(p.char_id))
+	return names
 
 # 获胜者称号：可同时获得多个（满足条件全部计入），第一个为最亮眼主称号
 # 统计口径：伤害/回复/复活/位移（含威慑吸引暗影步等所有位移来源）/承受伤害
@@ -780,13 +874,13 @@ func check_timers():
 			bp_state_changed.emit(bp.get_bp_state())
 		return
 	if _action_deadline > 0 and now >= _action_deadline:
-		# 超时对象：响应窗口是防守方，出牌阶段是当前玩家
-		var timed_player = (1 - current_player) if response_pending else current_player
+		# 超时对象：响应窗口是被攻击方（_pending_target），出牌阶段是当前玩家
+		var timed_player = (_pending_target if response_pending else current_player)
 		_action_deadline = 0
 		if _timeout_enabled(timed_player):
 			if response_pending:
 				# 响应窗口超时：默认不响应，结算后攻击者继续出牌（避免软锁）
-				skip_response(1 - current_player)
+				skip_response(_pending_target)
 				if phase == Config.Phase.PLAYER_TURN and turn_phase == Config.TurnPhase.ACTION:
 					_action_deadline = Time.get_ticks_msec() + ACTION_TIME * 1000
 				return
@@ -846,7 +940,7 @@ func get_full_state(full: bool = false) -> Dictionary:
 	var now = Time.get_ticks_msec()
 	var atl = -1
 	if _action_deadline > 0:
-		var timed_player = (1 - current_player) if response_pending else current_player
+		var timed_player = (_pending_target if response_pending else current_player)
 		if _timeout_enabled(timed_player):
 			atl = max(0, int((_action_deadline - now) / 1000.0))
 	var dtl = -1
@@ -857,13 +951,14 @@ func get_full_state(full: bool = false) -> Dictionary:
 		turn_number=turn_number, first_player=first_player,
 		response_pending=response_pending, pending_attack_card=pending_attack_card,
 		pending_attack_segment=pending_attack_segment, pending_attack_segments=pending_attack_segments,
+		pending_target=_pending_target,  # 当前攻击/技能的目标（多人局响应弹窗用）
 		waiting_for_discard=waiting_for_discard, discard_count=discard_count,
 		action_time_left=atl, discard_time_left=dtl,
 		deck_size=card_systems[0].deck.size(), discard_size=card_systems[0].discard.size(),
 		players=[], items=_serialize_items(), action_log=action_log.duplicate(),
-		distance=movement.get_distance(),
+		distance=movement.get_distance(_nearest_alive_opponent(current_player)),
 	}
-	for i in range(2):
+	for i in range(players.size()):
 		var p = players[i]; var cs = card_systems[i]
 		state.players.append({
 			index=i, char_id=p.char_id, char_name=Config.char_name(p.char_id),
@@ -871,6 +966,7 @@ func get_full_state(full: bool = false) -> Dictionary:
 			near_power=p.near_power, range_power=p.range_power, magic_power=p.magic_power,
 			position=movement.geometry.to_dict(p.position), weapon=p.weapon, armor=p.armor,
 			buffs=p.buffs.duplicate(), dots=p.dots.duplicate(), frozen=p.frozen,
+			eliminated=p.get("eliminated", false),
 			ap_attack=p.get("ap_attack",0), ap_move=p.get("ap_move",0), ap_function=p.get("ap_function",0),
 			hand_size=cs.hand.size(), deck_size=cs.deck.size(), discard_size=cs.discard.size(),
 			hand=cs.hand.duplicate(), hand_limit=movement.get_hand_limit(i),

@@ -43,23 +43,23 @@ func _atk_move(player_idx: int, card: Dictionary):
 	return _m._handle_move_card(player_idx, card)
 
 func _atk_attract(player_idx: int, card: Dictionary):
-	if not _m.movement.attract(player_idx):
+	if not _m.movement.attract(player_idx, int(card.get("target", -1))):
 		return {success=false, msg="无法吸引（板边/位置被占）"}  # 失败不消耗卡
 	_m.card_systems[player_idx].play_card(card.uid)
-	_m.add_log(player_idx, "吸引")
+	_m.add_log(player_idx, "吸引: %s" % _m._target_name(int(card.get("target", -1))))
 	return {success=true}  # 死亡判定由 _damage_player 统一处理
 
 func _atk_deter(player_idx: int, card: Dictionary):
-	if not _m.movement.deter(player_idx):
+	if not _m.movement.deter(player_idx, int(card.get("target", -1))):
 		return {success=false, msg="无法威慑（对方在板边）"}  # 失败不消耗卡
 	_m.card_systems[player_idx].play_card(card.uid)
-	_m.add_log(player_idx, "威慑")
+	_m.add_log(player_idx, "威慑: %s" % _m._target_name(int(card.get("target", -1))))
 	return {success=true}  # 死亡判定由 _damage_player 统一处理
 
 func _atk_freeze(player_idx: int, card: Dictionary):
 	# 冻结冷却中（不能连续冻结）：卡不消耗、明确提示（快速模式无冷却）
-	var opp = 1 - player_idx
-	if not _m.rapid_mode and _m.players[opp].frozen_lockout > 0:
+	var opp = _m.get_opponent(player_idx, int(card.get("target", -1)))
+	if opp >= 0 and not _m.rapid_mode and _m.players[opp].frozen_lockout > 0:
 		return {success=false, msg="不能对同一目标连续冻结"}
 	# 冻结可被魔法闪避响应
 	return _m._handle_respondable_card(player_idx, card, "freeze")
@@ -103,8 +103,9 @@ func _blessing(player_idx: int, card: Dictionary):
 func _trap(player_idx: int, card: Dictionary):
 	var p = _m.players[player_idx]
 	var geo = _m.movement.geometry
-	# 默认放自己朝对手方向一格（客户端未指定 trap_pos 时的兜底）
-	var default_pos = geo.step(p.position, geo.direction_between(p.position, _m.players[1 - player_idx].position))
+	# 默认放自己朝最近存活对手方向一格（客户端未指定 trap_pos 时的兜底）
+	var opp = _m._nearest_alive_opponent(player_idx)
+	var default_pos = geo.step(p.position, geo.direction_between(p.position, _m.players[opp].position)) if opp >= 0 else p.position
 	var pos: Vector2i = geo.from_dict(card.get("trap_pos", {}))
 	if not geo.is_valid(pos):
 		pos = default_pos

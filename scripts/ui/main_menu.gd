@@ -12,6 +12,7 @@ const Style = preload("res://scripts/theme/style_const.gd")
 @onready var c_back_btn = $CreatePanel/CBackBtn
 @onready var c_room_label = $CreatePanel/CRoomLabel
 var _create_fast_btn: CheckButton  # 创建房间：快速模式开关
+var _create_4p_btn: CheckButton    # 创建房间：4 人混战开关
 @onready var j_server = $JoinPanel/JServerInput
 @onready var j_room = $JoinPanel/JRoomInput
 @onready var j_name = $JoinPanel/JNameInput
@@ -22,11 +23,15 @@ var _create_fast_btn: CheckButton  # 创建房间：快速模式开关
 
 func _ready():
 	Style.scale_node_fonts(self)  # 移动端字号适配（tscn 写死的字号）
-	# 创建房间面板：快速模式开关（CNameInput 上方）
+	# 创建房间面板：模式/人数开关（CNameInput 上方）
 	_create_fast_btn = _popup_check("快速模式（无限出牌 · 冻结连续 · 天赐不限）")
 	_create_fast_btn.offset_left = 60; _create_fast_btn.offset_top = 225
 	_create_fast_btn.offset_right = 660; _create_fast_btn.offset_bottom = 285
 	create_panel.add_child(_create_fast_btn)
+	_create_4p_btn = _popup_check("4人混战（六边形地图，凑满4人开局）")
+	_create_4p_btn.offset_left = 60; _create_4p_btn.offset_top = 293
+	_create_4p_btn.offset_right = 660; _create_4p_btn.offset_bottom = 353
+	create_panel.add_child(_create_4p_btn)
 	$MainPanel/MultiBtn.pressed.connect(_on_multi_battle)
 	$MainPanel/SelfBtn.pressed.connect(_on_self_play)
 	$MainPanel/AiBtn.pressed.connect(_on_ai_battle)
@@ -206,7 +211,7 @@ func _on_create():
 	await Network.connected_to_server
 	var pname = c_name.text.strip_edges()
 	if pname == "": pname = "Player1"
-	Network.create_room(pname, _create_fast_btn.button_pressed)
+	Network.create_room(pname, _create_fast_btn.button_pressed, 4 if _create_4p_btn.button_pressed else 2)
 
 func _on_join():
 	var rid = j_room.text.strip_edges()
@@ -250,6 +255,12 @@ func _make_ready_btn(parent: Control, y: float) -> Button:
 	return btn
 
 func _on_game_starting(data: Dictionary):
+	if data.get("ffa", false):
+		# 4 人混战：跳过 BP 直接进对战（初始 state 由服务器附带）
+		status_label.text = "4人混战开始！"
+		Network.battle_state_cache = data.get("state", {})
+		get_tree().change_scene_to_file("res://scenes/battle_scene.tscn")
+		return
 	status_label.text = "进入BP..."
 	Network.bp_state_cache = data.get("bp_state", {})
 	get_tree().change_scene_to_file("res://scenes/bp_scene.tscn")
@@ -259,7 +270,7 @@ func _on_self_play():
 	var vb = c.get_child(1)
 	var fast = _popup_check("快速模式（无限出牌 · 冻结连续 · 天赐不限）")
 	vb.add_child(fast)
-	var start = _popup_btn("开始对战")
+	var start = _popup_btn("开始对战（2人）")
 	start.pressed.connect(func():
 		LocalGame.rapid_mode = fast.button_pressed
 		c.queue_free()
@@ -267,10 +278,24 @@ func _on_self_play():
 		get_tree().change_scene_to_file("res://scenes/bp_scene.tscn")
 	)
 	vb.add_child(start)
+	var ffa = _popup_btn("4人混战（六边形地图）")
+	ffa.pressed.connect(func():
+		LocalGame.rapid_mode = fast.button_pressed
+		c.queue_free()
+		LocalGame.start_local_game_multi(_random_chars(4))
+		get_tree().change_scene_to_file("res://scenes/battle_scene.tscn")
+	)
+	vb.add_child(ffa)
 	var back = _popup_btn("返回")
 	back.pressed.connect(func(): c.queue_free())
 	vb.add_child(back)
 	add_child(c)
+
+# 随机 n 个不同角色（4 人混战开局用）
+func _random_chars(n: int) -> Array:
+	var ids = Config.CHARACTER_IDS.duplicate()
+	ids.shuffle()
+	return ids.slice(0, n)
 
 # ---- 多人对战（选择创建或加入） ----
 func _on_multi_battle():

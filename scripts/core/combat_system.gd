@@ -16,7 +16,7 @@ func _init(match):
 func calculate_attack(attacker_idx: int, defender_idx: int, card_type_id: String, ignore_distance: bool = false) -> Dictionary:
 	var attacker = match_ref.get_player(attacker_idx)
 	var defender = match_ref.get_player(defender_idx)
-	var distance = match_ref.movement.get_distance()
+	var distance = match_ref.movement.get_distance(defender_idx)
 	var base_damage = 0
 	var damage_type = Config.get_damage_type(card_type_id)
 	var formula = ""
@@ -149,7 +149,7 @@ func consume_armor(defender_idx: int):
 		defender.armor = {}  # 碎裂
 
 # ---------- 响应处理 ----------
-func process_response(_attacker_idx: int, defender_idx: int, attack_card: String, response_card_uid: int) -> Dictionary:
+func process_response(attacker_idx: int, defender_idx: int, attack_card: String, response_card_uid: int) -> Dictionary:
 	var defender = match_ref.get_player(defender_idx)
 	var defender_cs = match_ref.card_systems[defender_idx]
 
@@ -179,7 +179,7 @@ func process_response(_attacker_idx: int, defender_idx: int, attack_card: String
 		# 远程卡可牵制远程/穿心，也可牵制魔法/吟唱
 		if attack_card in ["range", "pierce", "magic", "chant"]:
 			effect = "restrain"
-			value = max(0, defender.range_power - match_ref.movement.get_distance())
+			value = max(0, defender.range_power - match_ref.movement.geometry.distance(defender.position, match_ref.get_player(attacker_idx).position))
 			if not defender.weapon.is_empty() and defender.weapon.id == "repeater":
 				value += 2  # 连弩：牵制额外扣除2点
 		else:
@@ -215,7 +215,7 @@ func apply_on_hit_effects(attacker_idx: int, defender_idx: int, damage: int, dam
 	# 霜咬：近战命中后对方下回合位移=0
 	if weapon_id == "frost_bite":
 		defender.frozen_move = true
-		match_ref.add_log(attacker_idx, "霜咬: 对方下回合无法移动")
+		match_ref.add_log(attacker_idx, "霜咬: %s下回合无法移动" % match_ref._target_name(defender_idx))
 
 	# 嗜血：近战≥3伤害回2HP（走 on_heal 钩子，邪术师回血效果-1 覆盖）
 	if weapon_id == "bloodthirst" and damage >= 3:
@@ -229,12 +229,12 @@ func apply_on_hit_effects(attacker_idx: int, defender_idx: int, damage: int, dam
 	if weapon_id == "hawkeye":
 		match_ref._reveal_to = attacker_idx
 		match_ref._reveal_from = defender_idx
-		match_ref.add_log(attacker_idx, "鹰眼: 查看对方手牌")
+		match_ref.add_log(attacker_idx, "鹰眼: 查看%s手牌" % match_ref._target_name(defender_idx))
 
 	# 毒牙：远程命中后给予2层中毒（每回合-1HP，层数每回合-1，可叠加）
 	if weapon_id == "toxic_fang":
 		match_ref.status.add_poison(defender_idx, 2, attacker_idx)
-		match_ref.add_log(attacker_idx, "毒牙: 对方中毒2层")
+		match_ref.add_log(attacker_idx, "毒牙: %s中毒2层" % match_ref._target_name(defender_idx))
 
 	# 灼烧：魔法命中后灼烧2回合每回合-2HP，再次命中刷新时长
 	if weapon_id == "scorch":

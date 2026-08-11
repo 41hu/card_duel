@@ -114,7 +114,7 @@ func mage_empower_value(player_idx: int) -> int:
 
 func on_attack_cast(player_idx: int, type_id: String) -> int:
 	var p = _ms.players[player_idx]
-	var opp = 1 - player_idx
+	var opp = _ms._pending_target if _ms._pending_target >= 0 else 1 - player_idx
 	# 释放魔法类型攻击（魔法/吟唱）→ 消耗全部法师强化层（buff 展示、可叠加）
 	if type_id in ["magic", "chant"]:
 		var total = mage_empower_value(player_idx)
@@ -427,11 +427,8 @@ func _mage_discard(player_idx: int, params: Dictionary) -> Dictionary:
 func _assassin_move(player_idx: int, params: Dictionary) -> Dictionary:
 	var dir: Vector2i = _ms.movement.geometry.from_dict(params.get("direction", {}))
 	if dir == Vector2i.ZERO: return {success=false, msg="请选择方向"}
-	# 暗影步不允许推人（免费位移不附带推人收益）：贴脸朝对方方向使用 → 明确提示
-	var p = _ms.players[player_idx]
-	var opp = _ms.players[1 - player_idx]
-	if _ms.movement.get_distance() == 0 \
-			and _ms.movement.geometry.direction_between(p.position, opp.position) == dir:
+	# 暗影步不允许推人（免费位移不附带推人收益）：贴脸朝任一存活对手方向使用 → 明确提示
+	if _ms.movement._opponent_in_dir(player_idx, dir) >= 0:
 		return {success=false, msg="暗影步不能推人"}
 	# 禁移动检查统一在 movement.move_player 兜底（霜咬同样限制暗影步）
 	if not _ms.movement.move_player(player_idx, dir, false): return {success=false, msg="无法移动"}

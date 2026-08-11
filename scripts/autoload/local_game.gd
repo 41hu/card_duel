@@ -74,6 +74,23 @@ func start_local_game(p1_char: String, p2_char: String, bp_first: int = -1):
 	game._start_game()
 	battle_state_cache = game.get_full_state()
 
+# 4 人混战本地开局（阶段 1 测试用；不走 BP，直接随机先手）
+func start_local_game_multi(char_ids: Array):
+	ai_mode = false
+	tutorial_mode = false
+	_ai = null
+	last_record_path = ""
+	game = MatchStateClass.new()
+	game.disable_timeout = true
+	game.rapid_mode = rapid_mode
+	game.state_changed.connect(_on_state)
+	game.weapon_prompt.connect(_on_weapon)
+	game.response_needed.connect(_on_response)
+	game.game_ended.connect(_on_ended)
+	game.init_match_multi(char_ids)
+	game._start_game()
+	battle_state_cache = game.get_full_state()
+
 # 新手教程：开局刺客 vs 斗士（后续步骤由 TutorialManager 控制切段）
 func start_tutorial():
 	ai_mode = false
@@ -267,10 +284,12 @@ func send_play_card(card_uid: int, extra: Dictionary = {}):
 
 func send_response(respond: bool, card_uid: int = -1):
 	if not game: return
+	# 防守方 = 当前攻击的目标（多人局 _pending_target；2 人局兜底唯一对手）
+	var defender = game._pending_target if game._pending_target >= 0 else 1 - game.current_player
 	if respond:
-		game.process_response(1 - game.current_player, true, card_uid)
+		game.process_response(defender, true, card_uid)
 	else:
-		game.skip_response(1 - game.current_player)
+		game.skip_response(defender)
 
 func send_weapon_choice(accept: bool):
 	if not game: return

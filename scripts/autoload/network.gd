@@ -88,9 +88,9 @@ func send(msg: Dictionary):
 	var json_str = JSON.stringify(msg)
 	_socket.put_packet(json_str.to_utf8_buffer())
 
-func create_room(player_name: String = "Player1", rapid_mode: bool = false):
+func create_room(player_name: String = "Player1", rapid_mode: bool = false, max_players: int = 2):
 	_player_name = player_name
-	send({"t": "create_room", "player_name": player_name, "rapid_mode": rapid_mode})
+	send({"t": "create_room", "player_name": player_name, "rapid_mode": rapid_mode, "max_players": max_players})
 
 func join_room(rid: String, player_name: String = "Player2"):
 	_player_name = player_name

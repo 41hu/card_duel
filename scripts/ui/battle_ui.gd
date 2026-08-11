@@ -3,6 +3,7 @@ extends Control
 
 const Style = preload("res://scripts/theme/style_const.gd")
 const CardWidget = preload("res://scripts/ui/components/card_widget.gd")
+const MapGeometry = preload("res://scripts/core/map_geometry.gd")
 
 @onready var opp_info = $OppInfo
 @onready var phase_label = $PhaseLabel
@@ -28,6 +29,8 @@ var _discard_selected: Array = []
 var _last_hp: Array = [-1, -1]
 var _last_turn: int = -1
 var _last_player: int = -1
+var _board_hex: bool = false  # 棋盘当前是否六边形模式（多人局）
+var _opp_list: VBoxContainer = null  # 多人局：右侧竖排显示全部对手（名字/HP/位置）
 var _cheat_on: bool = false
 var _timer_left: int = -1
 var _resp_popup: Control
@@ -47,6 +50,15 @@ func _ready():
 	_deck_label.add_theme_font_size_override("font_size", Style.fs(26))
 	_deck_label.add_theme_color_override("font_color", Style.HAND_TITLE)
 	add_child(_deck_label)
+	# 多人局对手列表（右侧竖排，仅 4 人局显示）
+	_opp_list = VBoxContainer.new()
+	_opp_list.name = "OppList"
+	_opp_list.anchor_left = 1.0; _opp_list.anchor_right = 1.0
+	_opp_list.offset_left = -300; _opp_list.offset_right = -24
+	_opp_list.offset_top = 180; _opp_list.offset_bottom = 520
+	_opp_list.add_theme_constant_override("separation", 8)
+	_opp_list.visible = false
+	add_child(_opp_list)
 	_build_popups()
 	end_turn_btn.pressed.connect(_on_end_turn)
 	confirm_btn.pressed.connect(_on_confirm_card)
@@ -207,8 +219,10 @@ func _show_resp_popup(atk_card: String):
 	var has_any = false
 	var defender_hand = []
 	var defender = {}
+	# 防守方 = 攻击目标（state.pending_target）；旧状态无此字段时兜底取第一个非攻击者
+	var target_idx = int(_game_state.get("pending_target", -1))
 	for p in _game_state.players:
-		if p.index != _game_state.current_player:
+		if p.index == target_idx or (target_idx < 0 and p.index != _game_state.current_player):
 			defender_hand = p.get("hand", [])
 			defender = p
 			break
@@ -383,10 +397,48 @@ func _refresh_all(state: Dictionary):
 	var pls = state.players
 	if pls.size() < 2:
 		return
-	var opp = pls[0] if pls[0].index != _player_index else pls[1]
-	var me = pls[0] if pls[0].index == _player_index else pls[1]
+	# 多人局：棋盘切换六边形模式（模式不变时 BoardRenderer 内部跳过重建）
+	var want_hex = pls.size() > 2
+	if want_hex != _board_hex:
+		_board_hex = want_hex
+		board.set_geometry_mode(MapGeometry.MODE_HEX if want_hex else MapGeometry.MODE_LINEAR)
+	# HP 闪烁记录数组按玩家数扩展（4 人局原 2 元素会越界）
+	while _last_hp.size() < pls.size():
+		_last_hp.append(-1)
+	# 自己的面板 + 对手面板（4 人局显示第一个非己玩家，其余对手在目标弹窗里可见）
+	var opp = pls[0]
+	for p in pls:
+		if p.index != _player_index:
+			opp = p
+			break
+	var me = pls[0]
+	for p in pls:
+		if p.index == _player_index:
+			me = p
+			break
 	opp_info.refresh(opp, "对手", Color(1, 0.7, 0.5))
 	me_info.refresh(me, "自己", Color(0.5, 0.8, 1))
+	# 多人局：右侧竖排显示全部存活对手（名字/HP/位置），2 人局隐藏
+	for child in _opp_list.get_children():
+		_opp_list.remove_child(child)
+		child.queue_free()
+	_opp_list.visible = pls.size() > 2
+	if pls.size() > 2:
+		for p in pls:
+			if p.index == _player_index: continue
+			var pos = p.get("position", {})
+			var pos_str = "%d,%d" % [pos.get("x", 0), pos.get("y", 0)]
+			var l = Label.new()
+			if p.get("eliminated", false):
+				l.text = "P%d %s  已淘汰" % [p.index + 1, p.get("char_name", "?")]
+				l.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
+			else:
+				l.text = "P%d %s  HP:%d/%d  格(%s)" % [p.index + 1, p.get("char_name", "?"), p.get("hp", 0), p.get("max_hp", 1), pos_str]
+				l.add_theme_color_override("font_color", Color(1, 0.7, 0.5))
+			l.add_theme_font_size_override("font_size", Style.fs(24))
+			l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+			l.add_theme_constant_override("outline_size", Style.fs(3))
+			_opp_list.add_child(l)
 	for p in pls:
 		if p.hp != _last_hp[p.index]:
 			var panel = me_info if p.index == _player_index else opp_info
@@ -456,7 +508,7 @@ func _refresh_all(state: Dictionary):
 	action_log.show_logs(state.get("action_log", []), 8, _player_index)
 
 	if state.get("revealed_to", -1) == _player_index:
-		_on_hand_revealed(state.get("revealed_hand", []))
+		_on_hand_revealed(state.get("revealed_hand", []), int(state.get("revealed_from", -1)))
 
 	if state.get("response_pending", false) and state.current_player != _player_index:
 		_show_resp_popup(state.get("pending_attack_card", ""))
@@ -542,11 +594,50 @@ func _on_confirm_card():
 		elif _is_armor_override(_selected_type):
 			_show_armor_override_confirm(_selected_uid)
 			_selected_uid = -1
+		elif _is_targeted_card(_selected_type) and _game_state.players.size() > 2:
+			_show_target_pick(_selected_uid, _selected_type)
+			_selected_uid = -1
 		else:
 			_n().send_play_card(_selected_uid)
 			_selected_uid = -1
 	confirm_btn.visible = false
 	cancel_btn.visible = false
+
+# 指向性卡（多人局需要选择目标）：攻击/吸引/威慑/冻结/摧毁/夺取
+func _is_targeted_card(type_id: String) -> bool:
+	return type_id in ["near", "heavy", "range", "pierce", "magic", "chant",
+		"attract", "deter", "freeze", "destroy", "seize"]
+
+# 多人局：指向卡弹出目标选择（列所有存活对手：名字/HP/位置）
+# extra：目标外的附加参数（如摧毁手牌/装备的 destroy_target 等）
+func _show_target_pick(card_uid: int, type_id: String, extra: Dictionary = {}):
+	var c = Control.new()
+	c.name = "TargetPick"
+	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
+	var vb = _popup_box(c, 560, 460)
+	vb.add_child(_lbl("选择「%s」的目标：" % Config.card_name(type_id)))
+	var any = false
+	for p in _game_state.players:
+		if p.index == _player_index or p.get("eliminated", false): continue
+		any = true
+		var pos = p.get("position", {})
+		var pos_str = "%d,%d" % [pos.get("x", 0), pos.get("y", 0)]
+		var b = _mkbtn("P%d %s  HP:%d/%d  格(%s)" % [p.index + 1, p.get("char_name", "?"), p.get("hp", 0), p.get("max_hp", 1), pos_str])
+		b.pressed.connect(func(pid = p.index):
+			c.queue_free()
+			var send_extra = {"target": pid}
+			for k in extra: send_extra[k] = extra[k]
+			_n().send_play_card(card_uid, send_extra)
+		)
+		vb.add_child(b)
+	if not any:
+		vb.add_child(_lbl("没有可攻击的目标"))
+	var close = _mkbtn("取消")
+	close.pressed.connect(func(): c.queue_free())
+	vb.add_child(close)
+	add_child(c)
 
 # 已有防具时再装备防具卡：弹确认（旧防具会被直接覆盖消失）
 func _is_armor_override(type_id: String) -> bool:
@@ -682,31 +773,77 @@ func _popup_move(card_uid: int):
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
 	var vb = _popup_box(c, 620, 360)
 	vb.add_child(_lbl("移动方向"))
-	var hb = HBoxContainer.new()
-	vb.add_child(hb)
 	# 哨兵 -1 = 技能调用（暗影步）；调试发牌卡 uid 为负数（-1000 递减），必须走 play_card
-	# 教程：限制可选移动方向（如只允许向对手方向）
+	# 教程：限制可选移动方向（线性：左右；六边形教程不涉及）
 	var dirs = [1, -1]
 	if tutorial != null:
 		dirs = tutorial.allowed_move_dirs()
-	var lb = _mkbtn("左1格")
-	lb.visible = -1 in dirs
-	if card_uid == -1:
-		lb.pressed.connect(func(): c.queue_free(); _n().send_use_skill("assassin_move", {"direction": {"x": -1, "y": 0}}))
+	if _board_hex:
+		# 六边形：米字格布局（3×3，方向按视觉位置摆放，中间是取消）
+		#  西北  [北]  东北
+		#  西   [取消] 东
+		#  西南  [南]  东南
+		# 注意：六边形没有正北/正南方向（尖顶朝上只有 6 个邻居），
+		# 上中/下中放灰掉的占位按钮保持米字格视觉对齐
+		var grid = GridContainer.new()
+		grid.columns = 3
+		grid.add_theme_constant_override("h_separation", 16)
+		grid.add_theme_constant_override("v_separation", 10)
+		vb.add_child(grid)
+		# 行优先填入（与米字格位置一一对应）；占位项点击无效
+		var cells = [
+			["西北", Vector2i(0, -1), false],
+			["北", Vector2i.ZERO, true],
+			["东北", Vector2i(1, -1), false],
+			["西", Vector2i(-1, 0), false],
+			["取消", Vector2i.ZERO, true],
+			["东", Vector2i(1, 0), false],
+			["西南", Vector2i(-1, 1), false],
+			["南", Vector2i.ZERO, true],
+			["东南", Vector2i(0, 1), false],
+		]
+		for cell in cells:
+			var text: String = cell[0]
+			var dir: Vector2i = cell[1]
+			var placeholder: bool = cell[2]
+			if text == "取消":
+				var cb = _mkbtn("取消")
+				cb.pressed.connect(func(): c.queue_free())
+				grid.add_child(cb)
+				continue
+			if placeholder:
+				var d = _mkbtn(text)
+				d.disabled = true
+				grid.add_child(d)
+				continue
+			var b = _mkbtn("%s1格" % text)
+			b.pressed.connect(func(dd=dir):
+				c.queue_free()
+				_send_move(card_uid, dd)
+			)
+			grid.add_child(b)
 	else:
-		lb.pressed.connect(func(): c.queue_free(); _n().send_play_card(card_uid, {"direction": {"x": -1, "y": 0}, "steps": 1}))
-	hb.add_child(lb)
-	var rb = _mkbtn("右1格")
-	rb.visible = 1 in dirs
-	if card_uid == -1:
-		rb.pressed.connect(func(): c.queue_free(); _n().send_use_skill("assassin_move", {"direction": {"x": 1, "y": 0}}))
-	else:
-		rb.pressed.connect(func(): c.queue_free(); _n().send_play_card(card_uid, {"direction": {"x": 1, "y": 0}, "steps": 1}))
-	hb.add_child(rb)
+		var hb = HBoxContainer.new()
+		vb.add_child(hb)
+		var lb = _mkbtn("左1格")
+		lb.visible = -1 in dirs
+		lb.pressed.connect(func(): c.queue_free(); _send_move(card_uid, Vector2i(-1, 0)))
+		hb.add_child(lb)
+		var rb = _mkbtn("右1格")
+		rb.visible = 1 in dirs
+		rb.pressed.connect(func(): c.queue_free(); _send_move(card_uid, Vector2i(1, 0)))
+		hb.add_child(rb)
 	var cb = _mkbtn("取消")
 	cb.pressed.connect(func(): c.queue_free())
 	vb.add_child(cb)
 	add_child(c)
+
+# 移动/暗影步方向发送统一出口（card_uid == -1 表示暗影步技能）
+func _send_move(card_uid: int, dir: Vector2i):
+	if card_uid == -1:
+		_n().send_use_skill("assassin_move", {"direction": {"x": dir.x, "y": dir.y}})
+	else:
+		_n().send_play_card(card_uid, {"direction": {"x": dir.x, "y": dir.y}, "steps": 1})
 
 func _popup_destroy(card_uid: int):
 	var c = Control.new()
@@ -715,18 +852,38 @@ func _popup_destroy(card_uid: int):
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
 	var vb = _popup_box(c, 700, 440)
 	vb.add_child(_lbl("摧毁: 选择目标"))
+	var multi = _game_state.players.size() > 2  # 多人局：选完摧毁类型再选目标
 	var hb = _mkbtn("盲丢对方1手牌")
-	hb.pressed.connect(func(): c.queue_free(); _n().send_play_card(card_uid, {"destroy_target": "hand"}))
+	hb.pressed.connect(func():
+		c.queue_free()
+		if multi:
+			_show_target_pick(card_uid, "destroy", {"destroy_target": "hand"})
+		else:
+			_n().send_play_card(card_uid, {"destroy_target": "hand"})
+	)
 	vb.add_child(hb)
 	var pls = _game_state.players
+	# 多人局：武器/防具按钮始终显示（点选目标后由核心校验目标是否有对应装备）
 	var opp = pls[0] if pls[0].index != _player_index else pls[1]
-	if not opp.weapon.is_empty():
-		var wb = _mkbtn("摧毁对方武器: " + opp.weapon.data.name)
-		wb.pressed.connect(func(): c.queue_free(); _n().send_play_card(card_uid, {"destroy_target": "equip", "equip_type": "weapon"}))
+	if multi or not opp.weapon.is_empty():
+		var wb = _mkbtn("摧毁对方武器" + ((": " + opp.weapon.data.name) if not opp.weapon.is_empty() else ""))
+		wb.pressed.connect(func():
+			c.queue_free()
+			if multi:
+				_show_target_pick(card_uid, "destroy", {"destroy_target": "equip", "equip_type": "weapon"})
+			else:
+				_n().send_play_card(card_uid, {"destroy_target": "equip", "equip_type": "weapon"})
+		)
 		vb.add_child(wb)
-	if not opp.armor.is_empty():
-		var ab = _mkbtn("摧毁对方防具: " + opp.armor.data.name)
-		ab.pressed.connect(func(): c.queue_free(); _n().send_play_card(card_uid, {"destroy_target": "equip", "equip_type": "armor"}))
+	if multi or not opp.armor.is_empty():
+		var ab = _mkbtn("摧毁对方防具" + ((": " + opp.armor.data.name) if not opp.armor.is_empty() else ""))
+		ab.pressed.connect(func():
+			c.queue_free()
+			if multi:
+				_show_target_pick(card_uid, "destroy", {"destroy_target": "equip", "equip_type": "armor"})
+			else:
+				_n().send_play_card(card_uid, {"destroy_target": "equip", "equip_type": "armor"})
+		)
 		vb.add_child(ab)
 	var traps_list = _game_state.get("items", [])
 	if traps_list.size() > 0:
@@ -932,13 +1089,19 @@ func _show_mage_pick():
 	var cb = _mkbtn("取消"); cb.pressed.connect(func(): c.queue_free()); vb.add_child(cb)
 	add_child(c)
 
-func _on_hand_revealed(cards: Array):
+func _on_hand_revealed(cards: Array, from_idx: int = -1):
 	var c = Control.new()
 	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
 	var vb = _popup_box(c, 640, 460)
-	vb.add_child(_lbl("对方手牌："))
+	# 多人局明确"谁"的手牌（鹰眼等查看效果）
+	var who = "对方"
+	for p in _game_state.players:
+		if p.index == from_idx:
+			who = "P%d %s" % [from_idx + 1, p.get("char_name", "?")]
+			break
+	vb.add_child(_lbl("%s的手牌：" % who))
 	if cards.is_empty():
 		vb.add_child(_lbl("  (无手牌)"))
 	else:

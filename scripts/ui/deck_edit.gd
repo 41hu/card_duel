@@ -202,6 +202,12 @@ func _on_edit_slot(slot: int):
 	_draft = d.get("cards", []).duplicate()
 	_draft_name = str(d.get("name", ""))
 	_package_id = str(d.get("package", DeckData.DEFAULT_PACKAGE))
+	# 空卡组：自动填充套餐回复卡（回复卡 +/- 禁用，不自动填充则永远凑不齐套餐组合）
+	if _draft.is_empty():
+		var pkg: Dictionary = DeckData.HEAL_PACKAGES.get(_package_id, DeckData.HEAL_PACKAGES[DeckData.DEFAULT_PACKAGE])
+		for tid in pkg.heal:
+			for _i in range(int(pkg.heal[tid])):
+				_draft.append(tid)
 	_slot = slot
 	_show_edit()
 

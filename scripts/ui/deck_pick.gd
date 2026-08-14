@@ -77,6 +77,7 @@ func _build_layout():
 	back_btn.offset_bottom = -24
 	back_btn.add_theme_font_size_override("font_size", Style.fs(28))
 	back_btn.pressed.connect(_on_back)
+	back_btn.z_index = 10  # 置于全屏页面之上，否则被 pick_root/edit_root 盖住按不动
 	add_child(back_btn)
 	# 选择页
 	pick_root = Control.new()

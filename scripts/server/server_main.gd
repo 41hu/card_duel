@@ -3,6 +3,7 @@ extends Node
 
 const MatchStateClass = preload("res://scripts/core/match_state.gd")
 const ModeData = preload("res://scripts/data/mode_data.gd")
+const DeckData = preload("res://scripts/data/deck_data.gd")
 const PORT = 17890
 
 var _tcp_server: TCPServer = null
@@ -78,6 +79,7 @@ func _handle_message(peer_idx: int, raw: String):
 		"use_skill": _on_use_skill(peer_idx, data)
 		"reveal_hand": _on_reveal_hand(peer_idx)
 		"fighter_choice": _on_fighter_choice(peer_idx, data)
+		"deck_ready": _on_deck_ready(peer_idx, data)
 
 func _create_room(peer_idx: int, data: Dictionary):
 	var rid = str(_next_room_id); _next_room_id += 1
@@ -167,13 +169,7 @@ func _start_bp(room):
 func _on_bp_timeout(_bs: Dictionary, room):
 	_broadcast_bp_state(room)
 	if room.match.bp.is_done():
-		var chars = room.match.bp.get_start_chars()
-		var bf = room.match.bp._bp_first
-		room.match.rapid_mode = room.rapid_mode  # 快速模式（房间创建时指定）
-		room.match.init_match(chars[0], chars[1], bf)
-		room.match._start_game()
-		room.stage = "game"
-		log_msg("BP超时完成 P1=%s P2=%s" % [chars[0], chars[1]])
+		_after_bp(room)
 
 func _on_bp_action(peer_idx: int, data: Dictionary):
 	var peer = _peers[peer_idx]; var room = _find_room(peer.room_id)
@@ -183,13 +179,52 @@ func _on_bp_action(peer_idx: int, data: Dictionary):
 	log_msg("P%d BP操作 %s %s" % [peer.player_index, data.get("action",""), data.get("char_id","")])
 	_broadcast_bp_state(room)
 	if room.match.bp.is_done():
-		var chars = room.match.bp.get_start_chars()
-		var bf = room.match.bp._bp_first
-		room.match.rapid_mode = room.rapid_mode  # 快速模式（房间创建时指定）
-		room.match.init_match(chars[0], chars[1], bf)
-		room.match._start_game()
-		room.stage = "game"
-		log_msg("BP完成 P1=%s P2=%s" % [chars[0], chars[1]])
+		_after_bp(room)
+
+# BP 完成统一入口：经典/快速直接开战；自定义卡组进入「等卡组」阶段
+func _after_bp(room):
+	var chars = room.match.bp.get_start_chars()
+	var bf = room.match.bp._bp_first
+	if room.mode == "custom_deck":
+		# 自定义卡组：等双方 deck_ready（客户端跳配置环节选卡组）
+		room.stage = "deck"
+		room.decks = [{}, {}]
+		room.bp_chars = chars
+		room.bp_first = bf
+		_broadcast_to_room(room, {"t": "deck_config", "chars": chars, "first": bf})
+		log_msg("BP完成，等待双方卡组 P1=%s P2=%s" % [chars[0], chars[1]])
+		return
+	room.match.rapid_mode = room.rapid_mode  # 快速模式（房间创建时指定）
+	room.match.init_match(chars[0], chars[1], bf)
+	room.match._start_game()
+	room.stage = "game"
+	log_msg("BP完成 P1=%s P2=%s" % [chars[0], chars[1]])
+
+# 自定义卡组：玩家配置完卡组后上报；双方就绪则服务端校验开战（防作弊）
+func _on_deck_ready(peer_idx: int, data: Dictionary):
+	var peer = _peers[peer_idx]; var room = _find_room(peer.room_id)
+	if room == null or room.stage != "deck": return
+	var cards: Array = data.get("cards", [])
+	var pkg = str(data.get("package", DeckData.DEFAULT_PACKAGE))
+	var v = DeckData.validate_deck(cards, pkg)
+	if not v.ok:
+		_send_to(peer_idx, {"t": "error", "msg": "卡组不合法：" + v.msg})
+		log_msg("P%d 非法卡组被拒：%s" % [peer.player_index, v.msg])
+		return
+	room.decks[peer.player_index] = cards
+	log_msg("P%d 卡组就绪（%d张，套餐%s）" % [peer.player_index, cards.size(), pkg])
+	if room.decks[0].is_empty() or room.decks[1].is_empty():
+		return
+	var chars = room.bp_chars
+	var bf = room.bp_first
+	room.match.rapid_mode = room.rapid_mode
+	room.match.init_match(chars[0], chars[1], bf, [room.decks[0], room.decks[1]], true)
+	room.match._start_game()
+	room.stage = "game"
+	var st = room.match.get_full_state()
+	for p_idx in room.peer_indices:
+		_send_to(p_idx, {"t": "game_starting", "state": st})
+	log_msg("自定义卡组开战 P1=%s P2=%s" % [chars[0], chars[1]])
 
 func _broadcast_bp_state(room):
 	var bp_state = room.match.bp.get_bp_state(); bp_state["t"]="bp_state"
@@ -318,6 +353,11 @@ func _on_peer_disconnected(peer_idx: int):
 			for p_idx in room.peer_indices:
 				_send_to(p_idx, {"t":"room_joined","room_id":room.id,"player_index":_peers[p_idx].player_index,"players":room.peer_names,"mode":room.mode})
 			log_msg("P%d离开房间%s（剩%d人）" % [idx, room.id, room.peer_indices.size()])
+			return
+		# 等待/BP/配置卡组阶段断线（对局未开始，match 为 null 或未 init）：清理房间，不发结算
+		if room.match == null or room.match.players.is_empty():
+			_rooms.erase(room)
+			log_msg("对局未开始P%d断开，房间%s解散" % [peer.player_index, room.id])
 			return
 		# 存活方获胜：发送完整结算数据（与正常对局结束一致），结算界面可查看统计/称号
 		for p_idx in room.peer_indices:

@@ -48,6 +48,8 @@ var stats: Array = []
 var _moved_to_adjacent_this_turn: bool = false
 # 本次攻击防具是否生效（实际造成伤害时消耗耐久，闪避/0伤害不消耗）
 var _armor_hit: bool = false
+# 本次攻击是否触发穿甲（强化攻击 heavy/pierce/chant 命中防具时额外-2耐久）
+var _armor_pierce: bool = false
 var _ignore_distance: bool = false  # 魔力引导等技能：本次攻击无视贴脸距离限制
 # 调试发牌的 uid 计数器（保证唯一，与正常卡 uid 0-77 隔离）
 var _cheat_uid_counter: int = -1000
@@ -484,6 +486,8 @@ func _begin_attack_segment(player_idx: int) -> Dictionary:
 	if skill_bonus != 0:
 		_pending_formula += ("+%d" if skill_bonus > 0 else "%d") % skill_bonus
 	_armor_hit = calc.get("armor_hit", false)
+	# 穿甲标记：强化攻击（heavy/pierce/chant）命中防具时额外-2耐久
+	_armor_pierce = _armor_hit and type_id in ["heavy", "pierce", "chant"]
 	# 防具完全免疫优先于伤害加成判定（技能加成不能穿透满耐久防具）
 	if calc.get("blocked", false):
 		char_skills.on_attack_failed_no_damage(player_idx, attacker_last_type)
@@ -491,6 +495,10 @@ func _begin_attack_segment(player_idx: int) -> Dictionary:
 			# 距离不够（穿心）：攻击无效，不消耗卡
 			return {success=false, msg=calc.get("msg", "距离不够")}
 		combat.consume_armor(opp)  # 防具生效消耗耐久（免疫也算一次命中）
+		if _armor_pierce:
+			combat.pierce_armor(opp)
+			add_log(player_idx, "穿甲: 防具耐久-2")
+		_armor_pierce = false
 		add_log(player_idx, "被防具挡下")
 		# 多段攻击：本段被免疫则继续下一段（防具耐久已消耗，下一段按减半结算）
 		if pending_attack_segment < pending_attack_segments:
@@ -550,7 +558,11 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 	if final_damage > 0:
 		if _armor_hit:
 			combat.consume_armor(defender_idx)  # 防具耐久在实际伤害时消耗（被闪避后为0不消耗）
+			if _armor_pierce:
+				combat.pierce_armor(defender_idx)
+				add_log(attacker_idx, "穿甲: 防具耐久-2")
 		_armor_hit = false
+		_armor_pierce = false
 		var before_skill = final_damage
 		final_damage = char_skills.on_taking_damage(defender_idx, attacker_idx, final_damage)
 		if final_damage != before_skill:
@@ -568,7 +580,8 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		char_skills.on_attack_hit(attacker_idx, defender_idx, final_damage, attacker_last_type)
 		_damage_player(defender_idx, final_damage)  # 统一伤害入口（内部含死亡判定）
 	else:
-		# 0 伤害（被闪避/格挡到0等）：补充攻击方记录
+		# 0 伤害（被闪避/格挡到0等）：补充攻击方记录；穿甲不触发（未击中防具）
+		_armor_pierce = false
 		char_skills.on_attack_failed_no_damage(attacker_idx, attacker_last_type)
 		add_log(attacker_idx, "%s使用%s攻击未造成伤害" % [Config.char_name(players[attacker_idx].char_id), Config.card_name(pending_attack_card)])
 	if phase == Config.Phase.GAME_OVER: return  # 死亡判定已由 _damage_player 统一处理

@@ -1,22 +1,27 @@
 # deck_edit.gd — 卡组管理界面（主菜单「卡组管理」入口）
 # 三级页面：角色列表 → 槽位列表（每角色 3 套，可命名） → 卡组编辑（卡池加减卡）。
-# 编辑规则（DeckData）：每副 40 张；单卡上限默认 3，永久成长牌限 1，强干扰牌限 2。
-# 存档：user://decks.json（DeckData.set_deck 校验通过才写入）。
+# 编辑规则（DeckData 方案 B 大池设计）：
+#   40 张；攻击池17/战术池14/回复数值池6/装备池5；强化攻击子上限5、武器3、防具2；
+#   回复套餐 A/B/C（回复组合固定，数值加成配额随套餐）；单卡上限防极端。
+# 存档：user://decks.json（DeckData.set_deck 校验通过才写入，含套餐字段）。
 extends Control
 
 const Style = preload("res://scripts/theme/style_const.gd")
 const DeckData = preload("res://scripts/data/deck_data.gd")
 
-const GROUP_ORDER = ["attack", "move", "function", "heal", "buff", "free", "equip"]
+const GROUP_ORDER = ["attack", "tactics", "sustain", "equipment"]
 
 var _char_id: String = ""
 var _slot: int = 0              # 0 = 未进入编辑
 var _draft: Array = []          # 编辑中的卡组（type_id 列表）
 var _draft_name: String = ""
+var _package_id: String = DeckData.DEFAULT_PACKAGE  # 回复套餐 A/B/C
 # 编辑页节点引用（避免脆弱的 get_child 索引）
 var _edit_count_label: Label
 var _edit_pool_box: VBoxContainer
 var _edit_sel_box: VBoxContainer
+var _budget_label: Label
+var _pkg_buttons: Dictionary = {}  # 套餐按钮（pid -> Button），选中态刷新用
 
 @onready var root: Control
 var _body: Control              # 当前页面容器（每次切换重建）
@@ -180,13 +185,14 @@ func _on_edit_slot(slot: int):
 	var d = DeckData.get_deck(_char_id, slot)
 	_draft = d.get("cards", []).duplicate()
 	_draft_name = str(d.get("name", ""))
+	_package_id = str(d.get("package", DeckData.DEFAULT_PACKAGE))
 	_slot = slot
 	_show_edit()
 
 func _on_clear_slot(slot: int):
 	var all = DeckData.load_all()
 	if all.has(_char_id):
-		all[_char_id][str(slot)] = {"name": "", "cards": []}
+		all[_char_id][str(slot)] = {"name": "", "package": DeckData.DEFAULT_PACKAGE, "cards": []}
 		DeckData.save_all(all)
 	_flash("槽位 %d 已清空" % slot)
 	_show_slots()
@@ -221,10 +227,41 @@ func _show_edit():
 	save.add_theme_font_size_override("font_size", Style.fs(26))
 	save.pressed.connect(_on_save)
 	top.add_child(save)
+	# 第二行：回复套餐选择 + 大池预算
+	var top2 := HBoxContainer.new()
+	top2.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	top2.offset_top = 182
+	top2.offset_bottom = 258
+	top2.offset_left = -480
+	top2.offset_right = 480
+	top2.add_theme_constant_override("separation", Style.fs(12))
+	page.add_child(top2)
+	var pkg_lbl := Label.new()
+	pkg_lbl.text = "回复套餐"
+	pkg_lbl.add_theme_font_size_override("font_size", Style.fs(24))
+	pkg_lbl.add_theme_color_override("font_color", Style.CONFIG_LABEL)
+	pkg_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	top2.add_child(pkg_lbl)
+	_pkg_buttons.clear()
+	for pid in DeckData.HEAL_PACKAGES:
+		var pb := Button.new()
+		pb.text = str(DeckData.HEAL_PACKAGES[pid].name)
+		pb.custom_minimum_size = Vector2(Style.fs(120), Style.fs(60))
+		pb.add_theme_font_size_override("font_size", Style.fs(22))
+		pb.pressed.connect(_on_package_switch.bind(pid))
+		top2.add_child(pb)
+		_pkg_buttons[pid] = pb
+	var budget := Label.new()
+	budget.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	budget.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	budget.add_theme_font_size_override("font_size", Style.fs(22))
+	budget.add_theme_color_override("font_color", Style.MODE_DESC)
+	top2.add_child(budget)
+	_budget_label = budget
 	# 中部：左卡池 / 右已选（上下分栏更适合手机）
 	var mid := HBoxContainer.new()
 	mid.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	mid.offset_top = 190
+	mid.offset_top = 270
 	mid.offset_bottom = -120
 	mid.add_theme_constant_override("separation", Style.fs(10))
 	page.add_child(mid)
@@ -294,6 +331,21 @@ func _counts() -> Dictionary:
 
 func _refresh_edit(count_label: Label, pool_box: VBoxContainer, sel_box: VBoxContainer):
 	count_label.text = "%d / %d" % [_draft.size(), DeckData.DECK_SIZE]
+	# 大池预算显示
+	var summary = DeckData.summarize(_draft)
+	var parts: Array = []
+	for cat in GROUP_ORDER:
+		var used = int(summary.get(cat, 0))
+		var mx = DeckData.category_max(cat)
+		parts.append("%s %d/%d" % [DeckData.category_name(cat), used, mx])
+	if _budget_label != null:
+		_budget_label.text = " ｜ ".join(parts)
+	# 套餐按钮选中态
+	for pid in _pkg_buttons:
+		var b: Button = _pkg_buttons[pid]
+		var sel = (pid == _package_id)
+		b.add_theme_color_override("font_color", Style.MODE_SELECTED if sel else Color(0.85, 0.87, 0.92))
+		b.text = ("▶ " if sel else "") + str(DeckData.HEAL_PACKAGES[pid].name)
 	# 卡池数量列 + +/- 可用性（与 _show_edit 构建顺序一致：每组一个标题 + 若干行）
 	var counts := _counts()
 	var child_idx := 0
@@ -305,14 +357,19 @@ func _refresh_edit(count_label: Label, pool_box: VBoxContainer, sel_box: VBoxCon
 			var row = pool_box.get_child(child_idx)
 			child_idx += 1
 			var n = int(counts.get(tid, 0))
-			var lim = DeckData.card_limit(tid)
+			var lim = DeckData.card_limit(tid, _package_id)
+			var is_heal = tid in ["heal_3", "heal_5"]
 			var cnt_l: Label = row.get_child(1)
-			cnt_l.text = "已有 %d / 上限 %d" % [n, lim]
-			cnt_l.add_theme_color_override("font_color", Color(0.9, 0.7, 0.4) if n >= lim else Color(0.6, 0.65, 0.72))
+			if is_heal:
+				cnt_l.text = "套餐固定 %d 张" % n
+				cnt_l.add_theme_color_override("font_color", Style.MODE_SELECTED)
+			else:
+				cnt_l.text = "已有 %d / 上限 %d" % [n, lim]
+				cnt_l.add_theme_color_override("font_color", Color(0.9, 0.7, 0.4) if n >= lim else Color(0.6, 0.65, 0.72))
 			var minus: Button = row.get_child(2)
-			minus.disabled = n <= 0 or _draft.is_empty()
+			minus.disabled = is_heal or n <= 0 or _draft.is_empty()
 			var plus: Button = row.get_child(3)
-			plus.disabled = n >= lim or _draft.size() >= DeckData.DECK_SIZE
+			plus.disabled = is_heal or n >= lim or _draft.size() >= DeckData.DECK_SIZE
 	# 已选列表重建
 	for c in sel_box.get_children():
 		c.queue_free()
@@ -331,15 +388,40 @@ func _refresh_edit(count_label: Label, pool_box: VBoxContainer, sel_box: VBoxCon
 		rm.text = "−"
 		rm.custom_minimum_size = Vector2(Style.fs(52), Style.fs(40))
 		rm.add_theme_font_size_override("font_size", Style.fs(22))
+		rm.disabled = tid in ["heal_3", "heal_5"]
 		rm.pressed.connect(_on_remove.bind(tid))
 		row.add_child(rm)
+
+# 套餐切换：替换卡组里的回复卡（数值卡一并清空，由玩家按新配额重选）
+func _on_package_switch(pid: String):
+	if pid == _package_id:
+		return
+	_package_id = pid
+	var pkg: Dictionary = DeckData.HEAL_PACKAGES[pid]
+	var new_draft: Array = []
+	for tid in _draft:
+		if tid in ["heal_3", "heal_5"] or tid in DeckData.BUF_CARDS:
+			continue
+		new_draft.append(tid)
+	for tid in pkg.heal:
+		for _i in range(int(pkg.heal[tid])):
+			new_draft.append(tid)
+	_draft = new_draft
+	_flash("%s：%s" % [pkg.name, pkg.desc], Style.MODE_FEATURE)
+	_refresh_edit_keep()
 
 func _on_add(tid: String):
 	var n := 0
 	for c in _draft:
 		if c == tid: n += 1
-	if n >= DeckData.card_limit(tid):
+	if n >= DeckData.card_limit(tid, _package_id):
 		_flash("%s 已达上限 %d 张" % [DeckData.card_name(tid), n], Style.ERROR_RED)
+		return
+	# 大池上限检查
+	var cat = DeckData.category_of(tid)
+	var summary = DeckData.summarize(_draft)
+	if int(summary.get(cat, 0)) >= DeckData.category_max(cat):
+		_flash("%s已满（%d）" % [DeckData.category_name(cat), DeckData.category_max(cat)], Style.ERROR_RED)
 		return
 	if _draft.size() >= DeckData.DECK_SIZE:
 		_flash("卡组已满 %d 张" % DeckData.DECK_SIZE, Style.ERROR_RED)
@@ -362,11 +444,11 @@ func _on_save():
 	if _draft.is_empty():
 		_flash("卡组为空，无法保存", Style.ERROR_RED)
 		return
-	var v = DeckData.validate_deck(_draft)
+	var v = DeckData.validate_deck(_draft, _package_id)
 	if not v.ok:
 		_flash(v.msg, Style.ERROR_RED)
 		return
-	var r = DeckData.set_deck(_char_id, _slot, _draft_name.strip_edges(), _draft)
+	var r = DeckData.set_deck(_char_id, _slot, _draft_name.strip_edges(), _package_id, _draft)
 	if r.ok:
 		_flash("已保存", Style.ME_GREEN)
 		_show_slots()

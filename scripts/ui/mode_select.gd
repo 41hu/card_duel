@@ -13,7 +13,9 @@ static var source := "self"
 
 @onready var back_btn: Button = $BackBtn
 @onready var title: Label = $Title
+@onready var cards_scroll: ScrollContainer = $CardsScroll
 @onready var cards_box: HBoxContainer = $CardsScroll/CardsBox
+@onready var config_scroll: ScrollContainer = $ConfigScroll
 @onready var config_box: VBoxContainer = $ConfigScroll/ConfigBox
 @onready var action_btn: Button = $ActionBtn
 @onready var status_label: Label = $StatusLabel
@@ -41,6 +43,7 @@ var _pending_connect: bool = false
 
 func _ready():
 	Style.scale_node_fonts(self)
+	_apply_safe_area()
 	title.text = "选择对战模式"
 	action_btn.text = "创建房间" if source == "create" else "开始对战"
 	back_btn.pressed.connect(_on_back)
@@ -57,6 +60,25 @@ func _ready():
 	Network.server_disconnected.connect(_on_disconnected)
 	_build_mode_cards()
 	_select_mode("classic")
+
+# 全面屏/刘海屏安全区适配：横屏时刘海/摄像头在左右两侧，
+# 模式卡片区、配置区（房间设置：服务器/名称/人数）、返回按钮都要避开，避免被遮挡
+func _apply_safe_area():
+	var sa = DisplayServer.get_display_safe_area()
+	var win = DisplayServer.window_get_size()
+	var vp = get_viewport_rect().size
+	if vp.x <= 0 or vp.y <= 0: return
+	var sx = win.x / vp.x if vp.x > 0 else 1.0
+	var left = sa.position.x / sx
+	var right = (win.x - sa.end.x) / sx
+	if left > 0:
+		cards_scroll.offset_left = left
+		config_scroll.offset_left = left
+		back_btn.offset_left += left
+		back_btn.offset_right += left
+	if right > 0:
+		cards_scroll.offset_right = -right
+		config_scroll.offset_right = -right
 
 func _exit_tree():
 	BackHandler.scene_back = Callable()

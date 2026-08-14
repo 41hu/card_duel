@@ -33,9 +33,15 @@ func _ready():
 	_create_char_buttons(Config.CHARACTER_IDS)
 	_n().bp_state_updated.connect(_on_bp_state)
 	_n().state_updated.connect(_on_game_state)
+	# 自定义卡组联机：BP 完成后服务端发 deck_config → 跳配置卡组环节
+	Network.deck_config.connect(_on_deck_config)
 	var cached = _n().bp_state_cache
 	if not cached.is_empty():
 		_on_bp_state(cached); _n().bp_state_cache = {}
+
+# 联机自定义卡组：进入配置卡组环节（deck_pick 场景）
+func _on_deck_config(_data: Dictionary):
+	get_tree().change_scene_to_file("res://scenes/deck_pick.tscn")
 
 # 服务器 bp_state 中的角色集合（available + banned + picked 并集）
 # 排序固定为本地角色表顺序：角色被禁用/选择后停留在原位（仅变色+标记），

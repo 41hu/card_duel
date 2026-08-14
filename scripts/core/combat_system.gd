@@ -148,6 +148,17 @@ func consume_armor(defender_idx: int):
 	if defender.armor.durability <= 0:
 		defender.armor = {}  # 碎裂
 
+# 穿甲：强化攻击（heavy/pierce/chant）命中时，防具额外损失耐久（默认2点）。
+# 无论防具是否完全免疫伤害都生效——强化攻击对防具的威慑价值。
+func pierce_armor(defender_idx: int, amount: int = 2) -> bool:
+	var defender = match_ref.get_player(defender_idx)
+	if defender.armor.is_empty():
+		return false
+	defender.armor.durability -= amount
+	if defender.armor.durability <= 0:
+		defender.armor = {}  # 碎裂
+	return true
+
 # ---------- 响应处理 ----------
 func process_response(attacker_idx: int, defender_idx: int, attack_card: String, response_card_uid: int) -> Dictionary:
 	var defender = match_ref.get_player(defender_idx)

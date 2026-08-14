@@ -13,6 +13,7 @@ signal response_needed(attack_info: Dictionary)
 signal game_ended(result: Dictionary)
 signal hand_revealed(cards: Array)
 signal network_error(msg: String)
+signal deck_config(data: Dictionary)  # 自定义卡组联机：BP 完成后进入配置环节
 
 var _socket: WebSocketPeer = null
 var _active: bool = false
@@ -23,6 +24,8 @@ var bp_state_cache: Dictionary = {}
 var battle_state_cache: Dictionary = {}
 # 最近一局结果缓存（结算界面从缓存读取，避免信号时序问题）
 var last_game_result: Dictionary = {}
+# 自定义卡组联机：BP 完成后的配置数据（{chars, first}），deck_pick 场景读取
+var deck_config_data: Dictionary = {}
 
 func _ready():
 	print("[Network] Autoload 已加载")
@@ -132,6 +135,10 @@ func send_fighter_choice(choice: String):
 func send_reveal_hand():
 	send({"t": "reveal_hand"})
 
+# 自定义卡组联机：上报自己配置好的卡组（服务端校验后双方就绪开战）
+func send_deck_ready(cards: Array, package_id: String = "B"):
+	send({"t": "deck_ready", "cards": cards, "package": package_id})
+
 func _handle_packet(raw: String):
 	var data = JSON.parse_string(raw)
 	if data == null:
@@ -165,3 +172,6 @@ func _handle_packet(raw: String):
 			pass
 		"hand_revealed":
 			hand_revealed.emit(data.get("cards", []))
+		"deck_config":
+			deck_config_data = {"chars": data.get("chars", []), "first": int(data.get("first", -1))}
+			deck_config.emit(data)

@@ -8,13 +8,14 @@ extends Control
 const Style = preload("res://scripts/theme/style_const.gd")
 const DeckData = preload("res://scripts/data/deck_data.gd")
 
-const GROUP_ORDER = ["attack", "move", "function", "heal", "buff", "free", "equip"]
+const GROUP_ORDER = ["attack", "tactics", "sustain", "equipment"]
 
 var _step := 0                  # 0 = P1，1 = P2
 var _decks: Array = [[], []]    # 已确认卡组（type_id 列表）
 var _page := "pick"             # pick 选择页 / edit 编辑页
 var _sel_kind := ""             # 当前选中："slot_1".."slot_3" / "default"
 var _draft: Array = []          # 编辑页草稿
+var _package_id: String = DeckData.DEFAULT_PACKAGE  # 当前选中卡组的回复套餐
 
 @onready var title: Label
 @onready var vs_label: Label
@@ -38,10 +39,24 @@ func _ready():
 		else:
 			_quit_to_menu()
 		return true
+	# 联机：双方卡组就绪后服务端发 game_starting → 直接进对战
+	Network.game_starting.connect(_on_online_game_starting)
 	_show_pick()
 
 func _exit_tree():
 	BackHandler.scene_back = Callable()
+	if Network.game_starting.is_connected(_on_online_game_starting):
+		Network.game_starting.disconnect(_on_online_game_starting)
+
+# 联机模式判断：本地时 LocalGame.game 非空；联机时 deck_config_data 由服务端下发
+func _is_online() -> bool:
+	return LocalGame.game == null and not Network.deck_config_data.is_empty()
+
+# 联机：双方就绪后服务端开战，直接进对战场景
+func _on_online_game_starting(data: Dictionary):
+	Network.battle_state_cache = data.get("state", {})
+	Network.deck_config_data = {}
+	get_tree().change_scene_to_file("res://scenes/battle_scene.tscn")
 
 func _build_layout():
 	var bg := ColorRect.new()
@@ -197,13 +212,20 @@ func _on_back():
 		_quit_to_menu()
 
 func _quit_to_menu():
-	LocalGame.disconnect_from_server()
+	if _is_online():
+		Network.disconnect_from_server()
+	else:
+		LocalGame.disconnect_from_server()
 	get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
 
 func _current_char_id() -> String:
+	if _is_online():
+		return str(Network.deck_config_data.get("chars", [])[Network.player_index])
 	return str(LocalGame.bp_chars[_step])
 
 func _opponent_char_id() -> String:
+	if _is_online():
+		return str(Network.deck_config_data.get("chars", [])[1 - Network.player_index])
 	return str(LocalGame.bp_chars[1 - _step])
 
 # ---------- 选择页 ----------
@@ -211,9 +233,15 @@ func _show_pick():
 	_page = "pick"
 	pick_root.visible = true
 	edit_root.visible = false
-	if LocalGame.bp_chars.size() < 2:
-		_quit_to_menu()
-		return
+	if _is_online():
+		_step = int(Network.player_index)  # 联机：只选自己的
+		if Network.deck_config_data.get("chars", []).size() < 2:
+			_quit_to_menu()
+			return
+	else:
+		if LocalGame.bp_chars.size() < 2:
+			_quit_to_menu()
+			return
 	var pname = "P1" if _step == 0 else "P2"
 	title.text = "为 %s（%s）配置卡组" % [pname, Config.char_name(_current_char_id())]
 	# 常驻展示双方角色：玩家看清对手再决定卡组
@@ -233,7 +261,7 @@ func _show_pick():
 			btn.text = "预设槽位 %d（未配置）" % slot
 			btn.disabled = true
 		else:
-			var v = DeckData.validate_deck(cards)
+			var v = DeckData.validate_deck(cards, str(d.get("package", DeckData.DEFAULT_PACKAGE)))
 			var tag = "（%d张）" % cards.size() if v.ok else "（%s）" % v.msg
 			var nm = str(d.get("name", ""))
 			btn.text = "预设槽位 %d · %s%s" % [slot, nm if nm != "" else "未命名", tag]
@@ -256,6 +284,12 @@ func _option_btn() -> Button:
 
 func _on_option(kind: String):
 	_sel_kind = kind
+	# 记录选中卡组的套餐（预设槽位读存档，默认卡组用 B）
+	if kind == "default":
+		_package_id = DeckData.DEFAULT_PACKAGE
+	else:
+		var slot = int(kind.trim_prefix("slot_"))
+		_package_id = str(DeckData.get_deck(_current_char_id(), slot).get("package", DeckData.DEFAULT_PACKAGE))
 	# 选中态：金边框高亮
 	var idx := 0
 	for c in options_box.get_children():
@@ -305,6 +339,13 @@ func _on_edit():
 	_show_edit()
 
 func _next_step():
+	if _is_online():
+		# 联机：上报自己的卡组，等对手（服务端双方就绪后发 game_starting）
+		Network.send_deck_ready(_decks[_step], _package_id)
+		title.text = "已上报卡组，等待对手选择..."
+		confirm_btn.disabled = true
+		edit_btn.disabled = true
+		return
 	if _step == 0:
 		_step = 1
 		_show_pick()
@@ -375,14 +416,19 @@ func _refresh_edit():
 			var row = _edit_pool_box.get_child(child_idx)
 			child_idx += 1
 			var n = int(counts.get(tid, 0))
-			var lim = DeckData.card_limit(tid)
+			var lim = DeckData.card_limit(tid, _package_id)
+			var is_heal = tid in ["heal_3", "heal_5"]
 			var cnt_l: Label = row.get_child(1)
-			cnt_l.text = "已有 %d / 上限 %d" % [n, lim]
-			cnt_l.add_theme_color_override("font_color", Color(0.9, 0.7, 0.4) if n >= lim else Color(0.6, 0.65, 0.72))
+			if is_heal:
+				cnt_l.text = "套餐固定 %d 张" % n
+				cnt_l.add_theme_color_override("font_color", Style.MODE_SELECTED)
+			else:
+				cnt_l.text = "已有 %d / 上限 %d" % [n, lim]
+				cnt_l.add_theme_color_override("font_color", Color(0.9, 0.7, 0.4) if n >= lim else Color(0.6, 0.65, 0.72))
 			var minus: Button = row.get_child(2)
-			minus.disabled = n <= 0
+			minus.disabled = is_heal or n <= 0
 			var plus: Button = row.get_child(3)
-			plus.disabled = n >= lim or _draft.size() >= DeckData.DECK_SIZE
+			plus.disabled = is_heal or n >= lim or _draft.size() >= DeckData.DECK_SIZE
 	# 已选列表重建
 	for c in _edit_sel_box.get_children():
 		c.queue_free()
@@ -401,6 +447,7 @@ func _refresh_edit():
 		rm.text = "−"
 		rm.custom_minimum_size = Vector2(Style.fs(52), Style.fs(40))
 		rm.add_theme_font_size_override("font_size", Style.fs(22))
+		rm.disabled = tid in ["heal_3", "heal_5"]
 		rm.pressed.connect(_on_remove.bind(tid))
 		row.add_child(rm)
 
@@ -409,7 +456,12 @@ func _on_add(tid: String):
 	for c in _draft:
 		if c == tid:
 			n += 1
-	if n >= DeckData.card_limit(tid):
+	if n >= DeckData.card_limit(tid, _package_id):
+		return
+	# 大池上限检查
+	var cat = DeckData.category_of(tid)
+	var summary = DeckData.summarize(_draft)
+	if int(summary.get(cat, 0)) >= DeckData.category_max(cat):
 		return
 	if _draft.size() >= DeckData.DECK_SIZE:
 		return
@@ -423,7 +475,7 @@ func _on_remove(tid: String):
 		_refresh_edit()
 
 func _on_edit_confirm():
-	var v = DeckData.validate_deck(_draft)
+	var v = DeckData.validate_deck(_draft, _package_id)
 	if not v.ok:
 		_flash_status(v.msg)
 		return

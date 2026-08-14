@@ -48,10 +48,10 @@ func _ready():
 	if has_record:
 		var export_btn := Button.new()
 		export_btn.text = "导出对局数据"
-		# 位置在返回主菜单上方（调换：返回按钮沉底，导出按钮居中偏下，减少误触返回）
+		# 位置：获胜玩家(Detail)下方、返回主菜单上方，避免重叠
 		export_btn.anchor_left = 0.5; export_btn.anchor_right = 0.5
 		export_btn.offset_left = -180.0; export_btn.offset_right = 180.0
-		export_btn.offset_top = 690.0; export_btn.offset_bottom = 810.0
+		export_btn.offset_top = 815.0; export_btn.offset_bottom = 920.0
 		export_btn.add_theme_font_size_override("font_size", Style.fs(30))
 		export_btn.pressed.connect(func():
 			var result = LocalGame.game.game_result if LocalGame.game != null else Network.last_game_result

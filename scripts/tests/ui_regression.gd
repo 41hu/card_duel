@@ -78,8 +78,8 @@ func _check_current():
 		var bw = board.size.x
 		if bx < 316:
 			fails.append("棋盘左越界 x=%d<316" % bx)
-		if bx + bw > 1420:
-			fails.append("棋盘右越界 x=%d>1420" % (bx + bw))
+		if bx + bw > 1460:
+			fails.append("棋盘右越界 x=%d>1460" % (bx + bw))
 	_results.append({"case": c.name, "pass": fails.is_empty(), "msg": "；".join(fails)})
 
 func _write_summary():

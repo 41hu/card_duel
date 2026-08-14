@@ -73,6 +73,12 @@ static func is_valid_card(type_id: String) -> bool:
 static func card_name(type_id: String) -> String:
 	return CardData.CARD_DB.get(type_id, {}).get("name", type_id)
 
+# 编辑界面显示名：道具卡（trap）统一显示"道具"（不同角色的道具种类不同：默认陷阱/猎人捕兽夹/巫女鸟居）
+static func display_name(type_id: String) -> String:
+	if type_id == "trap":
+		return "道具"
+	return card_name(type_id)
+
 # 单卡上限（数值卡按套餐的 buf_card_limit，其余按 CARD_LIMITS/默认）
 static func card_limit(type_id: String, package_id: String = DEFAULT_PACKAGE) -> int:
 	if type_id in BUF_CARDS:

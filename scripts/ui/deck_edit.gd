@@ -64,16 +64,32 @@ func _flash(text: String, color: Color = Style.MODE_FEATURE):
 	_status.text = text
 	_status.add_theme_color_override("font_color", color)
 
+# 全面屏/刘海屏安全区：横屏刘海在左时，页面内容整体右移避开（卡池/列表贴左会被挡）
+func _apply_safe_area():
+	if _body == null:
+		return
+	var sa = DisplayServer.get_display_safe_area()
+	var win = DisplayServer.window_get_size()
+	var vp = get_viewport_rect().size
+	if vp.x <= 0 or vp.y <= 0:
+		return
+	var sx = win.x / vp.x if vp.x > 0 else 1.0
+	var left = sa.position.x / sx
+	_body.offset_left = left
+	_body.offset_right = left
+
 func _clear_body():
 	if _body != null and is_instance_valid(_body):
 		_body.queue_free()
 
 func _add_page(title_text: String, back_text: String) -> Control:
 	_clear_body()
+	_status.text = ""  # 切页清空旧提示，避免残留
 	var page := Control.new()
 	page.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(page)
 	_body = page
+	_apply_safe_area()
 	var t := Label.new()
 	t.text = title_text
 	t.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
@@ -295,7 +311,7 @@ func _show_edit():
 			row.add_theme_constant_override("separation", Style.fs(8))
 			pool_box.add_child(row)
 			var name_l := Label.new()
-			name_l.text = DeckData.card_name(tid)
+			name_l.text = DeckData.display_name(tid)
 			name_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			name_l.add_theme_font_size_override("font_size", Style.fs(24))
 			name_l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -309,12 +325,14 @@ func _show_edit():
 			minus.text = "−"
 			minus.custom_minimum_size = Vector2(Style.fs(56), Style.fs(44))
 			minus.add_theme_font_size_override("font_size", Style.fs(24))
+			minus.mouse_filter = Control.MOUSE_FILTER_PASS  # 放行拖动给卡池滚动
 			minus.pressed.connect(_on_remove.bind(tid))
 			row.add_child(minus)
 			var plus := Button.new()
 			plus.text = "+"
 			plus.custom_minimum_size = Vector2(Style.fs(56), Style.fs(44))
 			plus.add_theme_font_size_override("font_size", Style.fs(24))
+			plus.mouse_filter = Control.MOUSE_FILTER_PASS  # 放行拖动给卡池滚动
 			plus.pressed.connect(_on_add.bind(tid))
 			row.add_child(plus)
 	# 已选卡组渲染（函数尾部更新）
@@ -379,7 +397,7 @@ func _refresh_edit(count_label: Label, pool_box: VBoxContainer, sel_box: VBoxCon
 		row.add_theme_constant_override("separation", Style.fs(8))
 		sel_box.add_child(row)
 		var l := Label.new()
-		l.text = DeckData.card_name(tid)
+		l.text = DeckData.display_name(tid)
 		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		l.add_theme_font_size_override("font_size", Style.fs(22))
 		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -388,6 +406,7 @@ func _refresh_edit(count_label: Label, pool_box: VBoxContainer, sel_box: VBoxCon
 		rm.text = "−"
 		rm.custom_minimum_size = Vector2(Style.fs(52), Style.fs(40))
 		rm.add_theme_font_size_override("font_size", Style.fs(22))
+		rm.mouse_filter = Control.MOUSE_FILTER_PASS  # 放行拖动给已选列表滚动
 		rm.disabled = tid in ["heal_3", "heal_5"]
 		rm.pressed.connect(_on_remove.bind(tid))
 		row.add_child(rm)

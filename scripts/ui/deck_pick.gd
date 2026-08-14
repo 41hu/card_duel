@@ -29,7 +29,10 @@ var _package_id: String = DeckData.DEFAULT_PACKAGE  # 当前选中卡组的回�
 var _edit_count_label: Label
 var _edit_pool_box: VBoxContainer
 var _edit_sel_box: VBoxContainer
+var _edit_title: Label  # 编辑页标题
+var _edit_vs_info: Button  # 双方角色信息行（点击看技能）
 var _pkg_buttons: Dictionary = {}  # 编辑页套餐按钮（pid -> Button）
+var _flash_label: Label  # 临时提示（新提示覆盖旧的防残留）
 
 func _ready():
 	Style.scale_node_fonts(self)
@@ -157,10 +160,25 @@ func _build_layout():
 	et.add_theme_font_size_override("font_size", Style.fs(36))
 	et.add_theme_color_override("font_color", Style.MODE_TITLE)
 	edit_root.add_child(et)
+	_edit_title = et
+	# 双方角色信息行（编辑时可见自己与对手面板数值；角色名可点看技能）
+	var vs_info := Button.new()
+	vs_info.flat = true
+	vs_info.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	vs_info.offset_top = 105
+	vs_info.offset_bottom = 160
+	vs_info.offset_left = -450
+	vs_info.offset_right = 450
+	vs_info.add_theme_font_size_override("font_size", Style.fs(24))
+	vs_info.add_theme_color_override("font_color", Style.CONFIG_VALUE)
+	vs_info.pressed.connect(_show_char_skills)
+	edit_root.add_child(vs_info)
+	_edit_vs_info = vs_info
+	# 顶栏下移给角色信息行留空间
 	var top := HBoxContainer.new()
 	top.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
-	top.offset_top = 110
-	top.offset_bottom = 186
+	top.offset_top = 170
+	top.offset_bottom = 246
 	top.offset_left = -260
 	top.offset_right = 260
 	top.add_theme_constant_override("separation", Style.fs(20))
@@ -187,8 +205,8 @@ func _build_layout():
 	# 套餐行：回复套餐选择（切换自动替换回复卡）
 	var pkg_row := HBoxContainer.new()
 	pkg_row.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
-	pkg_row.offset_top = 192
-	pkg_row.offset_bottom = 262
+	pkg_row.offset_top = 252
+	pkg_row.offset_bottom = 322
 	pkg_row.offset_left = -260
 	pkg_row.offset_right = 260
 	pkg_row.add_theme_constant_override("separation", Style.fs(12))
@@ -211,7 +229,7 @@ func _build_layout():
 		_pkg_buttons[pid] = pb
 	var mid := HBoxContainer.new()
 	mid.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	mid.offset_top = 270
+	mid.offset_top = 330
 	mid.offset_bottom = -100
 	mid.add_theme_constant_override("separation", Style.fs(10))
 	edit_root.add_child(mid)
@@ -237,6 +255,18 @@ func _on_back():
 	else:
 		_quit_to_menu()
 
+# 页面切换时同步返回按钮文本（编辑页返回选择页，选择页返回主菜单）
+func _show_pick_page_text(editing: bool):
+	back_btn.text = "← 返回选择" if editing else "← 返回主菜单"
+
+# 点击双方角色信息行：显示双方技能描述
+func _show_char_skills():
+	var me_cd: Dictionary = Config.CHARACTER_DB.get(_current_char_id(), {})
+	var opp_cd: Dictionary = Config.CHARACTER_DB.get(_opponent_char_id(), {})
+	_flash_status("%s：%s\n%s：%s" % [
+		me_cd.get("name", "?"), me_cd.get("skill_desc", ""),
+		opp_cd.get("name", "?"), opp_cd.get("skill_desc", "")])
+
 func _quit_to_menu():
 	if _is_online():
 		Network.disconnect_from_server()
@@ -257,6 +287,7 @@ func _opponent_char_id() -> String:
 # ---------- 选择页 ----------
 func _show_pick():
 	_page = "pick"
+	_show_pick_page_text(false)
 	pick_root.visible = true
 	edit_root.visible = false
 	if _is_online():
@@ -381,8 +412,15 @@ func _next_step():
 # ---------- 编辑页（本局临时调整） ----------
 func _show_edit():
 	_page = "edit"
+	_show_pick_page_text(true)
 	pick_root.visible = false
 	edit_root.visible = true
+	# 双方角色信息行（编辑时可见自己与对手数值；点此看技能）
+	var me_cd: Dictionary = Config.CHARACTER_DB.get(_current_char_id(), {})
+	var opp_cd: Dictionary = Config.CHARACTER_DB.get(_opponent_char_id(), {})
+	_edit_vs_info.text = "你：%s 近%d远%d魔%d HP%d　vs　对手：%s 近%d远%d魔%d HP%d　（点此看技能）" % [
+		me_cd.get("name", "?"), me_cd.get("near", 0), me_cd.get("range", 0), me_cd.get("magic", 0), me_cd.get("hp", 0),
+		opp_cd.get("name", "?"), opp_cd.get("near", 0), opp_cd.get("range", 0), opp_cd.get("magic", 0), opp_cd.get("hp", 0)]
 	# 重建卡池
 	for c in _edit_pool_box.get_children():
 		c.queue_free()
@@ -400,7 +438,7 @@ func _show_edit():
 			row.add_theme_constant_override("separation", Style.fs(8))
 			_edit_pool_box.add_child(row)
 			var name_l := Label.new()
-			name_l.text = DeckData.card_name(tid)
+			name_l.text = DeckData.display_name(tid)
 			name_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			name_l.add_theme_font_size_override("font_size", Style.fs(24))
 			name_l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -414,12 +452,14 @@ func _show_edit():
 			minus.text = "−"
 			minus.custom_minimum_size = Vector2(Style.fs(56), Style.fs(44))
 			minus.add_theme_font_size_override("font_size", Style.fs(24))
+			minus.mouse_filter = Control.MOUSE_FILTER_PASS  # 放行拖动给卡池滚动
 			minus.pressed.connect(_on_remove.bind(tid))
 			row.add_child(minus)
 			var plus := Button.new()
 			plus.text = "+"
 			plus.custom_minimum_size = Vector2(Style.fs(56), Style.fs(44))
 			plus.add_theme_font_size_override("font_size", Style.fs(24))
+			plus.mouse_filter = Control.MOUSE_FILTER_PASS  # 放行拖动给卡池滚动
 			plus.pressed.connect(_on_add.bind(tid))
 			row.add_child(plus)
 	_refresh_edit()
@@ -470,7 +510,7 @@ func _refresh_edit():
 		row.add_theme_constant_override("separation", Style.fs(8))
 		_edit_sel_box.add_child(row)
 		var l := Label.new()
-		l.text = DeckData.card_name(tid)
+		l.text = DeckData.display_name(tid)
 		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		l.add_theme_font_size_override("font_size", Style.fs(22))
 		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -479,6 +519,7 @@ func _refresh_edit():
 		rm.text = "−"
 		rm.custom_minimum_size = Vector2(Style.fs(52), Style.fs(40))
 		rm.add_theme_font_size_override("font_size", Style.fs(22))
+		rm.mouse_filter = Control.MOUSE_FILTER_PASS  # 放行拖动给已选列表滚动
 		rm.disabled = tid in ["heal_3", "heal_5"]
 		rm.pressed.connect(_on_remove.bind(tid))
 		row.add_child(rm)
@@ -533,6 +574,9 @@ func _on_edit_confirm():
 	_next_step()
 
 func _flash_status(text: String):
+	# 覆盖旧提示，避免快速连续触发时多个 Label 叠加残留
+	if _flash_label != null and is_instance_valid(_flash_label):
+		_flash_label.queue_free()
 	var l := Label.new()
 	l.text = text
 	l.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
@@ -544,6 +588,7 @@ func _flash_status(text: String):
 	l.add_theme_font_size_override("font_size", Style.fs(24))
 	l.add_theme_color_override("font_color", Style.ERROR_RED)
 	edit_root.add_child(l)
+	_flash_label = l
 	get_tree().create_timer(1.5).timeout.connect(l.queue_free)
 
 # ---------- 开战 ----------

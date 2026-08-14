@@ -176,6 +176,8 @@ func _apply_safe_area():
 		_self_panel.offset_left = left + 12
 		skill_row.offset_left += left
 		skill_row.offset_right += left
+		action_log.offset_left += left
+		action_log.offset_right += left
 	if right > 0:
 		for p in _opp_panels:
 			p.offset_right = -(right + 12)
@@ -425,14 +427,14 @@ func _refresh_all(state: Dictionary):
 	if want_hex != _board_hex:
 		_board_hex = want_hex
 		board.set_geometry_mode(MapGeometry.MODE_HEX if want_hex else MapGeometry.MODE_LINEAR)
-	# 分区式布局：棋盘居中于中列（左战报 300、右对手面板 500 之间，中列中心 x≈868）。
+	# 分区式布局：棋盘居中于中列（左战报 300、右对手面板 460 之间，中心 x≈900）。
 	# 每次刷新都应用（不能只在模式切换时，否则首次进入 2 人局保持 tscn 旧尺寸 1440×760）
 	# 2 人局线性棋盘 1100×160（11 格×100）；4 人局六边形棋盘 900×640
 	if want_hex:
-		board.offset_left = -542; board.offset_right = 358
+		board.offset_left = -510; board.offset_right = 390
 		board.offset_top = -380; board.offset_bottom = 260
 	else:
-		board.offset_left = -642; board.offset_right = 458
+		board.offset_left = -610; board.offset_right = 490
 		board.offset_top = -140; board.offset_bottom = 20
 	# HP 闪烁记录数组按玩家数扩展（4 人局原 2 元素会越界）
 	while _last_hp.size() < pls.size():
@@ -626,7 +628,7 @@ func _panel_for(index: int) -> PanelContainer:
 func _make_opp_panel(slot: int) -> PanelContainer:
 	var pc: PanelContainer = InfoPanel.new()
 	pc.anchor_left = 1.0; pc.anchor_right = 1.0
-	pc.offset_left = -500; pc.offset_right = 0
+	pc.offset_left = -460; pc.offset_right = 0
 	pc.offset_top = 150 + slot * 206
 	pc.offset_bottom = 350 + slot * 206
 	pc.status_clicked.connect(_on_status_clicked)

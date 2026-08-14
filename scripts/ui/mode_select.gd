@@ -109,6 +109,8 @@ func _make_mode_card(mode: Dictionary) -> Button:
 	btn.name = "Card_%s" % mode.id
 	btn.flat = true
 	btn.custom_minimum_size = Vector2(Style.fs(460), Style.fs(300))
+	# PASS：放行触摸拖动给 CardsScroll（横向滑动选模式）；Button 释放判定自带"拖出区域不触发"
+	btn.mouse_filter = Control.MOUSE_FILTER_PASS
 	btn.pressed.connect(_on_card_pressed.bind(mode.id))
 	# 内容：名称 / 简介 / 规则要点 / 人数（VBox 铺满卡片，内边距）
 	var vb := VBoxContainer.new()

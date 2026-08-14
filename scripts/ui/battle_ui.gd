@@ -4,18 +4,16 @@ extends Control
 const Style = preload("res://scripts/theme/style_const.gd")
 const CardWidget = preload("res://scripts/ui/components/card_widget.gd")
 const MapGeometry = preload("res://scripts/core/map_geometry.gd")
+const InfoPanel = preload("res://scripts/ui/components/info_panel.gd")
 
-@onready var opp_info = $OppInfo
 @onready var phase_label = $PhaseLabel
-@onready var hand_area = $HandArea
-@onready var me_info = $MeInfo
+@onready var hand_area = $HandScroll/HandArea
 @onready var end_turn_btn = $EndTurnBtn
 @onready var confirm_btn = $ConfirmBtn
 @onready var cancel_btn = $CancelBtn
 @onready var status_label = $StatusLabel
 @onready var board = $Board
 @onready var action_log = $ActionLog
-var _deck_label: Label
 
 var _game_state: Dictionary = {}
 var _player_index: int = -1
@@ -30,7 +28,11 @@ var _last_hp: Array = [-1, -1]
 var _last_turn: int = -1
 var _last_player: int = -1
 var _board_hex: bool = false  # 棋盘当前是否六边形模式（多人局）
-var _opp_list: VBoxContainer = null  # 多人局：右侧竖排显示全部对手（名字/HP/位置）
+# 数据驱动玩家面板：自己面板（左下）+ 对手面板（右侧竖排，数量随玩家数动态增减）
+# 彻底消除 me_info/opp_info 二元假设，2 人 / 4 人 / 未来 N 人统一走同一套渲染
+var _self_panel: PanelContainer = null
+var _opp_panels: Array = []
+var _opp_indices: Array = []  # 与 _opp_panels 平行：每个面板对应的玩家 index（HP 闪烁/安全区定位用）
 var _cheat_on: bool = false
 var _timer_left: int = -1
 var _resp_popup: Control
@@ -41,24 +43,30 @@ func _n():
 	if LocalGame.game != null: return LocalGame
 	return Network
 
+# ---------- 数据驱动：玩家查找（消除 players[0]/[1] 二元假设） ----------
+# 从给定列表（默认 _game_state.players）找自己；找不到返回空字典。
+# 关键：不再假设只有 2 个玩家，多人局（4 人）任意 index 都能正确命中。
+func _find_self(pls: Array = []) -> Dictionary:
+	if pls.is_empty():
+		pls = _game_state.get("players", [])
+	for p in pls:
+		if p.get("index", -1) == _player_index:
+			return p
+	return {}
+
+# 从给定列表找第一个对手（2 人局=唯一对手；多人局取第一个，用于单目标场景）
+func _find_opponent(pls: Array = []) -> Dictionary:
+	if pls.is_empty():
+		pls = _game_state.get("players", [])
+	for p in pls:
+		if p.get("index", -1) != _player_index:
+			return p
+	return {}
+
 func _ready():
 	Style.scale_node_fonts(self)  # 移动端字号适配（tscn 写死的字号）
 	board.cell_clicked.connect(_on_board_cell_clicked)
-	me_info.status_clicked.connect(_on_status_clicked)
-	opp_info.status_clicked.connect(_on_status_clicked)
-	_deck_label = Label.new()
-	_deck_label.add_theme_font_size_override("font_size", Style.fs(26))
-	_deck_label.add_theme_color_override("font_color", Style.HAND_TITLE)
-	add_child(_deck_label)
-	# 多人局对手列表（右侧竖排，仅 4 人局显示）
-	_opp_list = VBoxContainer.new()
-	_opp_list.name = "OppList"
-	_opp_list.anchor_left = 1.0; _opp_list.anchor_right = 1.0
-	_opp_list.offset_left = -300; _opp_list.offset_right = -24
-	_opp_list.offset_top = 180; _opp_list.offset_bottom = 520
-	_opp_list.add_theme_constant_override("separation", 8)
-	_opp_list.visible = false
-	add_child(_opp_list)
+	_create_self_panel()
 	_build_popups()
 	end_turn_btn.pressed.connect(_on_end_turn)
 	confirm_btn.pressed.connect(_on_confirm_card)
@@ -83,6 +91,20 @@ func _ready():
 		tm.g = LocalGame.game
 		add_child(tm)
 		tutorial = tm
+
+# 自己面板（左下角，动态创建，替代原场景 MeInfo 固定节点）
+func _create_self_panel():
+	var pc: PanelContainer = InfoPanel.new()
+	pc.anchor_left = 0.0
+	pc.anchor_top = 1.0
+	pc.anchor_bottom = 1.0
+	pc.offset_left = 16
+	pc.offset_top = -220
+	pc.offset_right = 594
+	pc.offset_bottom = -20
+	pc.status_clicked.connect(_on_status_clicked)
+	add_child(pc)
+	_self_panel = pc
 
 # 调试菜单按钮（仅编辑器运行时显示，导出到真机不显示）：快速结束对局/发牌
 func _setup_debug_button():
@@ -151,11 +173,12 @@ func _apply_safe_area():
 	var _top = sa.position.y / sy
 	var bottom = (win.y - sa.end.y) / sy
 	if left > 0:
-		me_info.offset_left = left + 12
+		_self_panel.offset_left = left + 12
 		skill_row.offset_left += left
 		skill_row.offset_right += left
 	if right > 0:
-		opp_info.offset_right = -(right + 12)
+		for p in _opp_panels:
+			p.offset_right = -(right + 12)
 	if bottom > 0:
 		end_turn_btn.offset_top -= bottom
 		end_turn_btn.offset_bottom -= bottom
@@ -402,47 +425,27 @@ func _refresh_all(state: Dictionary):
 	if want_hex != _board_hex:
 		_board_hex = want_hex
 		board.set_geometry_mode(MapGeometry.MODE_HEX if want_hex else MapGeometry.MODE_LINEAR)
+	# 分区式布局：棋盘居中于中列（左战报 300、右对手面板 500 之间，中列中心 x≈868）。
+	# 每次刷新都应用（不能只在模式切换时，否则首次进入 2 人局保持 tscn 旧尺寸 1440×760）
+	# 2 人局线性棋盘 1100×160（11 格×100）；4 人局六边形棋盘 900×640
+	if want_hex:
+		board.offset_left = -542; board.offset_right = 358
+		board.offset_top = -380; board.offset_bottom = 260
+	else:
+		board.offset_left = -642; board.offset_right = 458
+		board.offset_top = -140; board.offset_bottom = 20
 	# HP 闪烁记录数组按玩家数扩展（4 人局原 2 元素会越界）
 	while _last_hp.size() < pls.size():
 		_last_hp.append(-1)
-	# 自己的面板 + 对手面板（4 人局显示第一个非己玩家，其余对手在目标弹窗里可见）
-	var opp = pls[0]
-	for p in pls:
-		if p.index != _player_index:
-			opp = p
-			break
-	var me = pls[0]
-	for p in pls:
-		if p.index == _player_index:
-			me = p
-			break
-	opp_info.refresh(opp, "对手", Color(1, 0.7, 0.5))
-	me_info.refresh(me, "自己", Color(0.5, 0.8, 1))
-	# 多人局：右侧竖排显示全部存活对手（名字/HP/位置），2 人局隐藏
-	for child in _opp_list.get_children():
-		_opp_list.remove_child(child)
-		child.queue_free()
-	_opp_list.visible = pls.size() > 2
-	if pls.size() > 2:
-		for p in pls:
-			if p.index == _player_index: continue
-			var pos = p.get("position", {})
-			var pos_str = "%d,%d" % [pos.get("x", 0), pos.get("y", 0)]
-			var l = Label.new()
-			if p.get("eliminated", false):
-				l.text = "P%d %s  已淘汰" % [p.index + 1, p.get("char_name", "?")]
-				l.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
-			else:
-				l.text = "P%d %s  HP:%d/%d  格(%s)" % [p.index + 1, p.get("char_name", "?"), p.get("hp", 0), p.get("max_hp", 1), pos_str]
-				l.add_theme_color_override("font_color", Color(1, 0.7, 0.5))
-			l.add_theme_font_size_override("font_size", Style.fs(24))
-			l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
-			l.add_theme_constant_override("outline_size", Style.fs(3))
-			_opp_list.add_child(l)
+	# 数据驱动玩家面板：自己面板 + 所有对手面板（数量随玩家数动态，2/4/N 人统一）
+	var me = _find_self(pls)
+	_self_panel.refresh(me, "自己", Color(0.5, 0.8, 1))
+	_refresh_opp_panels(pls)
 	for p in pls:
 		if p.hp != _last_hp[p.index]:
-			var panel = me_info if p.index == _player_index else opp_info
-			panel.flash_hp(p.hp > _last_hp[p.index])
+			var panel = _panel_for(int(p.index))
+			if panel != null:
+				panel.flash_hp(p.hp > _last_hp[p.index])
 			_last_hp[p.index] = p.hp
 	var tp = ["判定", "摸牌", "出牌", "弃牌"]
 	var tn = tp[state.get("turn_phase", 0)] if state.get("turn_phase", 0) < tp.size() else "?"
@@ -459,15 +462,6 @@ func _refresh_all(state: Dictionary):
 	if state.turn_number != _last_turn or state.current_player != _last_player:
 		_last_turn = state.turn_number; _last_player = state.current_player
 		_flash(phase_label)
-
-	# 独立卡组：显示自己视角的牌堆/弃牌数（players[idx] 各自有独立牌堆）
-	var me2 = pls[0] if pls[0].index != _player_index else pls[1]
-	_deck_label.text = "牌堆:%d  弃牌:%d" % [me2.get("deck_size", 0), me2.get("discard_size", 0)]
-	_deck_label.anchor_left = 0.5; _deck_label.anchor_right = 0.5
-	_deck_label.anchor_top = 0.05; _deck_label.anchor_bottom = 0.05
-	_deck_label.offset_left = -100; _deck_label.offset_right = 100
-	_deck_label.offset_top = 38; _deck_label.offset_bottom = 66
-	_deck_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	board.update(pls, state.get("items", []), _player_index)
 
@@ -569,7 +563,7 @@ func _on_card_clicked(card_uid: int, type_id: String):
 		cancel_btn.visible = true
 		# 通用道具卡：点击说明按角色道具显示（道具名 + 效果描述）
 		if type_id == "trap":
-			var me2 = _game_state.players[0] if _game_state.players[0].index == _player_index else _game_state.players[1]
+			var me2 = _find_self()
 			card_info.text = "%s：%s" % [me2.get("item_type_name", "道具"), me2.get("item_type_desc", "")]
 		else:
 			card_info.text = Config.card_name(type_id) + ": " + Config.CARD_DB.get(type_id, {}).get("desc", "")
@@ -602,6 +596,48 @@ func _on_confirm_card():
 			_selected_uid = -1
 	confirm_btn.visible = false
 	cancel_btn.visible = false
+
+# 数据驱动对手面板：右侧竖排，数量随对手数动态（2 人局 1 个，4 人局 3 个）
+func _refresh_opp_panels(pls: Array):
+	var opps := []
+	for p in pls:
+		if p.get("index", -1) != _player_index:
+			opps.append(p)
+	var need = opps.size()
+	while _opp_panels.size() < need:
+		_opp_panels.append(_make_opp_panel(_opp_panels.size()))
+		_opp_indices.append(-1)
+	while _opp_panels.size() > need:
+		_opp_panels.pop_back().queue_free()
+		_opp_indices.pop_back()
+	for i in range(need):
+		_opp_indices[i] = int(opps[i].index)
+		_update_opp_panel(_opp_panels[i], opps[i])
+
+# 指定玩家索引 → 其面板（自己 → 左下；对手 → 右侧竖排对应项）；找不到返回 null
+func _panel_for(index: int) -> PanelContainer:
+	if index == _player_index:
+		return _self_panel
+	var pos = _opp_indices.find(index)
+	if pos >= 0 and pos < _opp_panels.size():
+		return _opp_panels[pos]
+	return null
+
+func _make_opp_panel(slot: int) -> PanelContainer:
+	var pc: PanelContainer = InfoPanel.new()
+	pc.anchor_left = 1.0; pc.anchor_right = 1.0
+	pc.offset_left = -500; pc.offset_right = 0
+	pc.offset_top = 150 + slot * 206
+	pc.offset_bottom = 350 + slot * 206
+	pc.status_clicked.connect(_on_status_clicked)
+	add_child(pc)
+	return pc
+
+func _update_opp_panel(pc: PanelContainer, p: Dictionary):
+	var tag = "P%d %s" % [p.index + 1, p.get("char_name", "?")]
+	if p.get("eliminated", false):
+		tag += "（已淘汰）"
+	pc.refresh(p, tag, Color(1, 0.7, 0.5))
 
 # 指向性卡（多人局需要选择目标）：攻击/吸引/威慑/冻结/摧毁/夺取
 func _is_targeted_card(type_id: String) -> bool:
@@ -642,7 +678,7 @@ func _show_target_pick(card_uid: int, type_id: String, extra: Dictionary = {}):
 # 已有防具时再装备防具卡：弹确认（旧防具会被直接覆盖消失）
 func _is_armor_override(type_id: String) -> bool:
 	if not type_id.ends_with("_armor"): return false
-	var me = _game_state.players[0] if _game_state.players[0].index == _player_index else _game_state.players[1]
+	var me = _find_self()
 	return not me.get("armor", {}).is_empty()
 
 func _show_armor_override_confirm(card_uid: int):
@@ -651,7 +687,7 @@ func _show_armor_override_confirm(card_uid: int):
 	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
 	var vb = _popup_box(c, 640, 400)
-	var me = _game_state.players[0] if _game_state.players[0].index == _player_index else _game_state.players[1]
+	var me = _find_self()
 	var old_name = me.get("armor", {}).get("data", {}).get("name", "防具")
 	vb.add_child(_lbl("已装备防具「%s」\n新防具会覆盖旧防具（旧防具直接消失），确定装备？" % old_name))
 	var hb := HBoxContainer.new()
@@ -730,7 +766,7 @@ func _on_board_cell_clicked(cell_pos: Vector2i):
 			status_label.text = ""
 			return
 		# 判断所选卡是否为穿心（穿心需连续选 2 个放置位置）
-		var me = _game_state.players[0] if _game_state.players[0].index == _player_index else _game_state.players[1]
+		var me = _find_self()
 		var is_pierce = false
 		for card in me.get("hand", []):
 			# _game_state 是 JSON 化状态，uid 是 float，需 int 强转后比较
@@ -864,7 +900,7 @@ func _popup_destroy(card_uid: int):
 	vb.add_child(hb)
 	var pls = _game_state.players
 	# 多人局：武器/防具按钮始终显示（点选目标后由核心校验目标是否有对应装备）
-	var opp = pls[0] if pls[0].index != _player_index else pls[1]
+	var opp = _find_opponent(pls)
 	if multi or not opp.weapon.is_empty():
 		var wb = _mkbtn("摧毁对方武器" + ((": " + opp.weapon.data.name) if not opp.weapon.is_empty() else ""))
 		wb.pressed.connect(func():
@@ -973,7 +1009,7 @@ func _show_wardsmith_repair():
 	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
 	var vb = _popup_box(c, 620, 420)
-	var me = _game_state.players[0] if _game_state.players[0].index == _player_index else _game_state.players[1]
+	var me = _find_self()
 	var armor = me.get("armor", {})
 	var expect_type = ""
 	var armor_name = "未知护甲"
@@ -1008,7 +1044,7 @@ func _show_hunter_pick():
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
 	var vb = _popup_box(c, 560, 460)
 	vb.add_child(_lbl("埋伏：选择一张远程攻击牌"))
-	var me = _game_state.players[0] if _game_state.players[0].index == _player_index else _game_state.players[1]
+	var me = _find_self()
 	var has_any = false
 	for card in me.get("hand", []):
 		if card.type_id in ["range", "pierce"]:
@@ -1032,7 +1068,7 @@ func _show_spellblade_pick():
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
 	var vb = _popup_box(c, 620, 420)
 	vb.add_child(_lbl("魔力引导：选择魔法/吟唱（无视距离打出近战/重击）"))
-	var me = _game_state.players[0] if _game_state.players[0].index == _player_index else _game_state.players[1]
+	var me = _find_self()
 	var has_any = false
 	for card in me.get("hand", []):
 		if card.type_id in ["magic", "chant"]:
@@ -1081,7 +1117,7 @@ func _show_mage_pick():
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
 	var vb = _popup_box(c, 700, 460)
 	vb.add_child(_lbl("选择一张要弃的牌（魔法强化+2，可叠加，打出魔法攻击后清除）："))
-	var mh = (_game_state.players[0] if _game_state.players[0].index == _player_index else _game_state.players[1]).get("hand", [])
+	var mh = _find_self().get("hand", [])
 	for card in mh:
 		var b = _mkbtn(Config.card_name(card.type_id))
 		b.pressed.connect(func(uid=card.uid): c.queue_free(); _n().send_use_skill("mage_discard", {"card_uid": uid}))

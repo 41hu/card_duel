@@ -16,10 +16,14 @@ var ap_type: int = -1
 var _selected: bool = false
 var _respondable: bool = false
 var _is_discarded: bool = false
+# 触摸拖动判定：手指按下位置 + 是否已判定为拖动（拖动时不触发点击，交 ScrollContainer 滚动）
+var _press_pos: Vector2 = Vector2.ZERO
+var _dragging: bool = false
 
 func _init():
 	custom_minimum_size = Vector2(120, 150)
-	mouse_filter = Control.MOUSE_FILTER_STOP
+	# PASS：处理自身点击，同时放行触摸拖动给父级 ScrollContainer（手牌横向滚动）
+	mouse_filter = Control.MOUSE_FILTER_PASS
 	_panel = Panel.new()
 	_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -122,8 +126,20 @@ func set_discard_mark(active: bool):
 		_apply_panel_style(_card_bg_color(ap_type), false)
 
 func _on_gui_input(event: InputEvent):
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		pressed.emit(card_uid)
+	# 关键：ScrollContainer 的滚动只处理 MouseButton/MouseMotion（触摸由 emulate_mouse_from_touch 模拟）。
+	# 这里区分「点击」与「拖动」：按下记录位置，拖动超过阈值则不触发点击（交 ScrollContainer 滚动），
+	# 抬起且未拖动才触发 pressed。
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			_press_pos = event.position
+			_dragging = false
+		else:
+			if not _dragging:
+				pressed.emit(card_uid)
+		return
+	if event is InputEventMouseMotion and (event.button_mask & MOUSE_BUTTON_MASK_LEFT):
+		if _press_pos.distance_to(event.position) > 12.0:
+			_dragging = true
 
 func _on_hover():
 	var s = _panel.get_theme_stylebox("panel").duplicate()

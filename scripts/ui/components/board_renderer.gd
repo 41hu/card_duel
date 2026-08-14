@@ -49,8 +49,8 @@ func _rebuild_cells():
 # 创建一个格子及其标签（仅 LINEAR 模式）
 func _create_cell(pos: Vector2i) -> Panel:
 	var p = Panel.new()
-	p.position = Vector2(pos.x * 108, 0)
-	p.size = Vector2(104, 104)
+	p.position = Vector2(pos.x * 100, 0)
+	p.size = Vector2(100, 100)
 	p.set_meta("cell_pos", pos)
 	p.mouse_filter = Control.MOUSE_FILTER_STOP
 	p.gui_input.connect(func(event): _on_cell_input(event, pos))
@@ -66,7 +66,7 @@ func _create_cell(pos: Vector2i) -> Panel:
 
 	var l = Label.new()
 	l.position = Vector2(0, 0)
-	l.size = Vector2(104, 104)
+	l.size = Vector2(100, 100)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	l.add_theme_font_size_override("font_size", Style.fs(26))

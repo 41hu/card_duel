@@ -54,3 +54,14 @@ const ERROR_RED     = Color(1.0, 0.3, 0.3)
 const READY_YELLOW  = Color(1.0, 1.0, 0.3)
 const WIN_GOLD      = Color(1.0, 0.85, 0.3)
 const LOSE_RED      = Color(0.7, 0.3, 0.3)
+
+# ---- 模式选择界面（mode_select）----
+const MODE_CARD_BG       = Color(0.13, 0.16, 0.22)   # 模式卡片底（待美术替换）
+const MODE_CARD_BORDER   = Color(0.30, 0.32, 0.40)   # 未选中边框
+const MODE_SELECTED      = Color(1.0, 0.85, 0.3)     # 选中金边
+const MODE_DISABLED      = Color(0.40, 0.40, 0.44)   # 禁用/占位卡
+const MODE_TITLE         = Color(1.0, 0.85, 0.3)     # 模式名
+const MODE_DESC          = Color(0.75, 0.78, 0.84)   # 模式简介
+const MODE_FEATURE       = Color(0.55, 0.60, 0.68)   # 规则要点
+const CONFIG_LABEL       = Color(0.85, 0.87, 0.92)   # 配置区标签
+const CONFIG_VALUE       = Color(1.0, 0.9, 0.5)      # 配置数值

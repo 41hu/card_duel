@@ -583,13 +583,8 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 	# 响应方不限时清掉 deadline 后，攻击方（若限时）恢复出牌计时
 	if _action_deadline == 0 and _timeout_enabled(attacker_idx):
 		_action_deadline = Time.get_ticks_msec() + ACTION_TIME * 1000
-	var st = get_full_state()
-	if _reveal_to >= 0:
-		st["revealed_hand"] = card_systems[_reveal_from].get_hand_type_ids()
-		st["revealed_to"] = _reveal_to
-		st["revealed_from"] = _reveal_from  # 被查看手牌的目标玩家（弹窗显示"谁"）
-		_reveal_to = -1; _reveal_from = -1
-	state_changed.emit(st)
+	# 鹰眼等查看手牌由 get_full_state 统一带出并重置（防止提前 return 路径残留）
+	state_changed.emit(get_full_state())
 
 func skip_response(defender_idx: int): process_response(defender_idx, false)
 
@@ -955,6 +950,7 @@ func get_full_state(full: bool = false) -> Dictionary:
 		waiting_for_discard=waiting_for_discard, discard_count=discard_count,
 		action_time_left=atl, discard_time_left=dtl,
 		deck_size=card_systems[0].deck.size(), discard_size=card_systems[0].discard.size(),
+		independent_decks=independent_decks,  # 独立牌堆标记（UI 决定显示单方/双方牌堆）
 		players=[], items=_serialize_items(), action_log=action_log.duplicate(),
 		distance=movement.get_distance(_nearest_alive_opponent(current_player)),
 	}
@@ -978,6 +974,14 @@ func get_full_state(full: bool = false) -> Dictionary:
 			item_type_desc=item_system.get_item_type(char_skills.get_item_type(i)).get("desc", ""),
 		})
 	if full: state.bp_state = bp.get_bp_state()
+	# 鹰眼等查看手牌效果：快照统一带出 revealed 并立即重置。
+	# 放在 get_full_state 内部可防止 process_response 提前 return 路径漏重置
+	# （残留的 _reveal_to 会让后续任意状态刷新误弹"查看手牌"）
+	if _reveal_to >= 0:
+		state["revealed_hand"] = card_systems[_reveal_from].get_hand_type_ids()
+		state["revealed_to"] = _reveal_to
+		state["revealed_from"] = _reveal_from  # 被查看手牌的目标玩家（弹窗显示"谁"）
+		_reveal_to = -1; _reveal_from = -1
 	_record_snapshot(state)
 	return state
 

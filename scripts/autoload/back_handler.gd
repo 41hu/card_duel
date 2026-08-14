@@ -36,12 +36,21 @@ func _unhandled_input(event: InputEvent):
 # 回调返回 true = 已处理（本次返回不退出游戏）；false = 未处理（走正常退出逻辑）
 var main_menu_back: Callable = Callable()
 
+# 通用场景返回回调（mode_select 等独立场景）：任意场景按返回键时优先调用，
+# 返回 true = 已处理（本次返回不退出游戏）。场景卸载时清空。
+var scene_back: Callable = Callable()
+
 func _handle_back():
 	var now = Time.get_ticks_msec()
 	if now - _last_handle_time < REPEAT_GUARD_MS:
 		return  # 同一次返回的重复事件（通知/信号/手势多次回调）
 	_last_handle_time = now
 	get_viewport().set_input_as_handled()  # 阻止 Godot 默认退出
+	# 通用场景返回（mode_select 等）：优先级最高
+	if scene_back.is_valid() and scene_back.call():
+		_last_back_time = 0
+		_clear_hint()
+		return
 	# 主菜单子面板（创建/加入房间）：返回键直接回主面板，不退出游戏
 	if _is_main_menu() and main_menu_back.is_valid() and main_menu_back.call():
 		_last_back_time = 0

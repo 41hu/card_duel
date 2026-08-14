@@ -17,7 +17,7 @@ const _TITLE_CONDITIONS := {
 
 @onready var title_label = $Title
 @onready var title2_label: RichTextLabel = $Title2
-@onready var stats_label = $StatsLabel
+@onready var stats_label = $StatsScroll/StatsLabel
 @onready var detail_label = $Detail
 @onready var back_btn = $BackBtn
 

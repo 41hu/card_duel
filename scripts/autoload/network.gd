@@ -3,8 +3,8 @@ extends Node
 
 signal connected_to_server()
 signal server_disconnected()
-signal room_created(room_id: String, rapid_mode: bool)
-signal room_joined(room_id: String, players: Array, rapid_mode: bool)
+signal room_created(room_id: String, mode: String)
+signal room_joined(room_id: String, players: Array, mode: String)
 signal game_starting(data: Dictionary)
 signal state_updated(state: Dictionary)
 signal bp_state_updated(bp_state: Dictionary)
@@ -88,9 +88,9 @@ func send(msg: Dictionary):
 	var json_str = JSON.stringify(msg)
 	_socket.put_packet(json_str.to_utf8_buffer())
 
-func create_room(player_name: String = "Player1", rapid_mode: bool = false, max_players: int = 2):
+func create_room(player_name: String = "Player1", mode: String = "classic", max_players: int = 2, config: Dictionary = {}):
 	_player_name = player_name
-	send({"t": "create_room", "player_name": player_name, "rapid_mode": rapid_mode, "max_players": max_players})
+	send({"t": "create_room", "player_name": player_name, "mode": mode, "max_players": max_players, "config": config})
 
 func join_room(rid: String, player_name: String = "Player2"):
 	_player_name = player_name
@@ -142,10 +142,10 @@ func _handle_packet(raw: String):
 		"room_created":
 			room_id = data.room_id
 			player_index = 0
-			room_created.emit(data.room_id, bool(data.get("rapid_mode", false)))
+			room_created.emit(data.room_id, str(data.get("mode", "classic")))
 		"room_joined":
 			player_index = data.player_index
-			room_joined.emit(data.room_id, data.players, bool(data.get("rapid_mode", false)))
+			room_joined.emit(data.room_id, data.players, str(data.get("mode", "classic")))
 		"game_starting":
 			game_starting.emit(data)
 		"bp_state":

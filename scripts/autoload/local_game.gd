@@ -36,6 +36,11 @@ var _ai_busy: bool = false
 var tutorial_mode: bool = false
 # ---- 快速模式（主菜单开关）：无限出牌/天赐不限/冻结连续 ----
 var rapid_mode: bool = false
+# ---- 自定义卡组模式：BP 选完角色后进入「配置卡组」环节（deck_pick 场景） ----
+var deck_mode: bool = false
+# BP 结果缓存（deck_pick 场景读取：双方角色 / 先手）
+var bp_chars: Array = []
+var bp_first: int = -1
 # AI 每步间隔（让玩家看清 AI 的出牌过程）
 const AI_STEP_DELAY_MS = 700
 var _ai_next_act_time: int = 0
@@ -58,7 +63,7 @@ func _process(delta):
 			_ai_bp_act()
 			_ai_next_act_time = Time.get_ticks_msec() + AI_STEP_DELAY_MS
 
-func start_local_game(p1_char: String, p2_char: String, bp_first: int = -1):
+func start_local_game(p1_char: String, p2_char: String, first_idx: int = -1, custom_decks: Array = [], independent_decks: bool = false):
 	ai_mode = false  # 防残留：人机后直接进自我对战会被 _process 的 AI 驱动干扰
 	tutorial_mode = false
 	_ai = null
@@ -70,7 +75,9 @@ func start_local_game(p1_char: String, p2_char: String, bp_first: int = -1):
 	game.weapon_prompt.connect(_on_weapon)
 	game.response_needed.connect(_on_response)
 	game.game_ended.connect(_on_ended)
-	game.init_match(p1_char, p2_char, bp_first)
+	# custom_decks[idx] = 该玩家卡组 type_id 列表（空 = 默认 78 张）；
+	# independent_decks=true = 每人独立牌堆/弃牌堆（自定义卡组模式）
+	game.init_match(p1_char, p2_char, first_idx, custom_decks, independent_decks)
 	game._start_game()
 	battle_state_cache = game.get_full_state()
 
@@ -218,6 +225,12 @@ func _on_bp_state_changed(bs: Dictionary):
 func _bp_done():
 	var chars = game.bp.get_start_chars()
 	var bf = game.bp._bp_first
+	if deck_mode:
+		# 自定义卡组：缓存 BP 结果 → 跳「配置卡组」环节（deck_pick 场景）
+		bp_chars = chars
+		bp_first = bf
+		get_tree().change_scene_to_file("res://scenes/deck_pick.tscn")
+		return
 	if ai_mode:
 		start_ai_game(chars[0], chars[1], ai_difficulty)
 	else:
@@ -338,6 +351,9 @@ func disconnect_from_server():
 	_ai = null
 	_ai_busy = false
 	rapid_mode = false
+	deck_mode = false
+	bp_chars = []
+	bp_first = -1
 	last_game_result = {}
 	server_disconnected.emit()
 

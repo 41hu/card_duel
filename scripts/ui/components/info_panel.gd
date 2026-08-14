@@ -17,6 +17,7 @@ var _name_label: Button
 var _hp_num: Label
 var _hp_bar: ProgressBar
 var _attr_label: Label
+var _deck_label: Label
 var _equip_label: Button
 var _status_row: FlowContainer
 var _skill_desc: String = ""
@@ -77,6 +78,11 @@ func _ready():
 	_attr_label.add_theme_font_size_override("font_size", Style.fs(22))
 	_attr_label.add_theme_color_override("font_color", Color(0.88, 0.9, 0.95))
 	vb.add_child(_attr_label)
+	# 牌堆/弃牌行：独立一行（独立牌堆模式下每人各自显示，共享模式下双方一致）
+	_deck_label = Label.new()
+	_deck_label.add_theme_font_size_override("font_size", Style.fs(20))
+	_deck_label.add_theme_color_override("font_color", Color(0.62, 0.68, 0.78))
+	vb.add_child(_deck_label)
 	# 装备行：武器/防具短信息，点击显示完整效果（PC 悬停 tooltip）
 	_equip_label = Button.new()
 	_equip_label.flat = true
@@ -103,7 +109,8 @@ func refresh(p: Dictionary, tag: String, accent: Color):
 	_hp_bar.value = p.hp
 	var fg := StyleBoxFlat.new()
 	fg.bg_color = Style.OPP_RED if pct <= 0.35 else Style.ME_GREEN
-	fg.set_corner_radius_all(4)
+	# fill 不设圆角：ProgressBar 满值时 fill 圆角会在右端留出空隙（看似没填满）
+	fg.set_corner_radius_all(0)
 	_hp_bar.add_theme_stylebox_override("fill", fg)
 	var pos = p.get("position", {})
 	var pos_x = pos.get("x", 0) if pos is Dictionary else pos
@@ -111,6 +118,7 @@ func refresh(p: Dictionary, tag: String, accent: Color):
 		_ap_circles(p.get("ap_attack", 0), p.get("ap_move", 0), p.get("ap_function", 0),
 			2 if p.get("char_id", "") == "warlock" else 1),
 		p.get("hand_size", 0), p.get("hand_limit", 5), pos_x]
+	_deck_label.text = "牌堆 %d · 弃牌 %d" % [p.get("deck_size", 0), p.get("discard_size", 0)]
 	_refresh_equip(p)
 	_refresh_status(p)
 

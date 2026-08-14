@@ -2,6 +2,7 @@
 extends Node
 
 const MatchStateClass = preload("res://scripts/core/match_state.gd")
+const ModeData = preload("res://scripts/data/mode_data.gd")
 const PORT = 17890
 
 var _tcp_server: TCPServer = null
@@ -81,14 +82,22 @@ func _handle_message(peer_idx: int, raw: String):
 func _create_room(peer_idx: int, data: Dictionary):
 	var rid = str(_next_room_id); _next_room_id += 1
 	var peer = _peers[peer_idx]
-	var max_p = int(data.get("max_players", 2))  # 房间容量：2（标准）或 4（混战）
-	if max_p != 4: max_p = 2
+	# 模式映射：classic=2人标准 / rapid=2人快速 / ffa=4人混战（未来夺旗在此扩展）
+	var mode = str(data.get("mode", "classic"))
+	var md = ModeData.get_mode(mode)
+	if md.is_empty() or not md.selectable:
+		mode = "classic"
+		md = ModeData.get_mode(mode)
+	var upper = md.max_players if md.max_players > 0 else 2
+	var max_p = clampi(int(data.get("max_players", upper)), 2, upper)
+	var rapid = (mode == "rapid")
 	var ready_arr: Array = []
 	for i in range(max_p): ready_arr.append(false)
 	peer.peer_name = data.get("player_name", "Player1"); peer.room_id = rid; peer.player_index = 0; peer.ready = false
-	_rooms.append({id=rid, peer_indices=[peer_idx], peer_names=[peer.peer_name], ready=ready_arr, stage="waiting", match=null, rapid_mode=bool(data.get("rapid_mode", false)), max_players=max_p})
-	_send_to(peer_idx, {"t": "room_created", "room_id": rid, "rapid_mode": _rooms.back().rapid_mode, "max_players": max_p})
-	log_msg("房间%s创建（%s%d人）" % [rid, "快速模式" if _rooms.back().rapid_mode else "标准模式", max_p])
+	# config（自定义规则开关）暂存，规则生效逻辑后续接入 match_state
+	_rooms.append({id=rid, peer_indices=[peer_idx], peer_names=[peer.peer_name], ready=ready_arr, stage="waiting", match=null, rapid_mode=rapid, mode=mode, max_players=max_p, config=data.get("config", {})})
+	_send_to(peer_idx, {"t": "room_created", "room_id": rid, "mode": mode, "max_players": max_p})
+	log_msg("房间%s创建（%s %d人）" % [rid, mode, max_p])
 
 func _join_room(peer_idx: int, data: Dictionary):
 	var rid = data.get("room_id", ""); var peer = _peers[peer_idx]; var room = _find_room(rid)
@@ -99,7 +108,7 @@ func _join_room(peer_idx: int, data: Dictionary):
 	room.peer_indices.append(peer_idx); room.peer_names.append(peer.peer_name)
 	# 广播给所有房内玩家（含新加入者），保持人数/序号同步
 	for p_idx in room.peer_indices:
-		_send_to(p_idx, {"t":"room_joined","room_id":rid,"player_index":_peers[p_idx].player_index,"players":room.peer_names,"rapid_mode":room.rapid_mode})
+		_send_to(p_idx, {"t":"room_joined","room_id":rid,"player_index":_peers[p_idx].player_index,"players":room.peer_names,"mode":room.mode})
 	log_msg("P%d加入房间%s（%d/%d）" % [peer.player_index, rid, room.peer_indices.size(), room.max_players])
 
 func _on_ready(peer_idx: int):
@@ -307,7 +316,7 @@ func _on_peer_disconnected(peer_idx: int):
 				_rooms.erase(room)
 				return
 			for p_idx in room.peer_indices:
-				_send_to(p_idx, {"t":"room_joined","room_id":room.id,"player_index":_peers[p_idx].player_index,"players":room.peer_names,"rapid_mode":room.rapid_mode})
+				_send_to(p_idx, {"t":"room_joined","room_id":room.id,"player_index":_peers[p_idx].player_index,"players":room.peer_names,"mode":room.mode})
 			log_msg("P%d离开房间%s（剩%d人）" % [idx, room.id, room.peer_indices.size()])
 			return
 		# 存活方获胜：发送完整结算数据（与正常对局结束一致），结算界面可查看统计/称号

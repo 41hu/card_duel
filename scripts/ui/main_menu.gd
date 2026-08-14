@@ -2,17 +2,11 @@
 extends Control
 
 const Style = preload("res://scripts/theme/style_const.gd")
+const ModeData = preload("res://scripts/data/mode_data.gd")
+const ModeSelectScript = preload("res://scripts/ui/mode_select.gd")
 
 @onready var main_panel = $MainPanel
-@onready var create_panel = $CreatePanel
 @onready var join_panel = $JoinPanel
-@onready var c_server = $CreatePanel/CServerInput
-@onready var c_name = $CreatePanel/CNameInput
-@onready var c_create_btn = $CreatePanel/CCreateBtn
-@onready var c_back_btn = $CreatePanel/CBackBtn
-@onready var c_room_label = $CreatePanel/CRoomLabel
-var _create_fast_btn: CheckButton  # 创建房间：快速模式开关
-var _create_4p_btn: CheckButton    # 创建房间：4 人混战开关
 @onready var j_server = $JoinPanel/JServerInput
 @onready var j_room = $JoinPanel/JRoomInput
 @onready var j_name = $JoinPanel/JNameInput
@@ -23,15 +17,6 @@ var _create_4p_btn: CheckButton    # 创建房间：4 人混战开关
 
 func _ready():
 	Style.scale_node_fonts(self)  # 移动端字号适配（tscn 写死的字号）
-	# 创建房间面板：模式/人数开关（CNameInput 上方）
-	_create_fast_btn = _popup_check("快速模式（无限出牌 · 冻结连续 · 天赐不限）")
-	_create_fast_btn.offset_left = 60; _create_fast_btn.offset_top = 225
-	_create_fast_btn.offset_right = 660; _create_fast_btn.offset_bottom = 285
-	create_panel.add_child(_create_fast_btn)
-	_create_4p_btn = _popup_check("4人混战（六边形地图，凑满4人开局）")
-	_create_4p_btn.offset_left = 60; _create_4p_btn.offset_top = 293
-	_create_4p_btn.offset_right = 660; _create_4p_btn.offset_bottom = 353
-	create_panel.add_child(_create_4p_btn)
 	$MainPanel/MultiBtn.pressed.connect(_on_multi_battle)
 	$MainPanel/SelfBtn.pressed.connect(_on_self_play)
 	$MainPanel/AiBtn.pressed.connect(_on_ai_battle)
@@ -51,8 +36,16 @@ func _ready():
 	tbtn.size = Vector2(Style.fs(180), Style.fs(80))
 	tbtn.pressed.connect(_start_tutorial)
 	add_child(tbtn)
-	_add_server_shortcut(c_server, "本地")
-	_add_server_shortcut(c_server, "云端")
+	# 卡组管理入口：新手教程按钮上方（预设每角色卡组，开局配置环节使用）
+	var dbtn := Button.new()
+	dbtn.text = "卡组管理"
+	dbtn.add_theme_font_size_override("font_size", Style.fs(26))
+	dbtn.anchor_top = 1.0; dbtn.anchor_bottom = 1.0
+	dbtn.offset_left = 24
+	dbtn.offset_top = -Style.fs(196); dbtn.offset_bottom = -Style.fs(116)
+	dbtn.size = Vector2(Style.fs(180), Style.fs(80))
+	dbtn.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/deck_edit.tscn"))
+	add_child(dbtn)
 	_add_server_shortcut(j_server, "本地")
 	_add_server_shortcut(j_server, "云端")
 	_check_update()
@@ -70,20 +63,17 @@ func _ready():
 	version_label.position = Vector2(sa.position.x / sx + 12, sa.position.y / sy + 12)
 	add_child(version_label)
 	# 返回按钮：断开连接（若已连服务器）并回主面板
-	c_back_btn.pressed.connect(func(): Network.disconnect_from_server(); _show_main())
 	j_back_btn.pressed.connect(func(): Network.disconnect_from_server(); _show_main())
-	# 手机返回键：创建/加入房间面板可见时回主面板（不退出游戏）
+	# 手机返回键：加入房间面板可见时回主面板（不退出游戏）
 	BackHandler.main_menu_back = func() -> bool:
-		if create_panel.visible or join_panel.visible:
+		if join_panel.visible:
 			Network.disconnect_from_server()
 			_show_main()
 			return true
 		return false
-	c_create_btn.pressed.connect(_on_create)
 	j_join_btn.pressed.connect(_on_join)
 	Network.connected_to_server.connect(_on_connected)
 	Network.server_disconnected.connect(_on_disconnected)
-	Network.room_created.connect(_on_room_created)
 	Network.room_joined.connect(_on_room_joined)
 	Network.game_starting.connect(_on_game_starting)
 	Network.network_error.connect(_on_error)
@@ -190,28 +180,13 @@ func _add_server_shortcut(input: LineEdit, label: String):
 			btn.pressed.connect(func(): input.text = "ws://47.107.47.251:17890")
 	input.get_parent().add_child(btn)
 
-func _show_create():
-	main_panel.visible = false
-	create_panel.visible = true
-	join_panel.visible = false
-
 func _show_join():
 	main_panel.visible = false
-	create_panel.visible = false
 	join_panel.visible = true
 
 func _show_main():
 	main_panel.visible = true
-	create_panel.visible = false
 	join_panel.visible = false
-
-func _on_create():
-	status_label.text = "正在连接..."
-	Network.connect_to_server(c_server.text.strip_edges())
-	await Network.connected_to_server
-	var pname = c_name.text.strip_edges()
-	if pname == "": pname = "Player1"
-	Network.create_room(pname, _create_fast_btn.button_pressed, 4 if _create_4p_btn.button_pressed else 2)
 
 func _on_join():
 	var rid = j_room.text.strip_edges()
@@ -226,16 +201,9 @@ func _on_join():
 func _on_connected(): status_label.text = "已连接"
 func _on_disconnected(): status_label.text = "断开连接"
 
-func _on_room_created(room_id: String, rapid_mode: bool):
-	c_room_label.text = "房间号: %s  %s" % [room_id, "【快速模式】" if rapid_mode else "【标准模式】"]
-	status_label.text = "等待对手加入..."
-	# 房间已创建：隐藏创建按钮，保留返回按钮（等待时可返回主界面，断开连接）
-	c_create_btn.visible = false
-	var btn = _make_ready_btn(create_panel, 560)
-	btn.pressed.connect(func(): Network.ready_up(); btn.disabled = true; btn.text = "已准备")
-
-func _on_room_joined(room_id: String, _players: Array, rapid_mode: bool):
-	status_label.text = "已加入房间 %s（%s）" % [room_id, "快速模式" if rapid_mode else "标准模式"]
+func _on_room_joined(room_id: String, _players: Array, mode: String):
+	var mode_name = ModeData.get_mode(mode).get("name", "标准模式")
+	status_label.text = "已加入房间 %s（%s）" % [room_id, mode_name]
 	# 房间已加入：隐藏加入按钮，保留返回按钮（等待时可返回主界面，断开连接）
 	j_join_btn.visible = false
 	var btn = _make_ready_btn(join_panel, 560)
@@ -246,7 +214,7 @@ func _make_ready_btn(parent: Control, y: float) -> Button:
 		if c is Button and "准备" in c.text: c.queue_free()
 	var btn = Button.new()
 	btn.text = "准备开始"
-	# 右侧按钮区（原创建/加入按钮位置），左侧保留返回按钮不重叠
+	# 右侧按钮区（原加入按钮位置），左侧保留返回按钮不重叠
 	btn.position = Vector2(400, y)
 	btn.size = Vector2(320, 100)
 	btn.add_theme_font_size_override("font_size", Style.fs(32))
@@ -256,7 +224,7 @@ func _make_ready_btn(parent: Control, y: float) -> Button:
 
 func _on_game_starting(data: Dictionary):
 	if data.get("ffa", false):
-		# 4 人混战：跳过 BP 直接进对战（初始 state 由服务器附带）
+		# 4 人混战：跳过 BP 直接进对战（初始 state 由服务器附带，独立场景布局）
 		status_label.text = "4人混战开始！"
 		Network.battle_state_cache = data.get("state", {})
 		get_tree().change_scene_to_file("res://scenes/battle_scene.tscn")
@@ -265,44 +233,20 @@ func _on_game_starting(data: Dictionary):
 	Network.bp_state_cache = data.get("bp_state", {})
 	get_tree().change_scene_to_file("res://scenes/bp_scene.tscn")
 
-func _on_self_play():
-	var c = _make_popup("自我对战")
-	var vb = c.get_child(1)
-	var fast = _popup_check("快速模式（无限出牌 · 冻结连续 · 天赐不限）")
-	vb.add_child(fast)
-	var start = _popup_btn("开始对战（2人）")
-	start.pressed.connect(func():
-		LocalGame.rapid_mode = fast.button_pressed
-		c.queue_free()
-		LocalGame.start_bp()
-		get_tree().change_scene_to_file("res://scenes/bp_scene.tscn")
-	)
-	vb.add_child(start)
-	var ffa = _popup_btn("4人混战（六边形地图）")
-	ffa.pressed.connect(func():
-		LocalGame.rapid_mode = fast.button_pressed
-		c.queue_free()
-		LocalGame.start_local_game_multi(_random_chars(4))
-		get_tree().change_scene_to_file("res://scenes/battle_scene.tscn")
-	)
-	vb.add_child(ffa)
-	var back = _popup_btn("返回")
-	back.pressed.connect(func(): c.queue_free())
-	vb.add_child(back)
-	add_child(c)
+# ---- 模式选择（创建房间 / 自我对战统一入口） ----
+func _goto_mode_select(src: String):
+	ModeSelectScript.source = src
+	get_tree().change_scene_to_file("res://scenes/mode_select.tscn")
 
-# 随机 n 个不同角色（4 人混战开局用）
-func _random_chars(n: int) -> Array:
-	var ids = Config.CHARACTER_IDS.duplicate()
-	ids.shuffle()
-	return ids.slice(0, n)
+func _on_self_play():
+	_goto_mode_select("self")
 
 # ---- 多人对战（选择创建或加入） ----
 func _on_multi_battle():
 	var c = _make_popup("多人对战")
 	var vb = c.get_child(1)
 	var create = _popup_btn("创建房间")
-	create.pressed.connect(func(): c.queue_free(); _show_create())
+	create.pressed.connect(func(): c.queue_free(); _goto_mode_select("create"))
 	vb.add_child(create)
 	var join = _popup_btn("加入房间")
 	join.pressed.connect(func(): c.queue_free(); _show_join())

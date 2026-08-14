@@ -84,10 +84,11 @@ func _build_guide_ui():
 	_guide_label.add_theme_color_override("font_color", Color(1, 0.9, 0.5))
 	_guide_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
 	_guide_label.add_theme_constant_override("outline_size", Style.fs(4))
-	# 右上角（避开棋盘/手牌/PhaseLabel 居中区域）
-	_guide_label.anchor_left = 1.0; _guide_label.anchor_right = 1.0
-	_guide_label.offset_left = -560; _guide_label.offset_right = -24
-	_guide_label.offset_top = 24; _guide_label.offset_bottom = 300
+	# 顶部居中（新版布局：右上角是对手面板，左侧是战斗日志，中部顶部空闲；
+	# y110 起避开 PhaseLabel(至101)，长步骤文本溢出绘制到 ~370 也不压 2 人棋盘(y400 起)）
+	_guide_label.anchor_left = 0.5; _guide_label.anchor_right = 0.5
+	_guide_label.offset_left = -450; _guide_label.offset_right = 450
+	_guide_label.offset_top = 110; _guide_label.offset_bottom = 350
 	get_tree().root.add_child(_guide_label)
 
 	_skip_btn = Button.new()
@@ -128,7 +129,7 @@ func _build_steps():
 	_steps = [
 		# ---- 第1步 移动（回合1）：刺客 vs 狂战士 ----
 		{
-			"guide": "第 1 步 —— 移动与距离\n点击手牌中的「移动」卡，向对手方向移动 1 格（其他牌本回合不能使用）。\n棋盘共 11 格，两人之间隔的格数就是距离；紧挨着（相邻两格）视为贴脸，距离为 0，此时近战才能打出。\n顶部角色面板的圆圈是行动点：攻 2 点、移 1 点、功 1 点——出牌消耗对应点数，回合开始重置。「移动」耗 1 位移点。",
+			"guide": "第 1 步 —— 移动与距离\n点击手牌中的「移动」卡，向对手方向移动 1 格。\n两人相隔的格数就是距离；贴脸（距离 0）才能近战。\n左下角你的角色面板显示行动点（攻2 移1 功1），出牌消耗对应点数，回合开始重置。",
 			"enter": func():
 				g.players[0].position = Vector2i(3, 0)
 				g.players[1].position = Vector2i(7, 0)
@@ -149,7 +150,7 @@ func _build_steps():
 		},
 		# ---- 第2步 暗影步（同一回合）----
 		{
-			"guide": "第 2 步 —— 暗影步技能\n刺客的被动技：每回合可免费移动 1 格（不消耗位移点）。\n点击左侧技能栏的「暗影步」向对手方向移动。注意：暗影步不能推人。",
+			"guide": "第 2 步 —— 暗影步技能\n刺客的被动技：每回合可免费移动 1 格（不消耗位移点）。\n点击左下角技能栏的「暗影步」向对手方向移动。注意：暗影步不能推人。",
 			"enter": func():
 				battle_state_refresh(),
 			"check": func():
@@ -176,7 +177,7 @@ func _build_steps():
 		},
 		# ---- 第4步 狂化讲解 + 远程防具（同一回合）----
 		{
-			"guide": "第 4 步 —— 狂战士的狂化与远程防具\n你刚才的远程命中了狂战士——他的被动「狂化」触发了（近战+1，可叠加，越打越强）。\n点击对手名字（面板顶部）可查看他的技能描述。\n然后装备手牌中的「远程防具」：满耐久可完全免疫一次远程攻击，之后减半。",
+			"guide": "第 4 步 —— 狂战士的狂化与远程防具\n你刚才的远程命中了狂战士——他的被动「狂化」触发了（近战+1，可叠加，越打越强）。\n点击右侧对手面板的角色名可查看他的技能描述。\n然后装备手牌中的「远程防具」：满耐久可完全免疫一次远程攻击，之后减半。",
 			"enter": func():
 				battle_state_refresh(),
 			"check": func():
@@ -189,7 +190,7 @@ func _build_steps():
 		},
 		# ---- 第5步 结束回合 → 狂战士回合（玩家格挡教学）----
 		{
-			"guide": "第 5 步 —— 狂战士回合\n点击「结束出牌」——先到弃牌阶段：手牌上限 = 你离己方板边的格数 + 1（顶部面板「手:当前/上限」），超上限必须弃到上限，再点「确认弃牌」。\n轮到狂战士行动：远程攻击（你的「远程防具」满耐久挡掉，看下方战斗日志）、吸引你、装备「斩铁」、近战攻击。\n近战攻击时请用「近战」卡格挡（伤害减半）。",
+			"guide": "第 5 步 —— 狂战士回合\n点「结束出牌」；弃牌阶段超上限就弃，再点「确认弃牌」。\n狂战士会远程攻击（防具挡掉）、吸引你、装备「斩铁」、再近战——用「近战」卡格挡（伤害减半，看左侧战斗日志）。",
 			"enter": func():
 				deal_hand(1, ["near", "near", "attract", "range", "near_weapon"])
 				g.players[1].ap_attack = 2
@@ -246,7 +247,7 @@ func _build_steps():
 		},
 		# ---- 第8步 连击后撤 → 结束回合 → 狂战士两刀复活 ----
 		{
-			"guide": "第 8 步 —— 连击与后撤\n再打一张「近战」命中（突刺加成下伤害可观），然后用「暗影步」向后撤（远离对手），点击「结束出牌」。\n轮到狂战士：他会吸引你并连打两刀近战——你手里没有能格挡的卡，只能点「无法响应（跳过）」。挨下两刀后 HP 归零——看下方战斗日志的复活流程。",
+			"guide": "第 8 步 —— 连击与后撤\n再打一张「近战」，然后用「暗影步」向后撤，点「结束出牌」。\n狂战士会吸引你并连打两刀——你没有格挡卡，点「无法响应（跳过）」，HP 归零后看左侧战斗日志的复活流程。",
 			"enter": func():
 				_combo_hp_base = g.players[1].hp
 				_combo_pos_base = g.players[0].position.x
@@ -280,7 +281,7 @@ func _build_steps():
 		},
 		# ---- 第9步 复活检测（狂战士两刀后，等玩家复活完成）----
 		{
-			"guide": "第 9 步 —— 复活机制\nHP 归零 → 自动弃光手牌 → 抽 4 张 → 自动使用回复卡 → HP 为正则复活（否则淘汰）。\n看下方战斗日志了解你倒下后发生了什么。",
+			"guide": "第 9 步 —— 复活机制\nHP 归零 → 自动弃光手牌 → 抽 4 张 → 自动使用回复卡 → HP 为正则复活（否则淘汰）。\n看左侧战斗日志了解你倒下后发生了什么。",
 			"enter": func():
 				battle_state_refresh(),
 			"check": func():

@@ -68,6 +68,9 @@ func _ready():
 	board.cell_clicked.connect(_on_board_cell_clicked)
 	_create_self_panel()
 	_build_popups()
+	# 日志加宽后左缘与棋盘第 0/1 格有重叠：PASS 让点按穿透到棋盘，
+	# 拖动仍由 ScrollContainer 先处理（发生滚动时 accept，否则继续下传）
+	action_log.mouse_filter = Control.MOUSE_FILTER_PASS
 	end_turn_btn.pressed.connect(_on_end_turn)
 	confirm_btn.pressed.connect(_on_confirm_card)
 	cancel_btn.pressed.connect(_on_cancel_select)

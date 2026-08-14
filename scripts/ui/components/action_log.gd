@@ -5,7 +5,6 @@ const Style = preload("res://scripts/theme/style_const.gd")
 @onready var _vbox: VBoxContainer = $VBox
 
 func _ready():
-	_vbox.layout_mode = 0
 	_vbox.size_flags_vertical = 0
 
 func show_logs(action_log: Array, max_count: int = 200, my_index: int = -1):
@@ -17,6 +16,8 @@ func show_logs(action_log: Array, max_count: int = 200, my_index: int = -1):
 		var lb = Label.new()
 		lb.text = "[T%d] %s: %s" % [e.get("turn", 0), e.get("player_name", "?"), e.get("msg", "")]
 		lb.add_theme_font_size_override("font_size", Style.fs(24))
+		# 长行自动换行：否则 Label 自然宽撑大 VBox 超出视口，右侧被水平裁剪
+		lb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		if my_index >= 0:
 			lb.add_theme_color_override("font_color", Style.ME_GREEN if e.get("player", -1) == my_index else Style.OPP_RED)
 		else:

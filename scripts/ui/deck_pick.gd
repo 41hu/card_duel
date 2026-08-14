@@ -29,6 +29,7 @@ var _package_id: String = DeckData.DEFAULT_PACKAGE  # 当前选中卡组的回�
 var _edit_count_label: Label
 var _edit_pool_box: VBoxContainer
 var _edit_sel_box: VBoxContainer
+var _pkg_buttons: Dictionary = {}  # 编辑页套餐按钮（pid -> Button）
 
 func _ready():
 	Style.scale_node_fonts(self)
@@ -183,9 +184,34 @@ func _build_layout():
 	cancel_btn.add_theme_font_size_override("font_size", Style.fs(26))
 	cancel_btn.pressed.connect(_show_pick)
 	top.add_child(cancel_btn)
+	# 套餐行：回复套餐选择（切换自动替换回复卡）
+	var pkg_row := HBoxContainer.new()
+	pkg_row.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	pkg_row.offset_top = 192
+	pkg_row.offset_bottom = 262
+	pkg_row.offset_left = -260
+	pkg_row.offset_right = 260
+	pkg_row.add_theme_constant_override("separation", Style.fs(12))
+	pkg_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	edit_root.add_child(pkg_row)
+	var pkg_lbl := Label.new()
+	pkg_lbl.text = "套餐"
+	pkg_lbl.add_theme_font_size_override("font_size", Style.fs(24))
+	pkg_lbl.add_theme_color_override("font_color", Style.CONFIG_LABEL)
+	pkg_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	pkg_row.add_child(pkg_lbl)
+	_pkg_buttons.clear()
+	for pid in DeckData.HEAL_PACKAGES:
+		var pb := Button.new()
+		pb.text = str(DeckData.HEAL_PACKAGES[pid].name)
+		pb.custom_minimum_size = Vector2(Style.fs(110), Style.fs(56))
+		pb.add_theme_font_size_override("font_size", Style.fs(22))
+		pb.pressed.connect(_on_package_switch.bind(pid))
+		pkg_row.add_child(pb)
+		_pkg_buttons[pid] = pb
 	var mid := HBoxContainer.new()
 	mid.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	mid.offset_top = 200
+	mid.offset_top = 270
 	mid.offset_bottom = -100
 	mid.add_theme_constant_override("separation", Style.fs(10))
 	edit_root.add_child(mid)
@@ -404,6 +430,12 @@ func _refresh_edit():
 	_edit_count_label.text = "%d / %d" % [_draft.size(), DeckData.DECK_SIZE]
 	_edit_count_label.add_theme_color_override("font_color",
 		Color(0.9, 0.7, 0.4) if _draft.size() >= DeckData.DECK_SIZE else Color(1, 0.9, 0.5))
+	# 套餐按钮选中态
+	for pid in _pkg_buttons:
+		var b: Button = _pkg_buttons[pid]
+		var sel = (pid == _package_id)
+		b.text = ("▶ " if sel else "") + str(DeckData.HEAL_PACKAGES[pid].name)
+		b.add_theme_color_override("font_color", Style.MODE_SELECTED if sel else Color(0.85, 0.87, 0.92))
 	var counts := {}
 	for tid in _draft:
 		counts[tid] = int(counts.get(tid, 0)) + 1
@@ -473,6 +505,24 @@ func _on_remove(tid: String):
 	if idx >= 0:
 		_draft.remove_at(idx)
 		_refresh_edit()
+
+# 套餐切换：替换回复卡组合，清空数值卡（按新配额重选）
+func _on_package_switch(pid: String):
+	if pid == _package_id:
+		return
+	_package_id = pid
+	var pkg: Dictionary = DeckData.HEAL_PACKAGES[pid]
+	var new_draft: Array = []
+	for tid in _draft:
+		if tid in ["heal_3", "heal_5"] or tid in DeckData.BUF_CARDS:
+			continue
+		new_draft.append(tid)
+	for tid in pkg.heal:
+		for _i in range(int(pkg.heal[tid])):
+			new_draft.append(tid)
+	_draft = new_draft
+	_flash_status("%s：%s" % [pkg.name, pkg.desc])
+	_refresh_edit()
 
 func _on_edit_confirm():
 	var v = DeckData.validate_deck(_draft, _package_id)

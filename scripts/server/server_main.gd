@@ -5,6 +5,7 @@ const MatchStateClass = preload("res://scripts/core/match_state.gd")
 const ModeData = preload("res://scripts/data/mode_data.gd")
 const DeckData = preload("res://scripts/data/deck_data.gd")
 const PORT = 17890
+const DECK_TIME = 90  # 自定义卡组配置超时（秒），超时自动使用默认卡组
 
 var _tcp_server: TCPServer = null
 var _peers: Array = []
@@ -59,6 +60,13 @@ func _process(_delta):
 		for room in _rooms:
 			if room.match != null:
 				room.match.check_timers()
+			# 自定义卡组配置超时：未上报的玩家自动使用默认卡组
+			if room.stage == "deck" and Time.get_ticks_msec() >= int(room.get("deck_deadline", 0)):
+				for i in range(room.decks.size()):
+					if room.decks[i].is_empty():
+						room.decks[i] = DeckData.default_deck()
+						log_msg("P%d 配置超时，使用默认卡组" % i)
+				_try_start_deck(room)
 
 func _handle_message(peer_idx: int, raw: String):
 	var data = JSON.parse_string(raw)
@@ -186,11 +194,12 @@ func _after_bp(room):
 	var chars = room.match.bp.get_start_chars()
 	var bf = room.match.bp._bp_first
 	if room.mode == "custom_deck":
-		# 自定义卡组：等双方 deck_ready（客户端跳配置环节选卡组）
+		# 自定义卡组：等双方 deck_ready（客户端跳配置环节选卡组），90 秒超时自动默认
 		room.stage = "deck"
 		room.decks = [{}, {}]
 		room.bp_chars = chars
 		room.bp_first = bf
+		room.deck_deadline = Time.get_ticks_msec() + DECK_TIME * 1000
 		_broadcast_to_room(room, {"t": "deck_config", "chars": chars, "first": bf})
 		log_msg("BP完成，等待双方卡组 P1=%s P2=%s" % [chars[0], chars[1]])
 		return
@@ -213,6 +222,10 @@ func _on_deck_ready(peer_idx: int, data: Dictionary):
 		return
 	room.decks[peer.player_index] = cards
 	log_msg("P%d 卡组就绪（%d张，套餐%s）" % [peer.player_index, cards.size(), pkg])
+	_try_start_deck(room)
+
+# 双方卡组就绪则开战（deck_ready 上报与超时兜底共用）
+func _try_start_deck(room):
 	if room.decks[0].is_empty() or room.decks[1].is_empty():
 		return
 	var chars = room.bp_chars

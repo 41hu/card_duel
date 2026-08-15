@@ -147,7 +147,7 @@ func _setup_match(char_ids: Array, bp_first: int, custom_decks: Array, independe
 	game_result = {}
 	stats = []
 	for i in range(n):
-		stats.append({"damage_dealt": 0, "damage_taken": 0, "damage_from_attack": 0, "damage_from_trap": 0, "damage_from_dot": 0, "heal_total": 0, "moves": 0, "responses": 0, "resurrected": 0, "cards_played": {}, "card_total": 0, "blocked_dmg": 0, "weapons_used": {}})
+		stats.append({"damage_dealt": 0, "damage_taken": 0, "damage_from_attack": 0, "damage_from_trap": 0, "damage_from_dot": 0, "heal_total": 0, "moves": 0, "responses": 0, "resurrected": 0, "cards_played": {}, "card_total": 0, "blocked_dmg": 0, "weapons_used": {}, "max_hit": 0})
 	_action_deadline = 0
 	_discard_deadline = 0
 	_moved_to_adjacent_this_turn = false
@@ -594,6 +594,9 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 			formula += "-%d" % (before_skill - final_damage)
 		# 对战统计：伤害（来源=攻击）
 		stats[attacker_idx]["damage_dealt"] += final_damage
+		# 单次最大伤害（致命一击称号判定）
+		if final_damage > stats[attacker_idx]["max_hit"]:
+			stats[attacker_idx]["max_hit"] = final_damage
 		stats[defender_idx]["damage_taken"] += final_damage
 		stats[defender_idx]["damage_from_attack"] += final_damage
 		var attacker_name = Config.char_name(players[attacker_idx].char_id)
@@ -893,7 +896,7 @@ func _calc_titles(player_idx: int, is_winner: bool) -> Array:
 	var groups := {
 		"dmg": [], "taken": [], "resurrect": [], "moves": [],
 		"responses": [], "hp_self": [], "turns": [],
-		"weapons": [], "blocked": [],
+		"weapons": [], "blocked": [], "max_hit": [], "perfect": [],
 	}
 	if is_winner:
 		# 胜者专属
@@ -915,6 +918,11 @@ func _calc_titles(player_idx: int, is_winner: bool) -> Array:
 	if w["responses"] >= 15: groups["responses"].append("坚守阵地")
 	if w["moves"] > 10: groups["moves"].append("马拉松冠军")
 	if w["damage_dealt"] >= 30: groups["dmg"].append("火力压制")
+	if w["max_hit"] > 15: groups["max_hit"].append("致命一击")
+	# 完美形态：游戏结束时三项数值面板均 > 6
+	var pp = players[player_idx]
+	if pp.near_power > 6 and pp.range_power > 6 and pp.magic_power > 6:
+		groups["perfect"].append("完美形态")
 	var titles: Array = []
 	for g in groups:
 		if not groups[g].is_empty():

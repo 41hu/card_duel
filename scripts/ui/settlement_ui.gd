@@ -11,7 +11,6 @@ const _TITLE_CONDITIONS := {
 	"耐杀王": "本局承受伤害 ≥ 50",
 	"不死鸟": "本局复活 ≥ 2 次",
 	"险胜": "取胜时自身血量 < 5 点",
-	"碾压": "取胜时对手剩余 HP < 10",
 	"征服者": "获得胜利（默认称号）",
 	"出师不利": "对敌人造成 0 点伤害且战败",
 	"负隅顽抗": "战败且本局复活 ≥ 2 次",
@@ -29,14 +28,14 @@ const _TITLE_CONDITIONS := {
 const _TITLE_TIERS := {
 	"完美击杀": "gold", "毁灭之王": "gold", "耐杀王": "gold", "不死鸟": "gold",
 	"出师不利": "gold", "负隅顽抗": "gold", "武器专家": "gold", "战术大师": "gold",
-	"险胜": "blue", "碾压": "blue", "虽败犹荣": "blue", "伤痕累累": "blue", "苦战": "blue",
+	"险胜": "blue", "虽败犹荣": "blue", "伤痕累累": "blue", "苦战": "blue",
 	"坚守阵地": "blue", "马拉松冠军": "blue", "火力压制": "blue",
 	"征服者": "white",
 }
 
 @onready var title_label = $Title
-@onready var title_row: HBoxContainer = $TitleBox/TitleRow
-@onready var loser_row: HBoxContainer = $TitleBox/LoserRow
+@onready var title_row: WrapContainer = $TitleBox/TitleRow
+@onready var loser_row: WrapContainer = $TitleBox/LoserRow
 @onready var cond_label: Label = $TitleBox/CondLabel
 @onready var stat_cards: Array = [
 	$StatsScroll/StatsRow/P0Card,
@@ -111,7 +110,7 @@ func _show_title_condition(cond: String):
 
 # 称号徽章横排：按难度分级着色（gold=金色大框最难 / blue=蓝色框 / white=白色框最易）
 # 每个徽章可点击/悬停查看达成条件；第一个为最亮眼主称号
-func _refresh_title_row(row: HBoxContainer, titles: Array):
+func _refresh_title_row(row: Container, titles: Array):
 	for c in row.get_children():
 		if c is Button:
 			row.remove_child(c)

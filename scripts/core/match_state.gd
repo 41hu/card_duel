@@ -892,7 +892,7 @@ func _calc_titles(player_idx: int, is_winner: bool) -> Array:
 	var w = stats[player_idx]
 	var groups := {
 		"dmg": [], "taken": [], "resurrect": [], "moves": [],
-		"responses": [], "hp_self": [], "hp_opp": [], "turns": [],
+		"responses": [], "hp_self": [], "turns": [],
 		"weapons": [], "blocked": [],
 	}
 	if is_winner:
@@ -902,7 +902,6 @@ func _calc_titles(player_idx: int, is_winner: bool) -> Array:
 		if w["damage_taken"] >= 50: groups["taken"].append("耐杀王")
 		if w["resurrected"] >= 2: groups["resurrect"].append("不死鸟")
 		if players[player_idx].hp < 5: groups["hp_self"].append("险胜")
-		if players.size() == 2 and players[1 - player_idx].hp < 10: groups["hp_opp"].append("碾压")
 	else:
 		# 败者专属
 		if w["damage_dealt"] == 0: groups["dmg"].append("出师不利")
@@ -920,7 +919,8 @@ func _calc_titles(player_idx: int, is_winner: bool) -> Array:
 	for g in groups:
 		if not groups[g].is_empty():
 			titles.append(groups[g][0])
-	if is_winner and titles.is_empty():
+	# 征服者：胜利必得（放最后，白色档最易）
+	if is_winner:
 		titles.append("征服者")
 	return titles
 

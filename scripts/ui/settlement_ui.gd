@@ -6,12 +6,11 @@ const Style = preload("res://scripts/theme/style_const.gd")
 # 获胜称号 → 获得条件（与 match_state._calc_titles 的判定一致）
 # 可同时获得多个：满足条件全部计入，第一个为最亮眼主称号
 const _TITLE_CONDITIONS := {
-	"无伤传说": "全程未受到任何伤害",
-	"毁灭之王": "本局造成伤害 ≥ 40",
-	"回春圣手": "本局恢复血量 > 25",
-	"不死凤凰": "本局复活 ≥ 2 次",
+	"完美击杀": "全程未受到任何伤害",
+	"灭世者": "本局造成伤害 ≥ 45",
+	"九命猫妖": "本局复活 ≥ 2 次",
 	"马拉松冠军": "本局位移 > 10 格（含移动卡/威慑/吸引/暗影步等所有位移）",
-	"耐杀王": "本局承受伤害 > 50",
+	"耐杀王": "本局承受伤害 ≥ 50",
 	"征服者": "获得胜利（默认称号）",
 }
 
@@ -111,14 +110,14 @@ func _refresh_title_label(titles: Array):
 		sb.content_margin_top = 6.0
 		sb.content_margin_bottom = 6.0
 		if i == 0:
-			# 主称号：金色
+			# 主称号：金色大徽章
 			sb.bg_color = Color(0.42, 0.33, 0.06, 1)
 			sb.border_color = Color(1, 0.85, 0.3, 1)
 			b.add_theme_font_size_override("font_size", Style.fs(40))
 		else:
-			# 其余称号：蓝色
+			# 其余称号：金框小徽章
 			sb.bg_color = Color(0.1, 0.16, 0.28, 1)
-			sb.border_color = Color(0.35, 0.55, 0.9, 1)
+			sb.border_color = Color(1, 0.85, 0.3, 1)
 			b.add_theme_font_size_override("font_size", Style.fs(26))
 		for state in ["normal", "hover", "pressed", "focus"]:
 			b.add_theme_stylebox_override(state, sb)

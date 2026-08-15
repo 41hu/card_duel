@@ -878,12 +878,11 @@ func _player_names() -> Array:
 func _calc_titles(winner_idx: int) -> Array:
 	var w = stats[winner_idx]
 	var titles = []
-	if w["damage_taken"] == 0: titles.append("无伤传说")
-	if w["damage_dealt"] >= 40: titles.append("毁灭之王")
-	if w["heal_total"] > 25: titles.append("回春圣手")
-	if w["resurrected"] >= 2: titles.append("不死凤凰")
+	if w["damage_taken"] == 0: titles.append("完美击杀")
+	if w["damage_dealt"] >= 45: titles.append("灭世者")
+	if w["resurrected"] >= 2: titles.append("九命猫妖")
 	if w["moves"] > 10: titles.append("马拉松冠军")
-	if w["damage_taken"] > 50: titles.append("耐杀王")
+	if w["damage_taken"] >= 50: titles.append("耐杀王")
 	if titles.is_empty(): titles.append("征服者")
 	return titles
 

@@ -511,6 +511,13 @@ func _begin_attack_segment(player_idx: int) -> Dictionary:
 		state_changed.emit(get_full_state())
 		return {success=true, msg="被防具挡下"}
 	if attacker_last_damage <= 0:
+		# 防具把伤害减半到 0：防具本次已生效（armor_hit=true），照常消耗耐久，
+		# 否则 1 伤害攻击可以无限白嫖防具减半；同时清空穿甲标记防残留
+		if _armor_hit:
+			combat.consume_armor(_pending_target)
+			add_log(player_idx, "防具减免伤害至0")
+		_armor_hit = false
+		_armor_pierce = false
 		char_skills.on_attack_failed_no_damage(player_idx, attacker_last_type)
 		# 本段 0 伤害：跳过本段响应，直接尝试下一段；末段仍 0 则整卡无效
 		if pending_attack_segment < pending_attack_segments:

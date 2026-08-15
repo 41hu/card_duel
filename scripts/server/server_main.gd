@@ -114,6 +114,8 @@ func _join_room(peer_idx: int, data: Dictionary):
 	if room == null: _send_to(peer_idx, {"t":"error","msg":"房间不存在"}); return
 	if room.peer_indices.size() >= room.max_players: _send_to(peer_idx, {"t":"error","msg":"房间已满"}); return
 	var pidx = room.peer_indices.size()  # 动态分配玩家序号（2 人房 0/1，4 人房 0-3）
+	if room.ready.size() <= pidx:
+		room.ready.append(false)  # 有人退出压缩过 ready 数组，补位时扩展保持下标对齐
 	peer.peer_name = data.get("player_name", "Player%d" % (pidx + 1)); peer.room_id = rid; peer.player_index = pidx; peer.ready = false
 	room.peer_indices.append(peer_idx); room.peer_names.append(peer.peer_name)
 	# 广播给所有房内玩家（含新加入者），保持人数/序号同步
@@ -130,6 +132,9 @@ func _on_ready(peer_idx: int):
 	for r in room.ready:
 		if not r: all_ready = false; break
 	if not all_ready: return
+	# 防重复 ready 重开 BP/对局（重复触发会重置 match 状态），以及人数未满时继续等人补位
+	if room.stage != "waiting": return
+	if room.peer_indices.size() < room.max_players: return
 	if room.max_players > 2:
 		_start_ffa(room)  # 4 人混战：直接随机角色开局（不走 BP）
 	else:
@@ -196,7 +201,7 @@ func _after_bp(room):
 	if room.mode == "custom_deck":
 		# 自定义卡组：等双方 deck_ready（客户端跳配置环节选卡组），90 秒超时自动默认
 		room.stage = "deck"
-		room.decks = [{}, {}]
+		room.decks = [[], []]  # 与 deck_ready 赋值的数组类型一致
 		room.bp_chars = chars
 		room.bp_first = bf
 		room.deck_deadline = Time.get_ticks_msec() + DECK_TIME * 1000
@@ -327,10 +332,13 @@ func _on_game_ended(result: Dictionary, room):
 
 func _send_to(peer_idx: int, msg: Dictionary):
 	var peer = _peers[peer_idx]
+	if peer.get("dead", false): return  # 断线 peer 保留槽位（索引对齐），但不再发送
 	peer.ws.put_packet(JSON.stringify(msg).to_utf8_buffer())
 
 func _broadcast_to_room(room, msg: Dictionary):
-	for p_idx in room.peer_indices: _send_to(p_idx, msg)
+	for p_idx in room.peer_indices:
+		if _peers[p_idx].get("dead", false): continue  # 4人房断线者仍占槽位，跳过无效发送
+		_send_to(p_idx, msg)
 
 func _on_peer_disconnected(peer_idx: int):
 	var peer = _peers[peer_idx]; var room = _find_room(peer.room_id)
@@ -350,22 +358,31 @@ func _on_peer_disconnected(peer_idx: int):
 				log_msg("P%d断线淘汰 房间%s" % [idx, room.id])
 				room.match._check_multi_winner()
 				if room.match.phase != Config.Phase.GAME_OVER:
-					room.match.state_changed.emit(room.match.get_full_state())
+					# 断线者正轮到出牌时立即换人，否则对局软锁到出牌超时（60s）
+					if room.match.current_player == idx \
+							and room.match.phase == Config.Phase.PLAYER_TURN:
+						room.match._advance_to_next_player()
+					else:
+						room.match.state_changed.emit(room.match.get_full_state())
 			return
-		# 4 人混战：等待/准备阶段断线 → 移除该玩家，房间继续等人
+		# 4 人混战：等待/准备阶段断线 → 移除该玩家并重排存活者 player_index，
+		# 房间继续等人补位（下标与 player_index 保持一致，防止新玩家撞号/幽灵位）
 		if room.max_players > 2 and room.stage != "game":
 			var idx = peer.player_index
 			room.peer_indices.erase(peer_idx)
 			if idx >= 0 and idx < room.peer_names.size():
 				room.peer_names.remove_at(idx)
-				room.ready[idx] = false
+				room.ready.remove_at(idx)  # 压缩数组：下标即 player_index 的不变量
 			peer.room_id = ""; peer.player_index = -1; peer.ready = false
 			if room.peer_indices.is_empty():
 				_rooms.erase(room)
 				return
+			# 重排存活者 player_index 并广播（客户端以 room_joined 里的 player_index 为准）
+			for i in range(room.peer_indices.size()):
+				_peers[room.peer_indices[i]].player_index = i
 			for p_idx in room.peer_indices:
 				_send_to(p_idx, {"t":"room_joined","room_id":room.id,"player_index":_peers[p_idx].player_index,"players":room.peer_names,"mode":room.mode})
-			log_msg("P%d离开房间%s（剩%d人）" % [idx, room.id, room.peer_indices.size()])
+			log_msg("P%d离开房间%s（剩%d人，索引已重排）" % [idx, room.id, room.peer_indices.size()])
 			return
 		# BP/配置卡组阶段断线（2人房，流程已启动但未开局，match.players 为空）：
 		# 存活方直接获胜结算（对手逃跑），否则客户端会卡在 BP/配置页一直等对手
@@ -387,8 +404,11 @@ func _on_peer_disconnected(peer_idx: int):
 					log_msg("配置阶段P%d断开，P%d获胜 房间%s解散" % [peer.player_index, winner, room.id])
 			_rooms.erase(room)
 			return
-		# 等待阶段断线（对局未开始，match 为 null）：清理房间，不发结算
+		# 等待阶段断线（对局未开始，match 为 null）：通知存活方对手已离开（否则客户端卡在等待界面）
 		if room.match == null or room.match.players.is_empty():
+			for p_idx in room.peer_indices:
+				if p_idx != peer_idx:
+					_send_to(p_idx, {"t":"error","msg":"对手已离开房间"})
 			_rooms.erase(room)
 			log_msg("对局未开始P%d断开，房间%s解散" % [peer.player_index, room.id])
 			return

@@ -355,6 +355,11 @@ func disconnect_from_server():
 	bp_chars = []
 	bp_first = -1
 	last_game_result = {}
+	# 教程模式必须复位：否则教程中退出后 tutorial_mode 残留，再开 AI/混战局会被误挂教程
+	tutorial_mode = false
+	# 断开即清零：防止上一局状态缓存串到下一局
+	battle_state_cache = {}
+	bp_state_cache = {}
 	server_disconnected.emit()
 
 func get_connected() -> bool:

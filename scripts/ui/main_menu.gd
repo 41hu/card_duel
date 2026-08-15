@@ -199,7 +199,13 @@ func _on_join():
 	Network.join_room(rid, pname)
 
 func _on_connected(): status_label.text = "已连接"
-func _on_disconnected(): status_label.text = "断开连接"
+func _on_disconnected():
+	status_label.text = "断开连接"
+	# 恢复加入面板：掉线后加入按钮复位、清除残留的准备按钮
+	j_join_btn.visible = true
+	for c in join_panel.get_children():
+		if c is Button and "准备" in c.text:
+			c.queue_free()
 
 func _on_room_joined(room_id: String, _players: Array, mode: String):
 	var mode_name = ModeData.get_mode(mode).get("name", "标准模式")

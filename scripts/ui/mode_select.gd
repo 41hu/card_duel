@@ -40,6 +40,7 @@ var _server_input: LineEdit
 var _name_input: LineEdit
 # 连接中标志（防止重复/超时后继续）
 var _pending_connect: bool = false
+var _waiting_room: bool = false  # 已创建房间、正在等待对手（掉线时需恢复配置界面）
 
 func _ready():
 	Style.scale_node_fonts(self)
@@ -454,12 +455,19 @@ func _on_connect_ok():
 		_pending_connect = false
 		_connect_resolved.emit(true)
 
-func _on_connect_err(_msg: String):
+func _on_connect_err(msg: String):
 	if _pending_connect:
 		_pending_connect = false
 		_connect_resolved.emit(false)
+	else:
+		# 非连接阶段的错误（如服务端通知「对手已离开房间」）：显示并恢复界面
+		if _waiting_room:
+			_restore_from_waiting(msg)
+		else:
+			status_label.text = msg
 
 func _on_room_created(room_id: String, _mode: String):
+	_waiting_room = true
 	status_label.text = "房间号: %s  （%s）\n等待对手加入..." % [room_id, ModeData.get_mode(_selected_mode).name]
 	status_label.add_theme_color_override("font_color", Style.ME_GREEN)
 	# 隐藏配置/卡片，显示准备按钮
@@ -486,8 +494,25 @@ func _on_game_starting(data: Dictionary):
 		get_tree().change_scene_to_file("res://scenes/bp_scene.tscn")
 
 func _on_disconnected():
-	if is_instance_valid(self) and status_label != null:
+	if not is_instance_valid(self) or status_label == null:
+		return
+	if _waiting_room:
+		_restore_from_waiting("连接断开")
+	else:
 		status_label.text = "已断开连接"
+
+# 等待房间时掉线/对手离开：恢复配置界面（否则界面僵死在等待态）
+func _restore_from_waiting(msg: String):
+	_waiting_room = false
+	status_label.text = msg
+	status_label.add_theme_color_override("font_color", Style.ERROR_RED)
+	for c in config_box.get_children():
+		c.visible = true
+	action_btn.text = "开始对战"
+	action_btn.disabled = false
+	if action_btn.pressed.is_connected(_on_ready):
+		action_btn.pressed.disconnect(_on_ready)
+	action_btn.pressed.connect(_on_action)
 
 # ---------- 工具 ----------
 func _flash_status(text: String, color: Color):

@@ -105,8 +105,12 @@ func _on_game_ended(result: Dictionary):
 		stats_label.text = ""
 		detail_label.text = "对方已断开连接"
 	else:
-		var is_winner = (winner == _n().player_index)
-		if is_winner:
+		# 本地自我对战：双方都是玩家自己，无胜负之分，显示"对局结束"而非胜利/败北
+		var is_self_play = (LocalGame.game != null) and not LocalGame.ai_mode
+		if is_self_play:
+			title_label.text = "对局结束"
+			title_label.add_theme_color_override("font_color", Style.WIN_GOLD)
+		elif winner == _n().player_index:
 			title_label.text = "胜利！"
 			title_label.add_theme_color_override("font_color", Style.WIN_GOLD)
 		else:

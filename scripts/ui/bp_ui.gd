@@ -50,6 +50,11 @@ func _exit_tree():
 		Network.deck_config.disconnect(_on_deck_config)
 	if Network.server_disconnected.is_connected(_on_server_disconnected):
 		Network.server_disconnected.disconnect(_on_server_disconnected)
+	var n = _n()
+	if n.bp_state_updated.is_connected(_on_bp_state):
+		n.bp_state_updated.disconnect(_on_bp_state)
+	if n.state_updated.is_connected(_on_game_state):
+		n.state_updated.disconnect(_on_game_state)
 
 # 联机：BP 阶段对手断线 → 跳结算
 func _on_game_ended(r: Dictionary):

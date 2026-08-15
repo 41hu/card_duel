@@ -48,10 +48,14 @@ func _process(_delta):
 				_handle_packet(raw)
 
 		WebSocketPeer.STATE_CLOSED:
-			if _active:
-				_active = false
-				print("[Network] 连接关闭")
-				server_disconnected.emit()
+			if _socket != null:
+				# 先排空缓冲中的最后一包（如对手逃跑的 game_over 结算），再发断开
+				while _socket.get_available_packet_count() > 0:
+					_handle_packet(_socket.get_packet().get_string_from_utf8())
+				if _active:
+					_active = false
+					print("[Network] 连接关闭")
+					server_disconnected.emit()
 				_close()
 
 func connect_to_server(url: String = ""):
@@ -80,6 +84,13 @@ func _close():
 	_active = false
 	room_id = ""
 	player_index = -1
+	# 断开即清零：防止上一局数据串到下一局
+	# （deck_config_data 残留会让 deck_pick 把本地局误判为联机）
+	bp_state_cache = {}
+	battle_state_cache = {}
+	deck_config_data = {}
+	# 注意：last_game_result 不清空——排空缓冲包时刚写入的结算数据（对手逃跑判胜）
+	# 需要保留给结算页读取；它每次结算都会重写，不存在串局
 
 func get_connected() -> bool:
 	return _active
@@ -147,12 +158,12 @@ func _handle_packet(raw: String):
 
 	match msg_type:
 		"room_created":
-			room_id = data.room_id
+			room_id = str(data.get("room_id", ""))
 			player_index = 0
-			room_created.emit(data.room_id, str(data.get("mode", "classic")))
+			room_created.emit(str(data.get("room_id", "")), str(data.get("mode", "classic")))
 		"room_joined":
-			player_index = data.player_index
-			room_joined.emit(data.room_id, data.players, str(data.get("mode", "classic")))
+			player_index = int(data.get("player_index", -1))
+			room_joined.emit(str(data.get("room_id", "")), data.get("players", []), str(data.get("mode", "classic")))
 		"game_starting":
 			game_starting.emit(data)
 		"bp_state":
@@ -161,7 +172,7 @@ func _handle_packet(raw: String):
 			if data.has("phase"):
 				state_updated.emit(data)
 		"weapon_prompt":
-			weapon_prompt.emit(data.weapon)
+			weapon_prompt.emit(data.get("weapon", {}))
 		"response_needed":
 			response_needed.emit(data)
 		"game_over":

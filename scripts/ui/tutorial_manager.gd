@@ -72,7 +72,8 @@ func _on_steps_finished():
 		_exit_tutorial()
 	)
 	vb.add_child(back)
-	get_tree().root.add_child(c)
+	# 挂到 battle_ui 下：随场景销毁自动释放
+	battle.add_child(c)
 
 # ---------------- 引导 UI ----------------
 func _build_guide_ui():
@@ -89,7 +90,9 @@ func _build_guide_ui():
 	_guide_label.anchor_left = 0.5; _guide_label.anchor_right = 0.5
 	_guide_label.offset_left = -450; _guide_label.offset_right = 450
 	_guide_label.offset_top = 110; _guide_label.offset_bottom = 350
-	get_tree().root.add_child(_guide_label)
+	# 挂到 battle_ui 下（而非 get_tree().root）：场景销毁时自动释放，
+	# 防止教程中非正常退出（双击返回等）导致横幅/按钮孤儿残留到主菜单
+	battle.add_child(_guide_label)
 
 	_skip_btn = Button.new()
 	_skip_btn.text = "跳过教程"
@@ -99,7 +102,7 @@ func _build_guide_ui():
 	_skip_btn.offset_left = 24; _skip_btn.offset_right = Style.fs(200)
 	_skip_btn.offset_top = 24; _skip_btn.offset_bottom = Style.fs(94)
 	_skip_btn.pressed.connect(func(): _exit_tutorial())
-	get_tree().root.add_child(_skip_btn)
+	battle.add_child(_skip_btn)
 
 func _exit_tutorial():
 	_cleanup()
@@ -117,8 +120,8 @@ func _cleanup():
 func _enter_hunter_segment():
 	_hunter_done = true
 	_finish_called = false  # 猎人段完成时允许再次收尾（直接退出）
-	# 清理可能残留的分段弹窗（防叠屏挡点击）
-	for old in get_tree().root.get_children():
+	# 清理可能残留的分段弹窗（防叠屏挡点击；现在挂在 battle_ui 下）
+	for old in battle.get_children():
 		if old.name == "SegmentChoice":
 			old.queue_free()
 	_steps = _hunter_steps

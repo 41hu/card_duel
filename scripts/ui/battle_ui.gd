@@ -95,6 +95,25 @@ func _ready():
 		add_child(tm)
 		tutorial = tm
 
+func _exit_tree():
+	# 与其它场景风格对齐：显式断开全部信号，防未来节点复用累积重复连接
+	var n = _n()
+	if n.state_updated.is_connected(_on_state_updated):
+		n.state_updated.disconnect(_on_state_updated)
+	if n.response_needed.is_connected(_on_response_needed):
+		n.response_needed.disconnect(_on_response_needed)
+	if n.hand_revealed.is_connected(_on_hand_revealed):
+		n.hand_revealed.disconnect(_on_hand_revealed)
+	if n.weapon_prompt.is_connected(_on_weapon_prompt):
+		n.weapon_prompt.disconnect(_on_weapon_prompt)
+	if n.game_ended.is_connected(_on_game_ended):
+		n.game_ended.disconnect(_on_game_ended)
+	if n.network_error.is_connected(_on_error):
+		n.network_error.disconnect(_on_error)
+	if Network.server_disconnected.is_connected(_on_server_disconnected):
+		Network.server_disconnected.disconnect(_on_server_disconnected)
+	# 教程控制器随场景释放（其引导横幅/跳过按钮已挂在本节点下）
+
 # 自己面板（左下角，动态创建，替代原场景 MeInfo 固定节点）
 func _create_self_panel():
 	var pc: PanelContainer = InfoPanel.new()

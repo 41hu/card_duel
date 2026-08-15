@@ -7,15 +7,36 @@ const Style = preload("res://scripts/theme/style_const.gd")
 # 可同时获得多个：满足条件全部计入，第一个为最亮眼主称号
 const _TITLE_CONDITIONS := {
 	"完美击杀": "全程未受到任何伤害",
-	"灭世者": "本局造成伤害 ≥ 45",
-	"九命猫妖": "本局复活 ≥ 2 次",
-	"马拉松冠军": "本局位移 > 10 格（含移动卡/威慑/吸引/暗影步等所有位移）",
+	"毁灭之王": "本局造成伤害 ≥ 45",
 	"耐杀王": "本局承受伤害 ≥ 50",
+	"不死鸟": "本局复活 ≥ 2 次",
+	"险胜": "取胜时自身血量 < 5 点",
+	"碾压": "取胜时对手剩余 HP < 10",
 	"征服者": "获得胜利（默认称号）",
+	"出师不利": "对敌人造成 0 点伤害且战败",
+	"负隅顽抗": "战败且本局复活 ≥ 2 次",
+	"虽败犹荣": "造成伤害 > 胜者造成的伤害",
+	"伤痕累累": "承受伤害 ≥ 50",
+	"苦战": "对局回合数 > 20",
+	"武器专家": "本局装备过 6 把不同的武器",
+	"战术大师": "牵制/魔法/满耐久护甲完全抵挡的伤害 > 45",
+	"坚守阵地": "本局响应 ≥ 15 次（格挡/牵制/闪避）",
+	"马拉松冠军": "本局位移 > 10 格（含移动卡/威慑/吸引/暗影步等所有位移）",
+	"火力压制": "本局造成伤害 ≥ 30",
+}
+
+# 称号难度分级 → 徽章样式（gold=金框大号最难 / blue=蓝框 / white=白框最易）
+const _TITLE_TIERS := {
+	"完美击杀": "gold", "毁灭之王": "gold", "耐杀王": "gold", "不死鸟": "gold",
+	"出师不利": "gold", "负隅顽抗": "gold", "武器专家": "gold", "战术大师": "gold",
+	"险胜": "blue", "碾压": "blue", "虽败犹荣": "blue", "伤痕累累": "blue", "苦战": "blue",
+	"坚守阵地": "blue", "马拉松冠军": "blue", "火力压制": "blue",
+	"征服者": "white",
 }
 
 @onready var title_label = $Title
 @onready var title_row: HBoxContainer = $TitleBox/TitleRow
+@onready var loser_row: HBoxContainer = $TitleBox/LoserRow
 @onready var cond_label: Label = $TitleBox/CondLabel
 @onready var stat_cards: Array = [
 	$StatsScroll/StatsRow/P0Card,
@@ -88,50 +109,55 @@ func _show_title_condition(cond: String):
 	cond_label.text = "条件：%s" % cond
 	cond_label.visible = true
 
-# 称号徽章横排：主称号（第一个，判定顺序首位）金色大徽章，其余蓝色小徽章
-# 每个徽章可点击/悬停查看达成条件
-func _refresh_title_label(titles: Array):
-	for c in title_row.get_children():
-		title_row.remove_child(c)
-		c.queue_free()
-	_current_title = str(titles[0])
-	_current_titles = titles
-	cond_label.visible = false
-	for i in range(titles.size()):
-		var t := str(titles[i])
-		var cond: String = _TITLE_CONDITIONS.get(t, "")
-		var b := Button.new()
-		b.text = t
-		var sb := StyleBoxFlat.new()
-		sb.set_corner_radius_all(14)
-		sb.set_border_width_all(2)
-		sb.content_margin_left = 20.0
-		sb.content_margin_right = 20.0
-		sb.content_margin_top = 6.0
-		sb.content_margin_bottom = 6.0
-		if i == 0:
-			# 主称号：金色大徽章
+# 称号徽章横排：按难度分级着色（gold=金色大框最难 / blue=蓝色框 / white=白色框最易）
+# 每个徽章可点击/悬停查看达成条件；第一个为最亮眼主称号
+func _refresh_title_row(row: HBoxContainer, titles: Array):
+	for c in row.get_children():
+		if c is Button:
+			row.remove_child(c)
+			c.queue_free()
+	for t in titles:
+		row.add_child(_make_title_badge(str(t)))
+
+func _make_title_badge(title: String) -> Button:
+	var cond: String = _TITLE_CONDITIONS.get(title, "")
+	var tier: String = _TITLE_TIERS.get(title, "blue")
+	var b := Button.new()
+	b.text = title
+	var sb := StyleBoxFlat.new()
+	sb.set_corner_radius_all(14)
+	sb.set_border_width_all(2)
+	sb.content_margin_left = 20.0
+	sb.content_margin_right = 20.0
+	sb.content_margin_top = 6.0
+	sb.content_margin_bottom = 6.0
+	match tier:
+		"gold":
 			sb.bg_color = Color(0.42, 0.33, 0.06, 1)
 			sb.border_color = Color(1, 0.85, 0.3, 1)
 			b.add_theme_font_size_override("font_size", Style.fs(40))
-		else:
-			# 其余称号：金框小徽章
+		"blue":
 			sb.bg_color = Color(0.1, 0.16, 0.28, 1)
-			sb.border_color = Color(1, 0.85, 0.3, 1)
+			sb.border_color = Color(0.35, 0.55, 0.9, 1)
 			b.add_theme_font_size_override("font_size", Style.fs(26))
-		for state in ["normal", "hover", "pressed", "focus"]:
-			b.add_theme_stylebox_override(state, sb)
-		b.tooltip_text = "条件：%s" % cond if cond != "" else ""
-		if cond != "":
-			b.pressed.connect(_show_title_condition.bind(cond))
-		title_row.add_child(b)
+		"white":
+			sb.bg_color = Color(0.22, 0.24, 0.3, 1)
+			sb.border_color = Color(1, 1, 1, 0.85)
+			b.add_theme_font_size_override("font_size", Style.fs(22))
+	for state in ["normal", "hover", "pressed", "focus"]:
+		b.add_theme_stylebox_override(state, sb)
+	b.tooltip_text = "条件：%s" % cond if cond != "" else ""
+	if cond != "":
+		b.pressed.connect(_show_title_condition.bind(cond))
+	return b
 
 func _on_game_ended(result: Dictionary):
 	var winner = result.get("winner", -1)
 	if winner == -1:
 		title_label.text = "对手断线"
 		title_label.add_theme_color_override("font_color", Style.WIN_GOLD)
-		_clear_title_row()
+		_clear_title_rows()
+		loser_row.visible = false
 		_current_title = ""
 		_current_titles = []
 		for l in stat_labels:
@@ -152,23 +178,30 @@ func _on_game_ended(result: Dictionary):
 		var titles: Array = result.get("titles", [])
 		if titles.is_empty() and result.get("title", "") != "":
 			titles = [result.get("title", "")]  # 兼容旧版结算数据
+		var titles_loser: Array = result.get("titles_loser", [])
 		var names = result.get("names", ["P1", "P2"])
+		_clear_title_rows()
 		if not titles.is_empty():
 			_current_titles = titles
-			_refresh_title_label(titles)
+			_current_title = str(titles[0])
+			_refresh_title_row(title_row, titles)
 		else:
 			_current_titles = []
 			_current_title = ""
-			_clear_title_row()
+		loser_row.visible = not titles_loser.is_empty()
+		if not titles_loser.is_empty():
+			_refresh_title_row(loser_row, titles_loser)
 		_fill_stats_panels(result.get("stats", []), names, winner)
 		# 优先显示玩家名（联机为创建房间时输入的名字），否则回退"玩家 N"
 		var wname = names[winner] if winner < names.size() else "玩家 %d" % (winner + 1)
 		detail_label.text = "%s 获胜" % wname
 
-func _clear_title_row():
-	for c in title_row.get_children():
-		title_row.remove_child(c)
-		c.queue_free()
+func _clear_title_rows():
+	for row in [title_row, loser_row]:
+		for c in row.get_children():
+			if c is Button:
+				row.remove_child(c)
+				c.queue_free()
 	cond_label.visible = false
 
 # 左右分栏统计卡片：各玩家一张，顶部名字（胜方金色），下方竖排数据
@@ -238,8 +271,10 @@ func _export_record(result: Dictionary) -> String:
 	var titles: Array = result.get("titles", [])
 	if titles.is_empty() and result.get("title", "") != "":
 		titles = [result.get("title", "")]
-	lines.append("胜者: %s（%s）| 称号: %s" % [
-		names[w] if w >= 0 and w < names.size() else "?", result.get("reason", ""), "、".join(titles)])
+	var tloser: Array = result.get("titles_loser", [])
+	var loser_str = "、".join(tloser) if not tloser.is_empty() else "无"
+	lines.append("胜者: %s（%s）| 称号: %s | 败者称号: %s" % [
+		names[w] if w >= 0 and w < names.size() else "?", result.get("reason", ""), "、".join(titles), loser_str])
 	# 导出路径：编辑器写项目目录（方便直接取文件）；导出平台（APK/PC 打包）res:// 只读，
 	# 写 user:// 应用数据目录；移动端另复制到剪贴板（文件路径用户不可见，粘贴即可分享）
 	var is_editor = OS.has_feature("editor")

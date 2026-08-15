@@ -22,6 +22,8 @@ func equip_weapon(player_idx: int, weapon_id: String):
 	if not player.weapon.is_empty():
 		match_ref.used_weapon_ids.erase(player.weapon.id)
 	player.weapon = {id=weapon_id, data=Config.WEAPON_DB[weapon_id]}
+	# 对战统计：记录装备过的武器（去重集合，武器专家称号判定）
+	match_ref.stats[player_idx]["weapons_used"][weapon_id] = true
 
 func discard_weapon_offer(weapon_id: String):
 	# 放弃幻化武器，放回池子

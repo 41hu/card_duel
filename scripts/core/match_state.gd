@@ -147,7 +147,7 @@ func _setup_match(char_ids: Array, bp_first: int, custom_decks: Array, independe
 	game_result = {}
 	stats = []
 	for i in range(n):
-		stats.append({"damage_dealt": 0, "damage_taken": 0, "damage_from_attack": 0, "damage_from_trap": 0, "damage_from_dot": 0, "heal_total": 0, "moves": 0, "responses": 0, "resurrected": 0, "cards_played": {}, "card_total": 0})
+		stats.append({"damage_dealt": 0, "damage_taken": 0, "damage_from_attack": 0, "damage_from_trap": 0, "damage_from_dot": 0, "heal_total": 0, "moves": 0, "responses": 0, "resurrected": 0, "cards_played": {}, "card_total": 0, "blocked_dmg": 0, "weapons_used": {}})
 	_action_deadline = 0
 	_discard_deadline = 0
 	_moved_to_adjacent_this_turn = false
@@ -507,6 +507,8 @@ func _begin_attack_segment(player_idx: int) -> Dictionary:
 		else:
 			combat.consume_armor(opp)
 		_armor_pierce = false
+		# 满耐久护甲完全免疫：该击伤害计入"完全抵挡"统计（战术大师称号）
+		stats[opp]["blocked_dmg"] += attacker_last_damage
 		add_log(player_idx, "被防具挡下")
 		# 多段攻击：本段被免疫则继续下一段（防具耐久已消耗，下一段按减半结算）
 		if pending_attack_segment < pending_attack_segments:
@@ -556,8 +558,15 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 			var rname = Config.card_name(rr.get("response_card", ""))
 			match rr.effect:
 				"block": final_damage = floori(final_damage / 2.0); formula += "/2"; add_log(defender_idx, "用%s格挡" % rname)
-				"restrain": final_damage = max(0, final_damage - rr.value); formula += "-%d" % rr.value; add_log(defender_idx, "用%s牵制(-%d)" % [rname, rr.value])
-				"dodge": final_damage = 0; add_log(defender_idx, "用%s闪避" % rname)
+				"restrain":
+					final_damage = max(0, final_damage - rr.value); formula += "-%d" % rr.value; add_log(defender_idx, "用%s牵制(-%d)" % [rname, rr.value])
+					# 牵制完全抵挡（归零）：计入"完全抵挡"统计（战术大师称号）
+					if final_damage == 0:
+						stats[defender_idx]["blocked_dmg"] += attacker_last_damage
+				"dodge":
+					final_damage = 0; add_log(defender_idx, "用%s闪避" % rname)
+					# 闪避完全抵挡：计入"完全抵挡"统计（战术大师称号）
+					stats[defender_idx]["blocked_dmg"] += attacker_last_damage
 		else:
 			if respond: add_log(defender_idx, "无法响应")
 	if pending_attack_card == "freeze":
@@ -839,7 +848,8 @@ func _check_permanent_death(player_idx: int):
 			winner=winner, loser=player_idx, reason="permanent_death",
 			stats=stats.duplicate(),
 			names=_player_names(),
-			titles=_calc_titles(winner),
+			titles=_calc_titles(winner, true),
+			titles_loser=_calc_titles(player_idx, false),
 			battle_record=battle_record.duplicate(),
 			action_log=action_log.duplicate(),
 		}
@@ -860,7 +870,8 @@ func _check_multi_winner():
 			winner=winner, loser=-1, reason="last_alive",
 			stats=stats.duplicate(),
 			names=_player_names(),
-			titles=_calc_titles(winner) if winner >= 0 else [],
+			titles=_calc_titles(winner, true) if winner >= 0 else [],
+			titles_loser=[],
 			battle_record=battle_record.duplicate(),
 			action_log=action_log.duplicate(),
 		}
@@ -873,17 +884,44 @@ func _player_names() -> Array:
 		names.append(Config.char_name(p.char_id))
 	return names
 
-# 获胜者称号：可同时获得多个（满足条件全部计入），第一个为最亮眼主称号
-# 统计口径：伤害/回复/复活/位移（含威慑吸引暗影步等所有位移来源）/承受伤害
-func _calc_titles(winner_idx: int) -> Array:
-	var w = stats[winner_idx]
-	var titles = []
-	if w["damage_taken"] == 0: titles.append("完美击杀")
-	if w["damage_dealt"] >= 45: titles.append("灭世者")
-	if w["resurrected"] >= 2: titles.append("九命猫妖")
-	if w["moves"] > 10: titles.append("马拉松冠军")
-	if w["damage_taken"] >= 50: titles.append("耐杀王")
-	if titles.is_empty(): titles.append("征服者")
+# 称号判定（is_winner: 胜者/败者归属），可同时获得多个，第一个为最亮眼主称号
+# 同条件类型互斥：同组内按定义顺序只保留第一个（定义顺序=条件更苛刻的优先），
+# 例如胜者达成毁灭之王（伤害≥45）则不再给火力压制（伤害≥30）
+# 称号难度分级（UI 徽章颜色）：gold=金色大框（最难）blue=蓝色框 white=白色框（最易）
+func _calc_titles(player_idx: int, is_winner: bool) -> Array:
+	var w = stats[player_idx]
+	var groups := {
+		"dmg": [], "taken": [], "resurrect": [], "moves": [],
+		"responses": [], "hp_self": [], "hp_opp": [], "turns": [],
+		"weapons": [], "blocked": [],
+	}
+	if is_winner:
+		# 胜者专属
+		if w["damage_taken"] == 0: groups["taken"].append("完美击杀")
+		if w["damage_dealt"] >= 45: groups["dmg"].append("毁灭之王")
+		if w["damage_taken"] >= 50: groups["taken"].append("耐杀王")
+		if w["resurrected"] >= 2: groups["resurrect"].append("不死鸟")
+		if players[player_idx].hp < 5: groups["hp_self"].append("险胜")
+		if players.size() == 2 and players[1 - player_idx].hp < 10: groups["hp_opp"].append("碾压")
+	else:
+		# 败者专属
+		if w["damage_dealt"] == 0: groups["dmg"].append("出师不利")
+		if w["resurrected"] >= 2: groups["resurrect"].append("负隅顽抗")
+		if w["damage_dealt"] > stats[1 - player_idx]["damage_dealt"]: groups["dmg"].append("虽败犹荣")
+		if w["damage_taken"] >= 50: groups["taken"].append("伤痕累累")
+		if turn_number > 20: groups["turns"].append("苦战")
+	# 通用（不论胜负）
+	if w["weapons_used"].size() >= 6: groups["weapons"].append("武器专家")
+	if w["blocked_dmg"] > 45: groups["blocked"].append("战术大师")
+	if w["responses"] >= 15: groups["responses"].append("坚守阵地")
+	if w["moves"] > 10: groups["moves"].append("马拉松冠军")
+	if w["damage_dealt"] >= 30: groups["dmg"].append("火力压制")
+	var titles: Array = []
+	for g in groups:
+		if not groups[g].is_empty():
+			titles.append(groups[g][0])
+	if is_winner and titles.is_empty():
+		titles.append("征服者")
 	return titles
 
 func check_timers():

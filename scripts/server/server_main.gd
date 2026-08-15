@@ -424,7 +424,8 @@ func _on_peer_disconnected(peer_idx: int):
 					"stats": room.match.stats.duplicate(),
 					"names": room.peer_names.duplicate() if room.peer_names.size() >= 2 else [
 						Config.char_name(room.match.players[0].char_id), Config.char_name(room.match.players[1].char_id)],
-					"titles": room.match._calc_titles(winner),
+					"titles": room.match._calc_titles(winner, true),
+					"titles_loser": [],  # 对手断线：不给败者称号
 					"battle_record": room.match.battle_record.duplicate(),
 					"action_log": room.match.action_log.duplicate(),
 				}

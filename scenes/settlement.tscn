@@ -41,13 +41,24 @@ anchor_right = 0.5
 offset_left = -250.0
 offset_top = 128.0
 offset_right = 250.0
-offset_bottom = 230.0
+offset_bottom = 270.0
 grow_horizontal = 2
 
 [node name="TitleRow" type="HBoxContainer" parent="TitleBox"]
 layout_mode = 2
 alignment = 1
 separation = 16
+
+[node name="LoserRow" type="HBoxContainer" parent="TitleBox"]
+layout_mode = 2
+alignment = 1
+separation = 12
+
+[node name="LoserTag" type="Label" parent="TitleBox/LoserRow"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.55, 0.6, 0.7, 1)
+theme_override_font_sizes/font_size = 22
+text = "败者"
 
 [node name="CondLabel" type="Label" parent="TitleBox"]
 layout_mode = 2
@@ -62,7 +73,7 @@ anchors_preset = 5
 anchor_left = 0.5
 anchor_right = 0.5
 offset_left = -400.0
-offset_top = 245.0
+offset_top = 285.0
 offset_right = 400.0
 offset_bottom = 612.0
 grow_horizontal = 2

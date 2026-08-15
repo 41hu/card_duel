@@ -220,8 +220,12 @@ var rapid_mode: bool = false
 func _build_card_system(idx: int, custom_decks: Array) -> CardSys:
 	var deck: Array = []
 	if custom_decks.size() > idx and custom_decks[idx] is Array and not custom_decks[idx].is_empty():
+		# uid 全局唯一：每名玩家独立牌堆加偏移（P1:0-39, P2:1000-1039, P3:2000-...）。
+		# 否则双方 uid 都从 0 起，夺取/偷牌跨玩家转移后同 uid 撞车，
+		# 出牌/弃牌/格挡按 uid 查找会选错卡、污染双方牌堆。
+		# 与教程发牌(9000+)、作弊发牌(-1000 递减)、经典共享牌堆(0-77)均不冲突。
 		for i in range(custom_decks[idx].size()):
-			deck.append({"uid": i, "type_id": str(custom_decks[idx][i])})
+			deck.append({"uid": idx * 1000 + i, "type_id": str(custom_decks[idx][i])})
 	else:
 		deck = Config.build_initial_deck()
 	return CardSys.new(deck)

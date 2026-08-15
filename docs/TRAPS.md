@@ -60,6 +60,7 @@
 - 端到端联机测试模板：本地起 `scenes/server.tscn`（headless）+ 多个 headless 客户端脚本（`-- role=A/B/C/D case=N` 参数化），验证以 A 的输出为准（主动断线方退出码 1 是预期）。临时测试脚本用完删除。
 - `room.decks` 初始化用 `[[], []]`（与 deck_ready 赋值的数组类型一致），不要 `[{}, {}]`。
 - **MCP 每次交互往返耗时数秒**：BackHandler 双击退出窗口（400ms~2s）无法用两次 MCP 按键模拟，用 eval 手动构造 `BackHandler._last_back_time = now - 1000` 后调 `_handle_back()`。
+- **独立牌堆卡牌 uid 必须全局唯一**：`_build_card_system` 每个玩家 uid 加偏移（`idx * 1000 + i`）。否则双方 uid 都从 0 起，夺取/偷牌跨玩家转移后同 uid 撞车，按 uid 查找的出牌/弃牌/格挡会选错卡、污染双方牌堆。经典共享牌堆（0-77）、教程发牌（9000+）、作弊发牌（-1000 递减）天然隔离。
 
 ---
 

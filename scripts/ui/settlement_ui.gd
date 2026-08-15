@@ -16,14 +16,25 @@ const _TITLE_CONDITIONS := {
 }
 
 @onready var title_label = $Title
-@onready var title2_label: RichTextLabel = $Title2
-@onready var stats_label = $StatsScroll/StatsLabel
+@onready var title_row: HBoxContainer = $TitleBox/TitleRow
+@onready var cond_label: Label = $TitleBox/CondLabel
+@onready var stat_cards: Array = [
+	$StatsScroll/StatsRow/P0Card,
+	$StatsScroll/StatsRow/P1Card,
+]
+@onready var stat_names: Array = [
+	$StatsScroll/StatsRow/P0Card/V/P0Name,
+	$StatsScroll/StatsRow/P1Card/V/P1Name,
+]
+@onready var stat_labels: Array = [
+	$StatsScroll/StatsRow/P0Card/V/P0Stats,
+	$StatsScroll/StatsRow/P1Card/V/P1Stats,
+]
 @onready var detail_label = $Detail
 @onready var back_btn = $BackBtn
 
 var _current_title: String = ""
 var _current_titles: Array = []
-var _title_owner: String = ""
 
 func _n():
 	if LocalGame.game != null: return LocalGame
@@ -37,8 +48,8 @@ func _ready():
 		Network.disconnect_from_server()
 		get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
 	)
-	# 称号悬停显示条件（PC）；点击显示条件，3 秒后恢复（移动端无 hover）
-	title2_label.meta_clicked.connect(func(_meta): _show_title_condition())
+	# 称号徽章：悬停显示条件（tooltip），点击在下方条件栏常驻显示
+	# （无 hover 的移动端点击即可查看，无需恢复计时）
 	# 对局记录导出（本地/联机都有：本地来自 game，联机由服务器随结算下发）
 	var has_record = false
 	if LocalGame.game != null:
@@ -73,36 +84,59 @@ func _ready():
 	if not cached.is_empty():
 		_on_game_ended(cached)
 
-func _show_title_condition():
-	if _current_title == "": return
-	var cond: String = _TITLE_CONDITIONS.get(_current_title, "")
-	if cond == "": return
-	title2_label.text = "[color=#ffd95c]条件：%s[/color]" % cond
-	await get_tree().create_timer(3.0).timeout
-	if _current_title != "" and not _current_titles.is_empty():
-		_refresh_title_label(_current_titles)
+# 点击徽章：条件常驻显示在称号行下方条件栏（不覆盖称号行）
+func _show_title_condition(cond: String):
+	cond_label.text = "条件：%s" % cond
+	cond_label.visible = true
 
-# 称号行展示：主称号（第一个，最亮眼）大字体 + 其余称号小字体，一行全部展示
+# 称号徽章横排：主称号（第一个，判定顺序首位）金色大徽章，其余蓝色小徽章
+# 每个徽章可点击/悬停查看达成条件
 func _refresh_title_label(titles: Array):
+	for c in title_row.get_children():
+		title_row.remove_child(c)
+		c.queue_free()
 	_current_title = str(titles[0])
-	var cond: String = _TITLE_CONDITIONS.get(_current_title, "")
-	var bb := "%s获得称号：[url=%s][font_size=52]%s[/font_size][/url]" % [_title_owner, cond, _current_title]
-	if titles.size() > 1:
-		var rest = "、".join(titles.slice(1).map(func(t): return str(t)))
-		bb += "[font_size=30]  %s[/font_size]" % rest
-	title2_label.text = bb
-	title2_label.tooltip_text = "条件：%s" % cond
+	_current_titles = titles
+	cond_label.visible = false
+	for i in range(titles.size()):
+		var t := str(titles[i])
+		var cond: String = _TITLE_CONDITIONS.get(t, "")
+		var b := Button.new()
+		b.text = t
+		var sb := StyleBoxFlat.new()
+		sb.set_corner_radius_all(14)
+		sb.set_border_width_all(2)
+		sb.content_margin_left = 20.0
+		sb.content_margin_right = 20.0
+		sb.content_margin_top = 6.0
+		sb.content_margin_bottom = 6.0
+		if i == 0:
+			# 主称号：金色
+			sb.bg_color = Color(0.42, 0.33, 0.06, 1)
+			sb.border_color = Color(1, 0.85, 0.3, 1)
+			b.add_theme_font_size_override("font_size", Style.fs(40))
+		else:
+			# 其余称号：蓝色
+			sb.bg_color = Color(0.1, 0.16, 0.28, 1)
+			sb.border_color = Color(0.35, 0.55, 0.9, 1)
+			b.add_theme_font_size_override("font_size", Style.fs(26))
+		for state in ["normal", "hover", "pressed", "focus"]:
+			b.add_theme_stylebox_override(state, sb)
+		b.tooltip_text = "条件：%s" % cond if cond != "" else ""
+		if cond != "":
+			b.pressed.connect(_show_title_condition.bind(cond))
+		title_row.add_child(b)
 
 func _on_game_ended(result: Dictionary):
 	var winner = result.get("winner", -1)
 	if winner == -1:
 		title_label.text = "对手断线"
 		title_label.add_theme_color_override("font_color", Style.WIN_GOLD)
-		title2_label.text = ""
+		_clear_title_row()
 		_current_title = ""
 		_current_titles = []
-		_title_owner = ""
-		stats_label.text = ""
+		for l in stat_labels:
+			l.text = ""
 		detail_label.text = "对方已断开连接"
 	else:
 		# 本地自我对战：双方都是玩家自己，无胜负之分，显示"对局结束"而非胜利/败北
@@ -121,36 +155,46 @@ func _on_game_ended(result: Dictionary):
 			titles = [result.get("title", "")]  # 兼容旧版结算数据
 		var names = result.get("names", ["P1", "P2"])
 		if not titles.is_empty():
-			# 称号归属：显示谁获得了称号（联机=玩家名，本地=角色名）；可多称号一行展示
-			_title_owner = names[winner] if winner >= 0 and winner < names.size() else "获胜者"
 			_current_titles = titles
 			_refresh_title_label(titles)
 		else:
-			_title_owner = ""
 			_current_titles = []
 			_current_title = ""
-			title2_label.text = ""
-		stats_label.text = _fmt_stats(result.get("stats", []), names)
+			_clear_title_row()
+		_fill_stats_panels(result.get("stats", []), names, winner)
 		# 优先显示玩家名（联机为创建房间时输入的名字），否则回退"玩家 N"
 		var wname = names[winner] if winner < names.size() else "玩家 %d" % (winner + 1)
 		detail_label.text = "%s 获胜" % wname
 
-# 组装对战统计文本（结算页展示）
-func _fmt_stats(stats: Array, names: Array) -> String:
-	if stats.size() < 2: return ""
-	var d0 = stats[0]; var d1 = stats[1]
-	var m0 = _max_card(d0.get("cards_played", {}))
-	var m1 = _max_card(d1.get("cards_played", {}))
-	var out = "── 对战统计 ──\n"
-	out += "造成伤害：%s %d  |  %s %d\n" % [names[0], d0.get("damage_dealt", 0), names[1], d1.get("damage_dealt", 0)]
-	out += "受到伤害：%s %d  |  %s %d\n" % [names[0], d0.get("damage_taken", 0), names[1], d1.get("damage_taken", 0)]
-	out += "  其中攻击：%s %d  |  %s %d\n" % [names[0], d0.get("damage_from_attack", 0), names[1], d1.get("damage_from_attack", 0)]
-	out += "  陷阱/DoT：%s %d/%d  |  %s %d/%d\n" % [names[0], d0.get("damage_from_trap", 0), d0.get("damage_from_dot", 0), names[1], d1.get("damage_from_trap", 0), d1.get("damage_from_dot", 0)]
-	out += "回复血量：%s %d  |  %s %d\n" % [names[0], d0.get("heal_total", 0), names[1], d1.get("heal_total", 0)]
-	out += "移动步数：%s %d  |  %s %d\n" % [names[0], d0.get("moves", 0), names[1], d1.get("moves", 0)]
-	out += "打出最多：%s %s  |  %s %s\n" % [names[0], _max_card_str(m0), names[1], _max_card_str(m1)]
-	out += "复活次数：%s %d  |  %s %d" % [names[0], d0.get("resurrected", 0), names[1], d1.get("resurrected", 0)]
-	return out
+func _clear_title_row():
+	for c in title_row.get_children():
+		title_row.remove_child(c)
+		c.queue_free()
+	cond_label.visible = false
+
+# 左右分栏统计卡片：各玩家一张，顶部名字（胜方金色），下方竖排数据
+func _fill_stats_panels(stats: Array, names: Array, winner: int):
+	if stats.size() < 2: return
+	for i in [0, 1]:
+		var card: PanelContainer = stat_cards[i]
+		var name_lbl: Label = stat_names[i]
+		var stat_lbl: Label = stat_labels[i]
+		name_lbl.text = names[i]
+		var is_win = (i == winner)
+		# 卡片样式：胜方金色边框，败方灰色
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(0.13, 0.16, 0.22, 0.9)
+		sb.border_color = Color(1, 0.85, 0.3, 0.95) if is_win else Color(0.42, 0.46, 0.55, 0.85)
+		sb.set_border_width_all(2)
+		sb.set_corner_radius_all(12)
+		card.add_theme_stylebox_override("panel", sb)
+		name_lbl.add_theme_color_override("font_color", Color(1, 0.85, 0.3) if is_win else Color.WHITE)
+		var d = stats[i]
+		var m = _max_card(d.get("cards_played", {}))
+		stat_lbl.text = "造成伤害  %d\n受到伤害  %d\n  · 攻击  %d\n  · 陷阱  %d\n  · DoT  %d\n回复血量  %d\n移动步数  %d\n复活次数  %d\n打出最多  %s" % [
+			d.get("damage_dealt", 0), d.get("damage_taken", 0),
+			d.get("damage_from_attack", 0), d.get("damage_from_trap", 0), d.get("damage_from_dot", 0),
+			d.get("heal_total", 0), d.get("moves", 0), d.get("resurrected", 0), _max_card_str(m)]
 
 # 导出对局记录：生成文本文件（battle_records/ 目录），返回文件路径
 # result 统一结构（本地 game.game_result / 联机服务器下发的 game_over 消息）：

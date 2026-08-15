@@ -33,19 +33,28 @@ grow_horizontal = 2
 theme_override_font_sizes/font_size = 64
 horizontal_alignment = 1
 
-[node name="Title2" type="RichTextLabel" parent="." unique_id=1144228868]
+[node name="TitleBox" type="VBoxContainer" parent="." unique_id=1144228868]
 layout_mode = 1
 anchors_preset = 5
 anchor_left = 0.5
 anchor_right = 0.5
 offset_left = -250.0
-offset_top = 130.0
+offset_top = 128.0
 offset_right = 250.0
-offset_bottom = 200.0
+offset_bottom = 215.0
 grow_horizontal = 2
-theme_override_colors/default_color = Color(1, 0.85, 0.3, 1)
-bbcode_enabled = true
-fit_content = true
+
+[node name="TitleRow" type="HBoxContainer" parent="TitleBox"]
+layout_mode = 2
+alignment = 1
+separation = 16
+
+[node name="CondLabel" type="Label" parent="TitleBox"]
+layout_mode = 2
+visible = false
+theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
+theme_override_font_sizes/font_size = 26
+horizontal_alignment = 1
 
 [node name="StatsScroll" type="ScrollContainer" parent="." unique_id=1144228869]
 layout_mode = 1
@@ -53,20 +62,55 @@ anchors_preset = 5
 anchor_left = 0.5
 anchor_right = 0.5
 offset_left = -400.0
-offset_top = 210.0
+offset_top = 225.0
 offset_right = 400.0
 offset_bottom = 590.0
 grow_horizontal = 2
 horizontal_scroll_mode = 0
 
-[node name="StatsLabel" type="Label" parent="StatsScroll"]
+[node name="StatsRow" type="HBoxContainer" parent="StatsScroll"]
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_colors/font_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 28
+alignment = 1
+separation = 24
+
+[node name="P0Card" type="PanelContainer" parent="StatsScroll/StatsRow"]
+custom_minimum_size = Vector2(350, 0)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="V" type="VBoxContainer" parent="StatsScroll/StatsRow/P0Card"]
+layout_mode = 2
+alignment = 1
+
+[node name="P0Name" type="Label" parent="StatsScroll/StatsRow/P0Card/V"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 30
 horizontal_alignment = 1
-vertical_alignment = 1
-autowrap_mode = 2
+
+[node name="P0Stats" type="Label" parent="StatsScroll/StatsRow/P0Card/V"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 26
+
+[node name="P1Card" type="PanelContainer" parent="StatsScroll/StatsRow"]
+custom_minimum_size = Vector2(350, 0)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="V" type="VBoxContainer" parent="StatsScroll/StatsRow/P1Card"]
+layout_mode = 2
+alignment = 1
+
+[node name="P1Name" type="Label" parent="StatsScroll/StatsRow/P1Card/V"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 30
+horizontal_alignment = 1
+
+[node name="P1Stats" type="Label" parent="StatsScroll/StatsRow/P1Card/V"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 26
 
 [node name="Detail" type="Label" parent="." unique_id=183571138]
 layout_mode = 1

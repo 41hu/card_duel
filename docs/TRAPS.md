@@ -90,3 +90,9 @@
 - 实现新功能每一步先问用户采用哪种方案。
 - 测试工具常驻：`scripts/tests/ui_regression.gd`（UI 回归，改动 battle_ui 后必跑）、`balance_sim.gd`（AI 对局模拟）。
 - 桌面实测窗口 1920×1080；真机横屏锚点相对布局自适应，绝对坐标估算时用锚点换算。
+
+### 5.1 SSH 部署服务器的坑（2026-08 实测）
+- **启动命令与验证分开**：`pkill` + `nohup &` 串一条命令链会 ssh 挂起（远端 shell 持有后台进程 fd 不退出）+ pkill 返回码污染。正确姿势：① `git pull` ② `pkill` ③ `setsid nohup ... > log 2>&1 < /dev/null & exit 0`（这条 ssh 会超时/hang 是正常现象，远端已执行）④ **单独一条 ssh 验证** `ps aux | grep`。
+- **PowerShell 调 ssh 的引用符规则**：远端命令只用**单引号**（PowerShell 外层双引号 + 内层单引号）；内层用双引号会被 ssh 剥掉——`grep -E "服务端启动|监听端口"` 传到远端变成 `grep -E 服务端启动|监听端口`，管道符被 bash 解释执行报"command not found"。
+- 服务器免密登录已配置（本机 id_ed25519），`ssh root@47.107.47.251` 直接用；服务器代码版本、进程状态可随时只读检查。
+- 协作者用 Godot 3 类名（如 `WrapContainer`）会直接编译失败——Godot 4 已改名 `FlowContainer`；合入协作者代码后先 `validate_scripts` 再跑。

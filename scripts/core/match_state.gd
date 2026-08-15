@@ -887,10 +887,20 @@ func _player_names() -> Array:
 		names.append(Config.char_name(p.char_id))
 	return names
 
-# 称号判定（is_winner: 胜者/败者归属），可同时获得多个，第一个为最亮眼主称号
+# 称号难度分级（UI 徽章颜色）：gold=金色大框（最难）blue=蓝色框 white=白色框（最易）
+const TITLE_TIERS := {
+	"完美击杀": "gold", "毁灭之王": "gold", "耐杀王": "gold", "不死鸟": "gold",
+	"出师不利": "gold", "负隅顽抗": "gold", "武器专家": "gold", "战术大师": "gold",
+	"致命一击": "gold", "完美形态": "gold",
+	"险胜": "blue", "虽败犹荣": "blue", "伤痕累累": "blue", "苦战": "blue",
+	"坚守阵地": "blue", "马拉松冠军": "blue", "火力压制": "blue",
+	"征服者": "white",
+}
+
+# 称号判定（is_winner: 胜者/败者归属），可同时获得多个
 # 同条件类型互斥：同组内按定义顺序只保留第一个（定义顺序=条件更苛刻的优先），
 # 例如胜者达成毁灭之王（伤害≥45）则不再给火力压制（伤害≥30）
-# 称号难度分级（UI 徽章颜色）：gold=金色大框（最难）blue=蓝色框 white=白色框（最易）
+# 主称号 = 难度最高档（gold > blue > white），同档保持判定顺序
 func _calc_titles(player_idx: int, is_winner: bool) -> Array:
 	var w = stats[player_idx]
 	var groups := {
@@ -927,6 +937,10 @@ func _calc_titles(player_idx: int, is_winner: bool) -> Array:
 	for g in groups:
 		if not groups[g].is_empty():
 			titles.append(groups[g][0])
+	# 主称号 = 最难档优先（gold > blue > white），同档保持判定顺序
+	var rank := {"gold": 0, "blue": 1, "white": 2}
+	titles.sort_custom(func(a: String, b: String) -> bool:
+		return rank[TITLE_TIERS.get(a, "blue")] < rank[TITLE_TIERS.get(b, "blue")])
 	# 征服者：胜利必得（放最后，白色档最易）
 	if is_winner:
 		titles.append("征服者")

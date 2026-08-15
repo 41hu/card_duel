@@ -26,15 +26,9 @@ const _TITLE_CONDITIONS := {
 	"完美形态": "游戏结束时近战/远程/魔法面板均 > 6",
 }
 
-# 称号难度分级 → 徽章样式（gold=金框大号最难 / blue=蓝框 / white=白框最易）
-const _TITLE_TIERS := {
-	"完美击杀": "gold", "毁灭之王": "gold", "耐杀王": "gold", "不死鸟": "gold",
-	"出师不利": "gold", "负隅顽抗": "gold", "武器专家": "gold", "战术大师": "gold",
-	"致命一击": "gold", "完美形态": "gold",
-	"险胜": "blue", "虽败犹荣": "blue", "伤痕累累": "blue", "苦战": "blue",
-	"坚守阵地": "blue", "马拉松冠军": "blue", "火力压制": "blue",
-	"征服者": "white",
-}
+# 称号难度分级（gold/blue/white）统一定义在 match_state.TITLE_TIERS，UI 引用
+const MatchStateClass = preload("res://scripts/core/match_state.gd")
+const _TITLE_TIERS: Dictionary = MatchStateClass.TITLE_TIERS
 
 @onready var title_label = $Title
 @onready var title_row: WrapContainer = $TitleBox/TitleRow

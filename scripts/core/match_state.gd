@@ -498,10 +498,14 @@ func _begin_attack_segment(player_idx: int) -> Dictionary:
 		if calc.get("reason", "") == "distance":
 			# 距离不够（穿心）：攻击无效，不消耗卡
 			return {success=false, msg=calc.get("msg", "距离不够")}
-		combat.consume_armor(opp)  # 防具生效消耗耐久（免疫也算一次命中）
+		# 强化攻击（heavy/pierce/chant）命中防具：只掉 2 点耐久（穿甲），不叠加正常消耗 -1
+		# （满耐久 3 的防具需两次强化攻击命中才碎裂——玩家要求，勿改回）；
+		# 普通攻击免疫照常消耗 1 点
 		if _armor_pierce:
 			combat.pierce_armor(opp)
 			add_log(player_idx, "穿甲: 防具耐久-2")
+		else:
+			combat.consume_armor(opp)
 		_armor_pierce = false
 		add_log(player_idx, "被防具挡下")
 		# 多段攻击：本段被免疫则继续下一段（防具耐久已消耗，下一段按减半结算）
@@ -567,11 +571,12 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		state_changed.emit(get_full_state())
 		return
 	if final_damage > 0:
-		if _armor_hit:
-			combat.consume_armor(defender_idx)  # 防具耐久在实际伤害时消耗（被闪避后为0不消耗）
-			if _armor_pierce:
-				combat.pierce_armor(defender_idx)
-				add_log(attacker_idx, "穿甲: 防具耐久-2")
+		# 强化攻击命中防具：只掉 2 点耐久（穿甲），不叠加正常消耗 -1（玩家要求）
+		if _armor_hit and _armor_pierce:
+			combat.pierce_armor(defender_idx)
+			add_log(attacker_idx, "穿甲: 防具耐久-2")
+		elif _armor_hit:
+			combat.consume_armor(defender_idx)  # 普通攻击：防具耐久在实际伤害时消耗（被闪避后为0不消耗）
 		_armor_hit = false
 		_armor_pierce = false
 		var before_skill = final_damage

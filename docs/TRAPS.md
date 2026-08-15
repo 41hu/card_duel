@@ -61,7 +61,7 @@
 - `room.decks` 初始化用 `[[], []]`（与 deck_ready 赋值的数组类型一致），不要 `[{}, {}]`。
 - **MCP 每次交互往返耗时数秒**：BackHandler 双击退出窗口（400ms~2s）无法用两次 MCP 按键模拟，用 eval 手动构造 `BackHandler._last_back_time = now - 1000` 后调 `_handle_back()`。
 - **独立牌堆卡牌 uid 必须全局唯一**：`_build_card_system` 每个玩家 uid 加偏移（`idx * 1000 + i`）。否则双方 uid 都从 0 起，夺取/偷牌跨玩家转移后同 uid 撞车，按 uid 查找的出牌/弃牌/格挡会选错卡、污染双方牌堆。经典共享牌堆（0-77）、教程发牌（9000+）、作弊发牌（-1000 递减）天然隔离。
-- **防具结算规则（改 combat 前必读）**：满耐久=完全免疫，非满=减半（`floori(dmg/2)`）；耐久只在两条路径消耗——免疫路径与 `final_damage>0` 路径（`consume_armor`）；强化攻击（heavy/pierce/chant）命中防具额外 `pierce_armor(-2)`（免疫也生效，被闪避/牵制到0不生效）→ 满耐久 3 的防具被强化攻击一击打碎是**设计行为**（1+2=3），不是 bug。注意 1 伤害打非满耐久防具会减半到 0：`attacker_last_damage<=0` 分支必须也 `consume_armor`（否则防具无限白嫖），并顺手清 `_armor_hit/_armor_pierce` 防残留。
+- **防具结算规则（改 combat 前必读）**：满耐久=完全免疫，非满=减半（`floori(dmg/2)`）；耐久只在两条路径消耗——免疫路径与 `final_damage>0` 路径（`consume_armor`）；**强化攻击（heavy/pierce/chant）命中防具只额外 −2 耐久（`pierce_armor`），不叠加正常消耗 −1（玩家明确要求：不要一击爆甲，满耐久 3 需两次强化攻击命中才碎裂）**；被闪避/牵制到 0 不触发穿甲。注意 1 伤害打非满耐久防具会减半到 0：`attacker_last_damage<=0` 分支必须也 `consume_armor`（否则防具无限白嫖），并顺手清 `_armor_hit/_armor_pierce` 防残留。
 
 ---
 

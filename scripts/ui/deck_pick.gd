@@ -77,8 +77,9 @@ func _build_layout():
 	back_btn.offset_bottom = -24
 	back_btn.add_theme_font_size_override("font_size", Style.fs(28))
 	back_btn.pressed.connect(_on_back)
-	back_btn.z_index = 10  # 置于全屏页面之上，否则被 pick_root/edit_root 盖住按不动
-	add_child(back_btn)
+	# 注意：Godot 4 输入命中按场景树顺序（后添加的兄弟优先），z_index 只影响绘制。
+	# back_btn 必须在 pick_root/edit_root 之后 add_child，否则全屏层拦截点击（按钮可见但按不动）
+	back_btn.z_index = 10  # 绘制置于全屏页面之上
 	# 选择页
 	pick_root = Control.new()
 	pick_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -249,6 +250,8 @@ func _build_layout():
 	_edit_sel_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_edit_sel_box.add_theme_constant_override("separation", Style.fs(6))
 	sel_scroll.add_child(_edit_sel_box)
+	# back_btn 最后添加：树序最靠后 → 输入命中优先于全屏 pick_root/edit_root
+	add_child(back_btn)
 
 func _on_back():
 	if _page == "edit":

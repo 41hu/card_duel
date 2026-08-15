@@ -44,15 +44,17 @@ offset_right = 400.0
 offset_bottom = 420.0
 grow_horizontal = 2
 
-[node name="TitleRow" type="WrapContainer" parent="TitleBox"]
+[node name="TitleRow" type="FlowContainer" parent="TitleBox"]
 layout_mode = 2
 alignment = 1
-separation = 16
+h_separation = 16
+v_separation = 8
 
-[node name="LoserRow" type="WrapContainer" parent="TitleBox"]
+[node name="LoserRow" type="FlowContainer" parent="TitleBox"]
 layout_mode = 2
 alignment = 1
-separation = 12
+h_separation = 12
+v_separation = 4
 
 [node name="LoserTag" type="Label" parent="TitleBox/LoserRow"]
 layout_mode = 2

@@ -31,8 +31,8 @@ const MatchStateClass = preload("res://scripts/core/match_state.gd")
 const _TITLE_TIERS: Dictionary = MatchStateClass.TITLE_TIERS
 
 @onready var title_label = $Title
-@onready var title_row: WrapContainer = $TitleBox/TitleRow
-@onready var loser_row: WrapContainer = $TitleBox/LoserRow
+@onready var title_row: FlowContainer = $TitleBox/TitleRow
+@onready var loser_row: FlowContainer = $TitleBox/LoserRow
 @onready var cond_label: Label = $TitleBox/CondLabel
 @onready var stat_cards: Array = [
 	$StatsScroll/StatsRow/P0Card,

@@ -367,7 +367,27 @@ func _on_peer_disconnected(peer_idx: int):
 				_send_to(p_idx, {"t":"room_joined","room_id":room.id,"player_index":_peers[p_idx].player_index,"players":room.peer_names,"mode":room.mode})
 			log_msg("P%d离开房间%s（剩%d人）" % [idx, room.id, room.peer_indices.size()])
 			return
-		# 等待/BP/配置卡组阶段断线（对局未开始，match 为 null 或未 init）：清理房间，不发结算
+		# BP/配置卡组阶段断线（2人房，流程已启动但未开局，match.players 为空）：
+		# 存活方直接获胜结算（对手逃跑），否则客户端会卡在 BP/配置页一直等对手
+		if room.max_players <= 2 and room.stage in ["bp", "deck"]:
+			for p_idx in room.peer_indices:
+				if p_idx != peer_idx:
+					var winner = _peers[p_idx].player_index
+					_send_to(p_idx, {
+						"t": "game_over",
+						"winner": winner,
+						"loser": peer.player_index,
+						"reason": "opponent_disconnected",
+						"stats": [],
+						"names": room.peer_names.duplicate(),
+						"titles": [],
+						"battle_record": [],
+						"action_log": [],
+					})
+					log_msg("配置阶段P%d断开，P%d获胜 房间%s解散" % [peer.player_index, winner, room.id])
+			_rooms.erase(room)
+			return
+		# 等待阶段断线（对局未开始，match 为 null）：清理房间，不发结算
 		if room.match == null or room.match.players.is_empty():
 			_rooms.erase(room)
 			log_msg("对局未开始P%d断开，房间%s解散" % [peer.player_index, room.id])

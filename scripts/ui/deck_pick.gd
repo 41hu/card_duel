@@ -45,12 +45,20 @@ func _ready():
 		return true
 	# 联机：双方卡组就绪后服务端发 game_starting → 直接进对战
 	Network.game_starting.connect(_on_online_game_starting)
+	# 联机：配置阶段对手断线 → 服务端发 game_over → 跳结算（对手逃跑获胜）
+	Network.game_ended.connect(_on_game_ended)
+	# 联机：自己断线 → 回主菜单（避免卡在配置页）
+	Network.server_disconnected.connect(_on_server_disconnected)
 	_show_pick()
 
 func _exit_tree():
 	BackHandler.scene_back = Callable()
 	if Network.game_starting.is_connected(_on_online_game_starting):
 		Network.game_starting.disconnect(_on_online_game_starting)
+	if Network.game_ended.is_connected(_on_game_ended):
+		Network.game_ended.disconnect(_on_game_ended)
+	if Network.server_disconnected.is_connected(_on_server_disconnected):
+		Network.server_disconnected.disconnect(_on_server_disconnected)
 
 # 联机模式判断：本地时 LocalGame.game 非空；联机时 deck_config_data 由服务端下发
 func _is_online() -> bool:
@@ -61,6 +69,15 @@ func _on_online_game_starting(data: Dictionary):
 	Network.battle_state_cache = data.get("state", {})
 	Network.deck_config_data = {}
 	get_tree().change_scene_to_file("res://scenes/battle_scene.tscn")
+
+# 联机：配置阶段对手断线 → 跳结算（胜利方结算）
+func _on_game_ended(r: Dictionary):
+	Network.last_game_result = r
+	get_tree().change_scene_to_file("res://scenes/settlement.tscn")
+
+# 联机：自己断线 → 回主菜单
+func _on_server_disconnected():
+	get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
 
 func _build_layout():
 	var bg := ColorRect.new()
@@ -77,6 +94,8 @@ func _build_layout():
 	back_btn.offset_bottom = -24
 	back_btn.add_theme_font_size_override("font_size", Style.fs(28))
 	back_btn.pressed.connect(_on_back)
+	# 联机：配置阶段不允许随意退出（对手断线由服务端结算），隐藏返回按钮
+	back_btn.visible = not _is_online()
 	# 注意：Godot 4 输入命中按场景树顺序（后添加的兄弟优先），z_index 只影响绘制。
 	# back_btn 必须在 pick_root/edit_root 之后 add_child，否则全屏层拦截点击（按钮可见但按不动）
 	back_btn.z_index = 10  # 绘制置于全屏页面之上

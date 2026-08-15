@@ -35,9 +35,30 @@ func _ready():
 	_n().state_updated.connect(_on_game_state)
 	# 自定义卡组联机：BP 完成后服务端发 deck_config → 跳配置卡组环节
 	Network.deck_config.connect(_on_deck_config)
+	# 联机：BP 阶段对手断线 → 服务端发 game_over → 跳结算（对手逃跑获胜）
+	Network.game_ended.connect(_on_game_ended)
+	# 联机：自己断线 → 回主菜单（避免卡在 BP 页）
+	Network.server_disconnected.connect(_on_server_disconnected)
 	var cached = _n().bp_state_cache
 	if not cached.is_empty():
 		_on_bp_state(cached); _n().bp_state_cache = {}
+
+func _exit_tree():
+	if Network.game_ended.is_connected(_on_game_ended):
+		Network.game_ended.disconnect(_on_game_ended)
+	if Network.deck_config.is_connected(_on_deck_config):
+		Network.deck_config.disconnect(_on_deck_config)
+	if Network.server_disconnected.is_connected(_on_server_disconnected):
+		Network.server_disconnected.disconnect(_on_server_disconnected)
+
+# 联机：BP 阶段对手断线 → 跳结算
+func _on_game_ended(r: Dictionary):
+	Network.last_game_result = r
+	get_tree().change_scene_to_file("res://scenes/settlement.tscn")
+
+# 联机：自己断线 → 回主菜单
+func _on_server_disconnected():
+	get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
 
 # 联机自定义卡组：进入配置卡组环节（deck_pick 场景）
 func _on_deck_config(_data: Dictionary):

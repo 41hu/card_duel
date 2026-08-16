@@ -263,13 +263,6 @@ func apply_on_hit_effects(attacker_idx: int, defender_idx: int, damage: int, dam
 		match_ref.status.add_buff(defender_idx, "ap_attack_down", -1, 1)
 		match_ref.add_log(attacker_idx, "时滞: 对方下回合攻击行动点-1")
 
-	# 共鸣：法术命中后减少对方护甲耐久2点
-	if weapon_id == "resonance" and not defender.armor.is_empty():
-		defender.armor.durability -= 2
-		if defender.armor.durability <= 0:
-			defender.armor = {}  # 碎裂
-		match_ref.add_log(attacker_idx, "共鸣: 对方护甲耐久-2")
-
 # ---------- 处置DoT伤害 ----------
 # 灼烧: 每回合-2HP，duration-1，到0移除
 # 中毒: 每回合-1HP，duration-1，到0移除

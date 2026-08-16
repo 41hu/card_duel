@@ -19,7 +19,7 @@ const WEAPON_DB = {
 	"sage_book":      {name="贤者之书", type="magic", effect="magic_dmg",  value=2, desc="魔法伤害+2"},
 	"scorch":         {name="灼烧",     type="magic", effect="burn",       value=1, desc="-2HP/回合×2回合（再次命中刷新）"},
 	"time_lag":       {name="时滞",     type="magic", effect="ap_attack_down", value=1, desc="命中后对方下回合攻击行动点-1"},
-	"resonance":      {name="共鸣",     type="magic", effect="armor_reduce", value=2, desc="法术命中后减少对方护甲耐久2点"},
+	"resonance":      {name="共鸣",     type="magic", effect="resonance_rebound", value=2, desc="法术攻击被完全抵挡时额外造成2点伤害"},
 }
 
 const ARMOR_DB = {

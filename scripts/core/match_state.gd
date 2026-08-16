@@ -58,6 +58,8 @@ var _resp_effect: String = ""
 var _ignore_distance: bool = false  # 魔力引导等技能：本次攻击无视贴脸距离限制
 # 重锤武器：命中后对方护甲额外-1耐久（伤害归0时（闪避/格挡）不触发）
 var _hammer_pierce: bool = false
+# 共鸣武器：法术攻击被完全抵挡时额外造成2点伤害（穿透反震）
+var _resonance_rebound: bool = false
 # 调试发牌的 uid 计数器（保证唯一，与正常卡 uid 0-77 隔离）
 var _cheat_uid_counter: int = -1000
 var char_skills
@@ -525,6 +527,9 @@ func _begin_attack_segment(player_idx: int) -> Dictionary:
 	_armor_pierce = _armor_hit and type_id in ["heavy", "pierce", "chant"]
 	# 重锤标记：攻击者装备重锤时，命中后对方护甲额外-1耐久（伤害归0不触发）
 	_hammer_pierce = not player.weapon.is_empty() and player.weapon.id == "hammer"
+	# 共鸣标记：装备共鸣且打出法术攻击时，被完全抵挡则额外造成2点伤害
+	_resonance_rebound = not player.weapon.is_empty() and player.weapon.id == "resonance" \
+			and type_id in ["magic", "chant"]
 	# 防具完全免疫优先于伤害加成判定（技能加成不能穿透满耐久防具）
 	if calc.get("blocked", false):
 		char_skills.on_attack_failed_no_damage(player_idx, attacker_last_type)
@@ -550,6 +555,8 @@ func _begin_attack_segment(player_idx: int) -> Dictionary:
 			if _hammer_pierce:
 				combat.pierce_armor(_pending_target, 1)
 				add_log(player_idx, "重锤: 护甲耐久-1")
+			# 共鸣：护甲把伤害减到0 = 被完全抵挡 → 额外造成2点伤害
+			_apply_resonance_rebound(player_idx, _pending_target)
 		_armor_hit = false
 		_armor_pierce = false
 		char_skills.on_attack_failed_no_damage(player_idx, attacker_last_type)
@@ -666,6 +673,9 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		if _resp_effect == "" and not was_blocked:
 			# 无任何响应且非防具免疫（纯 0 伤害攻击）：补充记录
 			add_log(attacker_idx, "%s使用%s攻击未造成伤害" % [Config.char_name(players[attacker_idx].char_id), Config.card_name(pending_attack_card)])
+		# 共鸣：法术攻击被完全抵挡（护甲免疫生效/闪避/牵制归零）→ 额外造成2点伤害。
+		# 0 伤害分支必然是完全抵挡（免疫挡下或响应归零），统一在此触发一次
+		_apply_resonance_rebound(attacker_idx, defender_idx)
 	if phase == Config.Phase.GAME_OVER: return  # 死亡判定已由 _damage_player 统一处理
 	# 多段攻击：还有段则进入下一段响应窗口（每段独立结算；末段才消耗卡）
 	# 注意：_begin_attack_segment 内部会自增段号，这里不能重复自增
@@ -682,6 +692,15 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 	state_changed.emit(get_full_state())
 
 func skip_response(defender_idx: int): process_response(defender_idx, false)
+
+# 共鸣：法术攻击被完全抵挡时额外造成2点伤害（穿透反震，不再受响应/防具影响）
+func _apply_resonance_rebound(attacker_idx: int, defender_idx: int):
+	if not _resonance_rebound: return
+	_damage_player(defender_idx, 2)
+	stats[attacker_idx]["damage_dealt"] += 2
+	stats[defender_idx]["damage_taken"] += 2
+	stats[defender_idx]["damage_from_attack"] += 2
+	add_log(attacker_idx, "共鸣: 被完全抵挡，反震2点伤害")
 
 func _handle_move_card(player_idx: int, card: Dictionary) -> Dictionary:
 	var direction: Vector2i = movement.geometry.from_dict(card.get("direction", {}))

@@ -182,7 +182,12 @@ func _show_debug_menu():
 	vb.add_child(close)
 	add_child(c)
 
-# 全面屏/刘海屏安全区适配：横屏时刘海在左右两侧，给角落信息留出边距
+# 全面屏/刘海屏安全区适配：横屏时刘海在左右两侧，给角落信息留出边距。
+# 注意：对手面板是运行时动态创建的（人数变化会重建），安全区偏移存成成员变量，
+# _make_opp_panel 创建时直接带上——只在 _apply_safe_area 里遍历一次会导致
+# 联机局（首次渲染时面板尚未创建）新建面板不带安全区，被刘海裁切。
+var _safe_right: float = 0.0
+
 func _apply_safe_area():
 	var sa = DisplayServer.get_display_safe_area()
 	var win = DisplayServer.window_get_size()
@@ -194,6 +199,7 @@ func _apply_safe_area():
 	var right = (win.x - sa.end.x) / sx
 	var _top = sa.position.y / sy
 	var bottom = (win.y - sa.end.y) / sy
+	_safe_right = right
 	if left > 0:
 		_self_panel.offset_left = left + 12
 		skill_row.offset_left += left
@@ -652,7 +658,9 @@ func _panel_for(index: int) -> PanelContainer:
 func _make_opp_panel(slot: int) -> PanelContainer:
 	var pc: PanelContainer = InfoPanel.new()
 	pc.anchor_left = 1.0; pc.anchor_right = 1.0
-	pc.offset_left = -460; pc.offset_right = 0
+	# 创建即带安全区偏移：面板整体内移，防止刘海/圆角裁切（_safe_right 由 _apply_safe_area 计算）
+	pc.offset_left = -(460 + _safe_right)
+	pc.offset_right = -(_safe_right + 12)
 	pc.offset_top = 150 + slot * 206
 	pc.offset_bottom = 350 + slot * 206
 	pc.status_clicked.connect(_on_status_clicked)

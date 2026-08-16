@@ -10,6 +10,7 @@ const EquipmentSys = preload("res://scripts/core/equipment_system.gd")
 const StatusSys = preload("res://scripts/core/status_system.gd")
 const BPSys = preload("res://scripts/core/bp_system.gd")
 const CardSys = preload("res://scripts/core/card_system.gd")
+const DeckData = preload("res://scripts/data/deck_data.gd")
 
 const ACTION_TIME = 60
 const DISCARD_TIME = 30
@@ -27,7 +28,7 @@ var turn_phase: int = Config.TurnPhase.JUDGMENT
 var current_player: int = 0
 var turn_number: int = 0
 var first_player: int = 0
-var used_weapon_ids: Array = []
+var weapon_pools: Array = []  # 每玩家自定义武器幻化池 [{near:[],range:[],magic:[]}]（默认=武器库全部）
 var items: Array = []  # 地格道具（原 traps，泛化为道具系统；结构 {item_type, position, owner}）
 var action_log: Array = []
 var waiting_for_weapon_choice: int = -1
@@ -105,14 +106,14 @@ func _init():
 	char_skills = preload("res://scripts/core/character_skills.gd").new(self)
 	card_effects = preload("res://scripts/core/card_effects.gd").new(self)
 
-func init_match(p1_char_id: String, p2_char_id: String, bp_first: int = -1, custom_decks: Array = [], independent_decks: bool = false):
-	_setup_match([p1_char_id, p2_char_id], bp_first, custom_decks, independent_decks)
+func init_match(p1_char_id: String, p2_char_id: String, bp_first: int = -1, custom_decks: Array = [], independent_decks: bool = false, weapon_pools: Array = []):
+	_setup_match([p1_char_id, p2_char_id], bp_first, custom_decks, independent_decks, weapon_pools)
 
 # 多人（4 人）混战开局：不走 BP 直接开战；默认独立牌堆（每角色各一副）
-func init_match_multi(char_ids: Array, custom_decks: Array = [], independent_decks: bool = true):
-	_setup_match(char_ids, randi() % char_ids.size(), custom_decks, independent_decks)
+func init_match_multi(char_ids: Array, custom_decks: Array = [], independent_decks: bool = true, weapon_pools: Array = []):
+	_setup_match(char_ids, randi() % char_ids.size(), custom_decks, independent_decks, weapon_pools)
 
-func _setup_match(char_ids: Array, bp_first: int, custom_decks: Array, independent_decks: bool):
+func _setup_match(char_ids: Array, bp_first: int, custom_decks: Array, independent_decks: bool, wp_in: Array = []):
 	var n = char_ids.size()
 	# 地图模式：2 人局线性、多人局六边形。以后新增布局只改 map_geometry.gd
 	# （见该文件头注释"以后修改地图布局"），此处按人数切换即可
@@ -135,7 +136,13 @@ func _setup_match(char_ids: Array, bp_first: int, custom_decks: Array, independe
 		card_systems = []
 		for i in range(n):
 			card_systems.append(CardSys.new(shared_deck, shared_discard))
-	used_weapon_ids.clear()
+	# 武器幻化池：每玩家独立（自定义卡组随卡组上报；非法/缺失 → 默认池=武器库全部）
+	self.weapon_pools = []
+	for i in range(n):
+		if wp_in.size() > i and DeckData.validate_weapon_pool(wp_in[i]):
+			self.weapon_pools.append(wp_in[i].duplicate(true))
+		else:
+			self.weapon_pools.append(DeckData.default_weapon_pool())
 	items.clear()
 	action_log.clear()
 	battle_record.clear(); _last_rec_key = ""  # 对局记录（本地/联机共用，结算导出）

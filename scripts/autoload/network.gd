@@ -147,8 +147,8 @@ func send_reveal_hand():
 	send({"t": "reveal_hand"})
 
 # 自定义卡组联机：上报自己配置好的卡组（服务端校验后双方就绪开战）
-func send_deck_ready(cards: Array, package_id: String = "B"):
-	send({"t": "deck_ready", "cards": cards, "package": package_id})
+func send_deck_ready(cards: Array, package_id: String = "B", weapon_pool: Dictionary = {}):
+	send({"t": "deck_ready", "cards": cards, "package": package_id, "weapon_pool": weapon_pool})
 
 func _handle_packet(raw: String):
 	var data = JSON.parse_string(raw)

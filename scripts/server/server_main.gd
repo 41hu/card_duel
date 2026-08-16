@@ -202,6 +202,7 @@ func _after_bp(room):
 		# 自定义卡组：等双方 deck_ready（客户端跳配置环节选卡组），90 秒超时自动默认
 		room.stage = "deck"
 		room.decks = [[], []]  # 与 deck_ready 赋值的数组类型一致
+		room.weapon_pools = [{}, {}]  # 武器幻化池随卡组上报
 		room.bp_chars = chars
 		room.bp_first = bf
 		room.deck_deadline = Time.get_ticks_msec() + DECK_TIME * 1000
@@ -226,7 +227,10 @@ func _on_deck_ready(peer_idx: int, data: Dictionary):
 		log_msg("P%d 非法卡组被拒：%s" % [peer.player_index, v.msg])
 		return
 	room.decks[peer.player_index] = cards
-	log_msg("P%d 卡组就绪（%d张，套餐%s）" % [peer.player_index, cards.size(), pkg])
+	# 武器幻化池：非法/缺失 → 默认池（不因此拒绝整个卡组，宽容处理）
+	room.weapon_pools[peer.player_index] = DeckData.normalize_weapon_pool(data.get("weapon_pool", {}))
+	log_msg("P%d 卡组就绪（%d张，套餐%s，武器池%s）" % [peer.player_index, cards.size(), pkg,
+		"自定义" if data.has("weapon_pool") else "默认"])
 	_try_start_deck(room)
 
 # 双方卡组就绪则开战（deck_ready 上报与超时兜底共用）
@@ -236,7 +240,7 @@ func _try_start_deck(room):
 	var chars = room.bp_chars
 	var bf = room.bp_first
 	room.match.rapid_mode = room.rapid_mode
-	room.match.init_match(chars[0], chars[1], bf, [room.decks[0], room.decks[1]], true)
+	room.match.init_match(chars[0], chars[1], bf, [room.decks[0], room.decks[1]], true, room.weapon_pools)
 	room.match._start_game()
 	room.stage = "game"
 	var st = room.match.get_full_state()

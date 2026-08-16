@@ -63,7 +63,7 @@ func _process(delta):
 			_ai_bp_act()
 			_ai_next_act_time = Time.get_ticks_msec() + AI_STEP_DELAY_MS
 
-func start_local_game(p1_char: String, p2_char: String, first_idx: int = -1, custom_decks: Array = [], independent_decks: bool = false):
+func start_local_game(p1_char: String, p2_char: String, first_idx: int = -1, custom_decks: Array = [], independent_decks: bool = false, weapon_pools: Array = []):
 	ai_mode = false  # 防残留：人机后直接进自我对战会被 _process 的 AI 驱动干扰
 	tutorial_mode = false
 	_ai = null
@@ -77,7 +77,7 @@ func start_local_game(p1_char: String, p2_char: String, first_idx: int = -1, cus
 	game.game_ended.connect(_on_ended)
 	# custom_decks[idx] = 该玩家卡组 type_id 列表（空 = 默认 78 张）；
 	# independent_decks=true = 每人独立牌堆/弃牌堆（自定义卡组模式）
-	game.init_match(p1_char, p2_char, first_idx, custom_decks, independent_decks)
+	game.init_match(p1_char, p2_char, first_idx, custom_decks, independent_decks, weapon_pools)
 	game._start_game()
 	battle_state_cache = game.get_full_state()
 

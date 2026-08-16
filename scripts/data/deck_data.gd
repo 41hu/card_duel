@@ -26,6 +26,8 @@ const CARD_LIMITS = {
 	"freeze": 2,
 	# 移动：战术池内上限 4（位移是节奏核心，稍放宽）
 	"move": 4,
+	# 道具卡：上限 5（照顾道具流角色——猎人夹子堆叠/巫女鸟居，全靠 trap 卡）
+	"trap": 5,
 	# 防具：上限 1（原 78 池各 1 张）
 	"near_armor": 1, "range_armor": 1, "magic_armor": 1,
 }
@@ -60,6 +62,38 @@ const HEAL_PACKAGES = {
 const DEFAULT_PACKAGE = "B"
 
 const BUF_CARDS = ["near_buf", "range_buf", "magic_buf"]
+
+# ---------- 武器幻化池（自定义卡组附带：每类型恰好 4 把） ----------
+
+const WEAPON_POOL_TYPES = ["near", "range", "magic"]
+const WEAPON_POOL_SIZE = 4
+
+# 默认武器池 = 当前武器库全部武器（按类型分组，现在每类正好 4 把）
+static func default_weapon_pool() -> Dictionary:
+	var pool := {"near": [], "range": [], "magic": []}
+	for wid in Config.WEAPON_DB:
+		var t = str(Config.WEAPON_DB[wid].type)
+		if pool.has(t):
+			pool[t].append(wid)
+	return pool
+
+# 校验武器池：每类型恰好 4 个且都是该类型的合法武器
+static func validate_weapon_pool(pool: Dictionary) -> bool:
+	if not (pool is Dictionary): return false
+	for t in WEAPON_POOL_TYPES:
+		var ids = pool.get(t, [])
+		if not (ids is Array) or ids.size() != WEAPON_POOL_SIZE:
+			return false
+		for wid in ids:
+			if not Config.WEAPON_DB.has(str(wid)): return false
+			if str(Config.WEAPON_DB[str(wid)].type) != t: return false
+	return true
+
+# 归一化：非法/缺字段 → 默认池（旧存档兼容）
+static func normalize_weapon_pool(pool) -> Dictionary:
+	if validate_weapon_pool(pool):
+		return pool.duplicate(true)
+	return default_weapon_pool()
 
 # ---------- 卡池 ----------
 
@@ -209,7 +243,7 @@ static func summarize(cards: Array) -> Dictionary:
 static func _empty_char_entry() -> Dictionary:
 	var entry := {}
 	for i in range(1, SLOTS_PER_CHAR + 1):
-		entry[str(i)] = {"name": "", "package": DEFAULT_PACKAGE, "cards": []}
+		entry[str(i)] = {"name": "", "package": DEFAULT_PACKAGE, "cards": [], "weapon_pool": default_weapon_pool()}
 	return entry
 
 static func load_all() -> Dictionary:
@@ -233,15 +267,17 @@ static func save_all(data: Dictionary) -> bool:
 	f.close()
 	return true
 
-# 读某角色的全部槽位（无记录返回 3 个空槽；旧存档补 package 字段）
+# 读某角色的全部槽位（无记录返回 3 个空槽；旧存档补 package/weapon_pool 字段）
 static func get_char_decks(char_id: String) -> Dictionary:
 	var all = load_all()
 	if not all.has(char_id):
 		return _empty_char_entry()
 	var entry: Dictionary = all[char_id]
 	for s in entry:
-		if entry[s] is Dictionary and not entry[s].has("package"):
-			entry[s]["package"] = DEFAULT_PACKAGE
+		if entry[s] is Dictionary:
+			if not entry[s].has("package"):
+				entry[s]["package"] = DEFAULT_PACKAGE
+			entry[s]["weapon_pool"] = normalize_weapon_pool(entry[s].get("weapon_pool", {}))
 	return entry
 
 # 读某槽位：{name, package, cards}（无配置返回 {}）
@@ -249,14 +285,17 @@ static func get_deck(char_id: String, slot: int) -> Dictionary:
 	var entry = get_char_decks(char_id)
 	return entry.get(str(slot), {})
 
-# 写某槽位；cards 不合法时拒绝写入
-static func set_deck(char_id: String, slot: int, name: String, package_id: String, cards: Array) -> Dictionary:
+# 写某槽位；cards 不合法时拒绝写入（weapon_pool 非法自动回默认池）
+static func set_deck(char_id: String, slot: int, name: String, package_id: String, cards: Array, weapon_pool: Dictionary = {}) -> Dictionary:
 	var v = validate_deck(cards, package_id)
 	if not v.ok:
 		return v
 	var all = load_all()
 	if not all.has(char_id):
 		all[char_id] = _empty_char_entry()
-	all[char_id][str(slot)] = {"name": name, "package": package_id, "cards": cards.duplicate()}
+	all[char_id][str(slot)] = {
+		"name": name, "package": package_id, "cards": cards.duplicate(),
+		"weapon_pool": normalize_weapon_pool(weapon_pool),
+	}
 	save_all(all)
 	return {"ok": true, "msg": "已保存"}

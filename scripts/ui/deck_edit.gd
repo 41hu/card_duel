@@ -14,6 +14,7 @@ const GROUP_ORDER = ["attack", "tactics", "sustain", "equipment"]
 var _char_id: String = ""
 var _slot: int = 0              # 0 = 未进入编辑
 var _draft: Array = []          # 编辑中的卡组（type_id 列表）
+var _draft_weapon_pool: Dictionary = {}  # 编辑中的武器幻化池
 var _draft_name: String = ""
 var _package_id: String = DeckData.DEFAULT_PACKAGE  # 回复套餐 A/B/C
 # 编辑页节点引用（避免脆弱的 get_child 索引）
@@ -200,6 +201,7 @@ func _show_slots():
 func _on_edit_slot(slot: int):
 	var d = DeckData.get_deck(_char_id, slot)
 	_draft = d.get("cards", []).duplicate()
+	_draft_weapon_pool = DeckData.normalize_weapon_pool(d.get("weapon_pool", {}))
 	_draft_name = str(d.get("name", ""))
 	_package_id = str(d.get("package", DeckData.DEFAULT_PACKAGE))
 	# 空卡组：自动填充套餐回复卡（回复卡 +/- 禁用，不自动填充则永远凑不齐套餐组合）
@@ -304,11 +306,28 @@ func _show_edit():
 	sel_scroll.add_child(sel_box)
 	# 卡池分组渲染（数量列由 _refresh_edit 更新）
 	for grp in GROUP_ORDER:
-		var gtitle := Label.new()
-		gtitle.text = DeckData.group_name(grp)
-		gtitle.add_theme_font_size_override("font_size", Style.fs(24))
-		gtitle.add_theme_color_override("font_color", Style.MODE_TITLE)
-		pool_box.add_child(gtitle)
+		if grp == "equipment":
+			# 装备池标题行：标题 + 「武器池编辑」按钮（HBox 仍占一个子节点，索引兼容）
+			var hrow := HBoxContainer.new()
+			hrow.add_theme_constant_override("separation", Style.fs(16))
+			pool_box.add_child(hrow)
+			var gtitle := Label.new()
+			gtitle.text = DeckData.group_name(grp)
+			gtitle.add_theme_font_size_override("font_size", Style.fs(24))
+			gtitle.add_theme_color_override("font_color", Style.MODE_TITLE)
+			hrow.add_child(gtitle)
+			var wp_btn := Button.new()
+			wp_btn.text = "🔧 武器池编辑"
+			wp_btn.add_theme_font_size_override("font_size", Style.fs(22))
+			wp_btn.add_theme_color_override("font_color", Style.CONFIG_VALUE)
+			wp_btn.pressed.connect(_open_weapon_pool_editor)
+			hrow.add_child(wp_btn)
+		else:
+			var gtitle := Label.new()
+			gtitle.text = DeckData.group_name(grp)
+			gtitle.add_theme_font_size_override("font_size", Style.fs(24))
+			gtitle.add_theme_color_override("font_color", Style.MODE_TITLE)
+			pool_box.add_child(gtitle)
 		for tid in DeckData.pool_ids():
 			if DeckData.card_group(tid) != grp:
 				continue
@@ -473,9 +492,18 @@ func _on_save():
 	if not v.ok:
 		_flash(v.msg, Style.ERROR_RED)
 		return
-	var r = DeckData.set_deck(_char_id, _slot, _draft_name.strip_edges(), _package_id, _draft)
+	var r = DeckData.set_deck(_char_id, _slot, _draft_name.strip_edges(), _package_id, _draft, _draft_weapon_pool)
 	if r.ok:
 		_flash("已保存", Style.ME_GREEN)
 		_show_slots()
 	else:
 		_flash(r.msg, Style.ERROR_RED)
+
+# 打开武器幻化池编辑器（覆盖层组件；返回时校验恰好 4 把，见 weapon_pool_editor.gd）
+func _open_weapon_pool_editor():
+	var ed = load("res://scripts/ui/components/weapon_pool_editor.gd").new()
+	ed.z_index = 15
+	add_child(ed)
+	ed.setup(_draft_weapon_pool, func(pool: Dictionary):
+		_draft_weapon_pool = pool.duplicate(true)
+	)

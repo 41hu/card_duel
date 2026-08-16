@@ -139,8 +139,8 @@ func _build_steps():
 				# 初始手牌（用户配置）
 				deal_hand(0, ["move", "range_armor", "near", "range", "near", "near"])
 				deal_hand(1, ["attract", "near", "range", "near_weapon"])
-				# 狂战士武器池只留斩铁
-				g.used_weapon_ids = ["frost_bite", "bloodthirst", "lunge"]
+				# 狂战士武器池只留斩铁（幻化必出斩铁）
+				g.weapon_pools[1] = {"near": ["iron_cutter"], "range": [], "magic": []}
 				battle_state_refresh(),
 			"check": func():
 				return g.players[0].position.x >= 4,
@@ -222,8 +222,8 @@ func _build_steps():
 			"enter": func():
 				# 回合开始一次性补发武器+移动（装备后直接移动爆发，不再用一张发一张）
 				add_cards(0, ["near_weapon", "move"])
-				# 武器池锁定突刺（排除其他近战）
-				g.used_weapon_ids = ["iron_cutter", "frost_bite", "bloodthirst"]
+				# 玩家武器池锁定突刺（幻化必出突刺）
+				g.weapon_pools[0] = {"near": ["lunge"], "range": [], "magic": []}
 				battle_state_refresh(),
 			"check": func():
 				return not g.players[0].weapon.is_empty(),

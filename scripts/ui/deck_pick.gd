@@ -12,9 +12,11 @@ const GROUP_ORDER = ["attack", "tactics", "sustain", "equipment"]
 
 var _step := 0                  # 0 = P1，1 = P2
 var _decks: Array = [[], []]    # 已确认卡组（type_id 列表）
+var _weapon_pools: Array = [{}, {}]  # 已确认武器幻化池（每玩家一份）
 var _page := "pick"             # pick 选择页 / edit 编辑页
 var _sel_kind := ""             # 当前选中："slot_1".."slot_3" / "default"
 var _draft: Array = []          # 编辑页草稿
+var _draft_weapon_pool: Dictionary = {}  # 编辑页武器池草稿
 var _package_id: String = DeckData.DEFAULT_PACKAGE  # 当前选中卡组的回复套餐
 
 @onready var title: Label
@@ -411,22 +413,31 @@ func _selected_cards() -> Array:
 	var slot = int(_sel_kind.trim_prefix("slot_"))
 	return DeckData.get_deck(_current_char_id(), slot).get("cards", []).duplicate()
 
+# 当前选中卡组的武器幻化池（默认卡组/槽位存档/编辑中草稿统一出口）
+func _selected_weapon_pool() -> Dictionary:
+	if _sel_kind == "default":
+		return DeckData.default_weapon_pool()
+	var slot = int(_sel_kind.trim_prefix("slot_"))
+	return DeckData.normalize_weapon_pool(DeckData.get_deck(_current_char_id(), slot).get("weapon_pool", {}))
+
 func _on_confirm():
 	if _sel_kind == "":
 		return
 	_decks[_step] = _selected_cards()
+	_weapon_pools[_step] = _selected_weapon_pool()
 	_next_step()
 
 func _on_edit():
 	if _sel_kind == "":
 		return
 	_draft = _selected_cards()
+	_draft_weapon_pool = _selected_weapon_pool()
 	_show_edit()
 
 func _next_step():
 	if _is_online():
 		# 联机：上报自己的卡组，等对手（服务端双方就绪后发 game_starting）
-		Network.send_deck_ready(_decks[_step], _package_id)
+		Network.send_deck_ready(_decks[_step], _package_id, _weapon_pools[_step])
 		title.text = "已上报卡组，等待对手选择..."
 		confirm_btn.disabled = true
 		edit_btn.disabled = true
@@ -457,11 +468,28 @@ func _show_edit():
 		_edit_pool_box.remove_child(c)
 		c.queue_free()
 	for grp in GROUP_ORDER:
-		var gtitle := Label.new()
-		gtitle.text = DeckData.group_name(grp)
-		gtitle.add_theme_font_size_override("font_size", Style.fs(24))
-		gtitle.add_theme_color_override("font_color", Style.MODE_TITLE)
-		_edit_pool_box.add_child(gtitle)
+		if grp == "equipment":
+			# 装备池标题行：标题 + 「武器池编辑」按钮（HBox 仍占一个子节点，child_idx 索引兼容）
+			var hrow := HBoxContainer.new()
+			hrow.add_theme_constant_override("separation", Style.fs(16))
+			_edit_pool_box.add_child(hrow)
+			var gtitle := Label.new()
+			gtitle.text = DeckData.group_name(grp)
+			gtitle.add_theme_font_size_override("font_size", Style.fs(24))
+			gtitle.add_theme_color_override("font_color", Style.MODE_TITLE)
+			hrow.add_child(gtitle)
+			var wp_btn := Button.new()
+			wp_btn.text = "🔧 武器池编辑"
+			wp_btn.add_theme_font_size_override("font_size", Style.fs(22))
+			wp_btn.add_theme_color_override("font_color", Style.CONFIG_VALUE)
+			wp_btn.pressed.connect(_open_weapon_pool_editor)
+			hrow.add_child(wp_btn)
+		else:
+			var gtitle := Label.new()
+			gtitle.text = DeckData.group_name(grp)
+			gtitle.add_theme_font_size_override("font_size", Style.fs(24))
+			gtitle.add_theme_color_override("font_color", Style.MODE_TITLE)
+			_edit_pool_box.add_child(gtitle)
 		for tid in DeckData.pool_ids():
 			if DeckData.card_group(tid) != grp:
 				continue
@@ -604,6 +632,7 @@ func _on_edit_confirm():
 		_flash_status(v.msg)
 		return
 	_decks[_step] = _draft.duplicate()
+	_weapon_pools[_step] = _draft_weapon_pool.duplicate(true)
 	_next_step()
 
 func _flash_status(text: String):
@@ -624,13 +653,23 @@ func _flash_status(text: String):
 	_flash_label = l
 	get_tree().create_timer(1.5).timeout.connect(l.queue_free)
 
+# 打开武器幻化池编辑器（覆盖层组件；返回时校验恰好 4 把，见 weapon_pool_editor.gd）
+func _open_weapon_pool_editor():
+	var ed = load("res://scripts/ui/components/weapon_pool_editor.gd").new()
+	ed.z_index = 15
+	add_child(ed)
+	ed.setup(_draft_weapon_pool, func(pool: Dictionary):
+		_draft_weapon_pool = pool.duplicate(true)
+	)
+
 # ---------- 开战 ----------
 func _start_battle():
 	var chars: Array = LocalGame.bp_chars.duplicate()
 	var bf: int = LocalGame.bp_first
 	var decks: Array = [_decks[0], _decks[1]]
+	var pools: Array = [_weapon_pools[0], _weapon_pools[1]]
 	LocalGame.deck_mode = false
 	LocalGame.bp_chars = []
 	LocalGame.bp_first = -1
-	LocalGame.start_local_game(str(chars[0]), str(chars[1]), bf, decks, true)
+	LocalGame.start_local_game(str(chars[0]), str(chars[1]), bf, decks, true, pools)
 	get_tree().change_scene_to_file("res://scenes/battle_scene.tscn")

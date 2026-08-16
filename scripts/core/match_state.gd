@@ -402,6 +402,16 @@ func _cheat_card(player_idx: int, type_id: String) -> Dictionary:
 
 # 调试：立即结束对局（win=true 自己获胜，false 自己败北）
 func _debug_end(player_idx: int, win: bool) -> Dictionary:
+	if players.size() > 2:
+		# 多人混战：调试胜利 = 其余全部淘汰自己获胜（走多人结算，每人称号齐全）；
+		# 调试失败 = 自己淘汰，对局继续（最后存活者胜，符合多人规则语义）
+		for i in range(players.size()):
+			if (win and i != player_idx) or (not win and i == player_idx):
+				players[i].hp = 0
+				players[i].eliminated = true
+		add_log(player_idx, "调试: 立即胜利" if win else "调试: 立即淘汰")
+		_check_multi_winner()
+		return {success=true}
 	var loser = 1 - player_idx if win else player_idx
 	players[loser].hp = 0
 	_check_permanent_death(loser)

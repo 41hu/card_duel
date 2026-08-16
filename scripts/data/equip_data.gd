@@ -20,6 +20,7 @@ const WEAPON_DB = {
 	"scorch":         {name="灼烧",     type="magic", effect="burn",       value=1, desc="-2HP/回合×2回合（再次命中刷新）"},
 	"time_lag":       {name="时滞",     type="magic", effect="ap_attack_down", value=1, desc="命中后对方下回合攻击行动点-1"},
 	"resonance":      {name="共鸣",     type="magic", effect="resonance_rebound", value=2, desc="法术攻击被完全抵挡时额外造成2点伤害"},
+	"void_grimoire":  {name="虚空魔典", type="magic", effect="wither_apply", value=1, desc="法术攻击命中后附加凋零2回合（回复量-1，再次命中刷新）"},
 }
 
 const ARMOR_DB = {

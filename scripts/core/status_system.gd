@@ -30,6 +30,8 @@ var _stack_rules: Dictionary = {
 	"ap_attack_down": {"max_stacks": 1},
 	# 神隐（巫女鸟居）：不可叠加（已有神隐再踩只保持跳过一回合）
 	"神隐": {"max_stacks": 1},
+	# 凋零（虚空魔典）：回复量-1，再次命中只刷新时长（不叠加）
+	"wither_weapon": {"max_stacks": 1},
 }
 
 func _init(match):
@@ -53,6 +55,18 @@ func add_buff(player_idx: int, buff_type: String, value: int, duration: int):
 					return
 			return
 	player.buffs.append({type=buff_type, value=value, duration=duration})
+
+# 添加凋零（虚空魔典）：持续2回合，回复量-1；再次命中只刷新持续时间为2回合（不叠加层数）
+func add_wither(player_idx: int):
+	add_buff(player_idx, "wither_weapon", -1, 2)
+
+# 凋零回复削减：返回当前凋零效果值（0 = 无凋零）
+func get_heal_reduction(player_idx: int) -> int:
+	var total := 0
+	for b in match_ref.get_player(player_idx).buffs:
+		if b.type == "wither_weapon":
+			total += int(b.value)
+	return total
 
 # 添加灼烧：持续2回合，每回合-2HP，再次命中刷新持续时间为2回合（不叠加层数）
 # source：施放者索引（用于伤害来源统计，-1=无来源）

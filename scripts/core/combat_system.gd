@@ -263,6 +263,11 @@ func apply_on_hit_effects(attacker_idx: int, defender_idx: int, damage: int, dam
 		match_ref.status.add_buff(defender_idx, "ap_attack_down", -1, 1)
 		match_ref.add_log(attacker_idx, "时滞: 对方下回合攻击行动点-1")
 
+	# 虚空魔典：法术命中后附加凋零（回复量-1，持续2回合，再次命中刷新）
+	if weapon_id == "void_grimoire":
+		match_ref.status.add_wither(defender_idx)
+		match_ref.add_log(attacker_idx, "虚空魔典: 附加凋零(回复量-1,2回合)")
+
 # ---------- 处置DoT伤害 ----------
 # 灼烧: 每回合-2HP，duration-1，到0移除
 # 中毒: 每回合-1HP，duration-1，到0移除

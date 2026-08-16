@@ -26,11 +26,25 @@ anchors_preset = 5
 anchor_left = 0.5
 anchor_right = 0.5
 offset_left = -250.0
-offset_top = 40.0
+offset_top = 24.0
 offset_right = 250.0
-offset_bottom = 120.0
+offset_bottom = 104.0
 grow_horizontal = 2
 theme_override_font_sizes/font_size = 64
+horizontal_alignment = 1
+
+[node name="Detail" type="Label" parent="." unique_id=183571138]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -300.0
+offset_top = 100.0
+offset_right = 300.0
+offset_bottom = 150.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 32
 horizontal_alignment = 1
 
 [node name="TitleBox" type="VBoxContainer" parent="." unique_id=1144228868]
@@ -38,35 +52,23 @@ layout_mode = 1
 anchors_preset = 5
 anchor_left = 0.5
 anchor_right = 0.5
-offset_left = -400.0
-offset_top = 128.0
-offset_right = 400.0
-offset_bottom = 420.0
+offset_left = -620.0
+offset_top = 150.0
+offset_right = 620.0
+offset_bottom = 330.0
 grow_horizontal = 2
 
-[node name="TitleRow" type="FlowContainer" parent="TitleBox"]
+[node name="TitleRow" type="FlowContainer" parent="TitleBox" unique_id=1974999278]
 layout_mode = 2
 alignment = 1
 h_separation = 16
 v_separation = 8
 
-[node name="LoserRow" type="FlowContainer" parent="TitleBox"]
-layout_mode = 2
-alignment = 1
-h_separation = 12
-v_separation = 4
-
-[node name="LoserTag" type="Label" parent="TitleBox/LoserRow"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.55, 0.6, 0.7, 1)
-theme_override_font_sizes/font_size = 22
-text = "败者"
-
-[node name="CondLabel" type="Label" parent="TitleBox"]
-layout_mode = 2
+[node name="CondLabel" type="Label" parent="TitleBox" unique_id=313193344]
 visible = false
+layout_mode = 2
 theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
-theme_override_font_sizes/font_size = 26
+theme_override_font_sizes/font_size = 24
 horizontal_alignment = 1
 
 [node name="StatsScroll" type="ScrollContainer" parent="." unique_id=1144228869]
@@ -74,83 +76,31 @@ layout_mode = 1
 anchors_preset = 5
 anchor_left = 0.5
 anchor_right = 0.5
-offset_left = -400.0
-offset_top = 435.0
-offset_right = 400.0
-offset_bottom = 612.0
+offset_left = -620.0
+offset_top = 340.0
+offset_right = 620.0
+offset_bottom = 980.0
 grow_horizontal = 2
 horizontal_scroll_mode = 0
 
-[node name="StatsRow" type="HBoxContainer" parent="StatsScroll"]
+[node name="StatsRow" type="HBoxContainer" parent="StatsScroll" unique_id=280878672]
 layout_mode = 2
 size_flags_horizontal = 3
 alignment = 1
-separation = 24
-
-[node name="P0Card" type="PanelContainer" parent="StatsScroll/StatsRow"]
-custom_minimum_size = Vector2(350, 0)
-layout_mode = 2
-size_flags_vertical = 3
-
-[node name="V" type="VBoxContainer" parent="StatsScroll/StatsRow/P0Card"]
-layout_mode = 2
-alignment = 1
-
-[node name="P0Name" type="Label" parent="StatsScroll/StatsRow/P0Card/V"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 30
-horizontal_alignment = 1
-
-[node name="P0Stats" type="Label" parent="StatsScroll/StatsRow/P0Card/V"]
-layout_mode = 2
-theme_override_colors/font_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 26
-
-[node name="P1Card" type="PanelContainer" parent="StatsScroll/StatsRow"]
-custom_minimum_size = Vector2(350, 0)
-layout_mode = 2
-size_flags_vertical = 3
-
-[node name="V" type="VBoxContainer" parent="StatsScroll/StatsRow/P1Card"]
-layout_mode = 2
-alignment = 1
-
-[node name="P1Name" type="Label" parent="StatsScroll/StatsRow/P1Card/V"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 30
-horizontal_alignment = 1
-
-[node name="P1Stats" type="Label" parent="StatsScroll/StatsRow/P1Card/V"]
-layout_mode = 2
-theme_override_colors/font_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 26
-
-[node name="Detail" type="Label" parent="." unique_id=183571138]
-layout_mode = 1
-anchors_preset = 5
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = -204.0
-offset_top = 722.0
-offset_right = 196.0
-offset_bottom = 775.0
-grow_horizontal = 2
-theme_override_colors/font_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 36
-horizontal_alignment = 1
+theme_override_constants/separation = 20
 
 [node name="BackBtn" type="Button" parent="." unique_id=1049546627]
 layout_mode = 1
-anchors_preset = 7
-anchor_left = 0.5
-anchor_top = 1.0
-anchor_right = 0.5
-anchor_bottom = 1.0
-offset_left = -180.0
-offset_top = -145.0
-offset_right = 180.0
-offset_bottom = -26.0
-grow_horizontal = 2
+anchors_preset = 0
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 0.0
+anchor_bottom = 0.0
+offset_left = 24.0
+offset_top = 24.0
+offset_right = 264.0
+offset_bottom = 120.0
+grow_horizontal = 0
 grow_vertical = 0
-theme_override_font_sizes/font_size = 36
+theme_override_font_sizes/font_size = 30
 text = "返回主菜单"

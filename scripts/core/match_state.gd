@@ -853,6 +853,9 @@ func _check_permanent_death(player_idx: int):
 			names=_player_names(),
 			titles=_calc_titles(winner, true),
 			titles_loser=_calc_titles(player_idx, false),
+			# 每名玩家的称号（结算界面统计卡片"查看称号"展开用；自己视角只看顶部自己的）
+			player_titles=[_calc_titles(0, winner == 0), _calc_titles(1, winner == 1)],
+			eliminated=[players[0].get("eliminated", false), players[1].get("eliminated", false)],
 			battle_record=battle_record.duplicate(),
 			action_log=action_log.duplicate(),
 		}
@@ -869,12 +872,19 @@ func _check_multi_winner():
 		var winner = alive[0] if alive.size() == 1 else -1
 		phase = Config.Phase.GAME_OVER
 		response_pending = false
+		var pts: Array = []
+		var eli: Array = []
+		for i in range(players.size()):
+			pts.append(_calc_titles(i, i == winner))
+			eli.append(players[i].get("eliminated", false))
 		game_result = {
 			winner=winner, loser=-1, reason="last_alive",
 			stats=stats.duplicate(),
 			names=_player_names(),
 			titles=_calc_titles(winner, true) if winner >= 0 else [],
 			titles_loser=[],
+			player_titles=pts,
+			eliminated=eli,
 			battle_record=battle_record.duplicate(),
 			action_log=action_log.duplicate(),
 		}
@@ -919,7 +929,9 @@ func _calc_titles(player_idx: int, is_winner: bool) -> Array:
 		# 败者专属
 		if w["damage_dealt"] == 0: groups["dmg"].append("出师不利")
 		if w["resurrected"] >= 2: groups["resurrect"].append("负隅顽抗")
-		if w["damage_dealt"] > stats[1 - player_idx]["damage_dealt"]: groups["dmg"].append("虽败犹荣")
+		# 虽败犹荣：败者伤害高于胜者——仅 2 人局成立（多人局无单一胜者对比对象，跳过）
+		if players.size() <= 2 and w["damage_dealt"] > stats[1 - player_idx]["damage_dealt"]:
+			groups["dmg"].append("虽败犹荣")
 		if w["damage_taken"] >= 50: groups["taken"].append("伤痕累累")
 		if turn_number > 20: groups["turns"].append("苦战")
 	# 通用（不论胜负）

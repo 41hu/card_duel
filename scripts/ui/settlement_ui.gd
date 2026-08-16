@@ -110,8 +110,17 @@ func _make_title_badge(title: String, small: bool = false) -> Button:
 	sb.content_margin_top = 4.0
 	sb.content_margin_bottom = 4.0
 	if small:
-		sb.bg_color = Color(0.2, 0.22, 0.28, 1)
-		sb.border_color = Color(0.55, 0.6, 0.7, 1)
+		# 统计卡片内的小徽章：同样按称号难度级别着色（金/蓝/白边框）
+		match tier:
+			"gold":
+				sb.bg_color = Color(0.3, 0.24, 0.05, 1)
+				sb.border_color = Color(1, 0.85, 0.3, 1)
+			"blue":
+				sb.bg_color = Color(0.09, 0.14, 0.24, 1)
+				sb.border_color = Color(0.35, 0.55, 0.9, 1)
+			"white":
+				sb.bg_color = Color(0.2, 0.22, 0.28, 1)
+				sb.border_color = Color(1, 1, 1, 0.8)
 		b.add_theme_font_size_override("font_size", Style.fs(18))
 	else:
 		match tier:
@@ -129,10 +138,53 @@ func _make_title_badge(title: String, small: bool = false) -> Button:
 				b.add_theme_font_size_override("font_size", Style.fs(22))
 	for state in ["normal", "hover", "pressed", "focus"]:
 		b.add_theme_stylebox_override(state, sb)
-	b.tooltip_text = "条件：%s" % cond if cond != "" else ""
-	if cond != "":
-		b.pressed.connect(_show_title_condition.bind(cond))
+	# 顶部徽章：悬停 tooltip；点击在条件栏常驻显示
+	if not small:
+		b.tooltip_text = "条件：%s" % cond if cond != "" else ""
+		if cond != "":
+			b.pressed.connect(_show_title_condition.bind(cond))
+	# 统计卡片内徽章：不常驻条件栏——按住弹出悬浮条件框（button_up 收起）
+	else:
+		if cond != "":
+			b.button_down.connect(func():
+				_show_float_cond(cond, b.global_position)
+			)
+			b.button_up.connect(func():
+				_hide_float_cond()
+			)
 	return b
+
+# 悬浮条件框：统计卡片内按住徽章时显示（与顶部点击常驻条件栏互不影响）
+var _float_popup: Label = null
+
+func _show_float_cond(cond: String, at_global: Vector2):
+	if _float_popup == null:
+		_float_popup = Label.new()
+		_float_popup.name = "FloatCond"
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(0, 0, 0, 0.88)
+		sb.border_color = Color(1, 0.85, 0.3, 0.9)
+		sb.set_border_width_all(1)
+		sb.set_corner_radius_all(8)
+		sb.content_margin_left = 14.0
+		sb.content_margin_right = 14.0
+		sb.content_margin_top = 8.0
+		sb.content_margin_bottom = 8.0
+		_float_popup.add_theme_stylebox_override("normal", sb)
+		_float_popup.add_theme_font_size_override("font_size", Style.fs(22))
+		_float_popup.add_theme_color_override("font_color", Color(1, 0.9, 0.6))
+		_float_popup.z_index = 30
+		add_child(_float_popup)
+	_float_popup.text = "条件：%s" % cond
+	_float_popup.reset_size()
+	_float_popup.position = at_global - global_position - Vector2(0, _float_popup.size.y + 14)
+	_float_popup.position.x = clampf(_float_popup.position.x, 8.0, size.x - _float_popup.size.x - 8.0)
+	_float_popup.position.y = maxf(_float_popup.position.y, 8.0)
+	_float_popup.visible = true
+
+func _hide_float_cond():
+	if _float_popup != null:
+		_float_popup.visible = false
 
 func _on_game_ended(result: Dictionary):
 	var winner = result.get("winner", -1)
@@ -157,10 +209,17 @@ func _on_game_ended(result: Dictionary):
 	else:
 		title_label.text = "败北"
 		title_label.add_theme_color_override("font_color", Style.LOSE_RED)
-	# 顶部只显示自己的称号（titles = 本局我的归属称号）
+	# 顶部只显示自己的称号：
+	# 联机/人机：player_titles[我的index]（我赢=我的胜者称号，我输=我的败者称号——绝不显示对手的）
+	# 自我对战：无"我"概念，显示胜者称号；断线/旧数据兜底 result.titles
 	var titles: Array = result.get("titles", [])
 	if titles.is_empty() and result.get("title", "") != "":
 		titles = [result.get("title", "")]  # 兼容旧版结算数据
+	var ptitles: Array = result.get("player_titles", [])
+	if not is_self_play:
+		var mi = _n().player_index
+		if mi >= 0 and mi < ptitles.size():
+			titles = ptitles[mi]
 	_clear_title_row()
 	if not titles.is_empty():
 		_current_titles = titles
@@ -246,9 +305,11 @@ func _build_stat_cards(result: Dictionary, names: Array, winner: int):
 		stat_l.add_theme_color_override("font_color", Color(1, 1, 1, 1))
 		stat_l.add_theme_font_size_override("font_size", Style.fs(24))
 		v.add_child(stat_l)
-		# 该玩家称号：默认隐藏，"查看称号 ▸"点击展开（我的称号已在顶部，卡片内不需要）
+		# 该玩家称号：默认隐藏，"查看称号 ▸"点击展开。
+		# 自己的卡片不展示（自己的称号已在顶部查看）；自我对战时胜者卡片不重复（顶部已展示胜者称号）
 		var pts: Array = ptitles[i] if i < ptitles.size() else []
-		if not pts.is_empty() and not is_me:
+		var skip_toggle = is_me or (is_self_play and is_win)
+		if not pts.is_empty() and not skip_toggle:
 			var badge_row := FlowContainer.new()
 			badge_row.name = "BadgeRow"
 			badge_row.visible = false

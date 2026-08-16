@@ -186,7 +186,9 @@ func _show_debug_menu():
 # 注意：对手面板是运行时动态创建的（人数变化会重建），安全区偏移存成成员变量，
 # _make_opp_panel 创建时直接带上——只在 _apply_safe_area 里遍历一次会导致
 # 联机局（首次渲染时面板尚未创建）新建面板不带安全区，被刘海裁切。
-var _safe_right: float = 0.0
+# 偏移量 clamp 到 [32, 100]：下限 32 覆盖全面屏圆角（横屏时右上/右下角圆角会切贴边面板，
+# 即使刘海在左、safe area 右值为 0 也要内缩）；上限 100 防部分设备 safe area 报告异常值把面板推飞。
+var _safe_right: float = 32.0
 
 func _apply_safe_area():
 	var sa = DisplayServer.get_display_safe_area()
@@ -199,7 +201,8 @@ func _apply_safe_area():
 	var right = (win.x - sa.end.x) / sx
 	var _top = sa.position.y / sy
 	var bottom = (win.y - sa.end.y) / sy
-	_safe_right = right
+	# 敌方面板统一按右侧不安全区 clamp 内缩（最小 32 避开圆角，上限 100 防异常值）
+	_safe_right = clampf(right, 32.0, 100.0)
 	if left > 0:
 		_self_panel.offset_left = left + 12
 		skill_row.offset_left += left
@@ -209,8 +212,8 @@ func _apply_safe_area():
 	if right > 0:
 		for p in _opp_panels:
 			# 左缘同步内移保持宽度：只改 offset_right 会让面板变窄、文字被裁切
-			p.offset_left = -(460 + right)
-			p.offset_right = -(right + 12)
+			p.offset_left = -(460 + _safe_right)
+			p.offset_right = -_safe_right
 	if bottom > 0:
 		end_turn_btn.offset_top -= bottom
 		end_turn_btn.offset_bottom -= bottom
@@ -658,9 +661,9 @@ func _panel_for(index: int) -> PanelContainer:
 func _make_opp_panel(slot: int) -> PanelContainer:
 	var pc: PanelContainer = InfoPanel.new()
 	pc.anchor_left = 1.0; pc.anchor_right = 1.0
-	# 创建即带安全区偏移：面板整体内移，防止刘海/圆角裁切（_safe_right 由 _apply_safe_area 计算）
+	# 创建即带安全区内缩：面板整体内移保持宽度，防止刘海/圆角裁切
 	pc.offset_left = -(460 + _safe_right)
-	pc.offset_right = -(_safe_right + 12)
+	pc.offset_right = -_safe_right
 	pc.offset_top = 150 + slot * 206
 	pc.offset_bottom = 350 + slot * 206
 	pc.status_clicked.connect(_on_status_clicked)

@@ -202,6 +202,8 @@ func _apply_safe_area():
 		action_log.offset_right += left
 	if right > 0:
 		for p in _opp_panels:
+			# 左缘同步内移保持宽度：只改 offset_right 会让面板变窄、文字被裁切
+			p.offset_left = -(460 + right)
 			p.offset_right = -(right + 12)
 	if bottom > 0:
 		end_turn_btn.offset_top -= bottom

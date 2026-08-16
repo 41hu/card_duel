@@ -30,6 +30,7 @@ var _edit_count_label: Label
 var _edit_pool_box: VBoxContainer
 var _edit_sel_box: VBoxContainer
 var _edit_title: Label  # 编辑页标题
+var _edit_ok_btn: Button  # 编辑页确认按钮（联机时文案改为"准备完成"）
 var _edit_vs_info: Button  # 双方角色信息行（点击看技能）
 var _pkg_buttons: Dictionary = {}  # 编辑页套餐按钮（pid -> Button）
 var _flash_label: Label  # 临时提示（新提示覆盖旧的防残留）
@@ -217,6 +218,7 @@ func _build_layout():
 	ok_btn.add_theme_font_size_override("font_size", Style.fs(26))
 	ok_btn.pressed.connect(_on_edit_confirm)
 	top.add_child(ok_btn)
+	_edit_ok_btn = ok_btn  # 联机时文案改为"准备完成"（见 _show_edit）
 	var cancel_btn := Button.new()
 	cancel_btn.text = "取消"
 	cancel_btn.custom_minimum_size = Vector2(Style.fs(140), Style.fs(64))
@@ -327,7 +329,10 @@ func _show_pick():
 	# 常驻展示双方角色：玩家看清对手再决定卡组
 	vs_label.text = "你：%s　vs　对手：%s" % [
 		Config.char_name(_current_char_id()), Config.char_name(_opponent_char_id())]
+	# 重建选项列表：remove_child 立即移出树，避免 queue_free 延迟删除
+	# 导致 P2 选择页残留 P1 的按钮（重复选项/选中态错乱）
 	for c in options_box.get_children():
+		options_box.remove_child(c)
 		c.queue_free()
 	_sel_kind = ""
 	var char_id = _current_char_id()
@@ -444,8 +449,12 @@ func _show_edit():
 	_edit_vs_info.text = "你：%s 近%d远%d魔%d HP%d　vs　对手：%s 近%d远%d魔%d HP%d　（点此看技能）" % [
 		me_cd.get("name", "?"), me_cd.get("near", 0), me_cd.get("range", 0), me_cd.get("magic", 0), me_cd.get("hp", 0),
 		opp_cd.get("name", "?"), opp_cd.get("near", 0), opp_cd.get("range", 0), opp_cd.get("magic", 0), opp_cd.get("hp", 0)]
-	# 重建卡池
+	# 联机只配自己的卡组：确认按钮文案改为"准备完成"，不再提示"下一人"
+	_edit_ok_btn.text = "准备完成（等待对手）" if _is_online() else "确认（进入下一人）"
+	# 重建卡池（remove_child 立即移出树，避免 queue_free 延迟删除导致
+	# 第二次进入编辑页时 _refresh_edit 按索引取到旧行、数量显示到已销毁节点上）
 	for c in _edit_pool_box.get_children():
+		_edit_pool_box.remove_child(c)
 		c.queue_free()
 	for grp in GROUP_ORDER:
 		var gtitle := Label.new()
@@ -524,8 +533,9 @@ func _refresh_edit():
 			minus.disabled = is_heal or n <= 0
 			var plus: Button = row.get_child(3)
 			plus.disabled = is_heal or n >= lim or _draft.size() >= DeckData.DECK_SIZE
-	# 已选列表重建
+	# 已选列表重建（remove_child 立即移出树，防旧行残留）
 	for c in _edit_sel_box.get_children():
+		_edit_sel_box.remove_child(c)
 		c.queue_free()
 	for tid in _draft:
 		var row := HBoxContainer.new()

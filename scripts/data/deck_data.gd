@@ -63,12 +63,12 @@ const DEFAULT_PACKAGE = "B"
 
 const BUF_CARDS = ["near_buf", "range_buf", "magic_buf"]
 
-# ---------- 武器幻化池（自定义卡组附带：每类型恰好 4 把） ----------
+# ---------- 武器幻化池（自定义卡组附带：每类型恰好 5 把） ----------
 
 const WEAPON_POOL_TYPES = ["near", "range", "magic"]
-const WEAPON_POOL_SIZE = 4
+const WEAPON_POOL_SIZE = 5
 
-# 默认武器池 = 当前武器库全部武器（按类型分组，现在每类正好 4 把）
+# 默认武器池 = 当前武器库全部武器（按类型分组，现在每类正好 5 把）
 static func default_weapon_pool() -> Dictionary:
 	var pool := {"near": [], "range": [], "magic": []}
 	for wid in Config.WEAPON_DB:
@@ -77,7 +77,7 @@ static func default_weapon_pool() -> Dictionary:
 			pool[t].append(wid)
 	return pool
 
-# 校验武器池：每类型恰好 4 个且都是该类型的合法武器
+# 校验武器池：每类型恰好 5 个且都是该类型的合法武器
 static func validate_weapon_pool(pool: Dictionary) -> bool:
 	if not (pool is Dictionary): return false
 	for t in WEAPON_POOL_TYPES:

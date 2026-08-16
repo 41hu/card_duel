@@ -56,6 +56,8 @@ var _pending_blocked: bool = false
 # 本次响应效果（block/restrain/dodge/""）：0 伤害结算时判断是否闪避保住防具
 var _resp_effect: String = ""
 var _ignore_distance: bool = false  # 魔力引导等技能：本次攻击无视贴脸距离限制
+# 重锤武器：命中后对方护甲额外-1耐久（伤害归0时（闪避/格挡）不触发）
+var _hammer_pierce: bool = false
 # 调试发牌的 uid 计数器（保证唯一，与正常卡 uid 0-77 隔离）
 var _cheat_uid_counter: int = -1000
 var char_skills
@@ -521,6 +523,8 @@ func _begin_attack_segment(player_idx: int) -> Dictionary:
 	_armor_hit = calc.get("armor_hit", false)
 	# 穿甲标记：强化攻击（heavy/pierce/chant）命中防具时额外-2耐久
 	_armor_pierce = _armor_hit and type_id in ["heavy", "pierce", "chant"]
+	# 重锤标记：攻击者装备重锤时，命中后对方护甲额外-1耐久（伤害归0不触发）
+	_hammer_pierce = not player.weapon.is_empty() and player.weapon.id == "hammer"
 	# 防具完全免疫优先于伤害加成判定（技能加成不能穿透满耐久防具）
 	if calc.get("blocked", false):
 		char_skills.on_attack_failed_no_damage(player_idx, attacker_last_type)
@@ -542,6 +546,10 @@ func _begin_attack_segment(player_idx: int) -> Dictionary:
 		if _armor_hit:
 			combat.consume_armor(_pending_target)
 			add_log(player_idx, "防具减免伤害至0")
+			# 重锤：护甲把伤害减到0 也算命中护甲，额外-1耐久
+			if _hammer_pierce:
+				combat.pierce_armor(_pending_target, 1)
+				add_log(player_idx, "重锤: 护甲耐久-1")
 		_armor_hit = false
 		_armor_pierce = false
 		char_skills.on_attack_failed_no_damage(player_idx, attacker_last_type)
@@ -610,6 +618,10 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 			combat.consume_armor(defender_idx)  # 普通攻击：防具耐久在实际伤害时消耗（被闪避后为0不消耗）
 		_armor_hit = false
 		_armor_pierce = false
+		# 重锤：响应后仍有伤害（格挡减半后 >0）则触发额外-1耐久；被闪避/格挡至0不触发
+		if _hammer_pierce:
+			combat.pierce_armor(defender_idx, 1)
+			add_log(attacker_idx, "重锤: 护甲耐久-1")
 		var before_skill = final_damage
 		final_damage = char_skills.on_taking_damage(defender_idx, attacker_idx, final_damage)
 		if final_damage != before_skill:
@@ -639,6 +651,10 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 				add_log(attacker_idx, "穿甲: 防具耐久-2")
 			else:
 				combat.consume_armor(defender_idx)
+			# 重锤：被护甲挡下也算命中，额外-1耐久（强化攻击穿甲-2 与之叠加，满耐久护甲可一次碎裂）
+			if _hammer_pierce:
+				combat.pierce_armor(defender_idx, 1)
+				add_log(attacker_idx, "重锤: 护甲耐久-1")
 			stats[defender_idx]["blocked_dmg"] += attacker_last_damage
 			add_log(attacker_idx, "被防具挡下")
 		elif was_blocked and _resp_effect == "dodge":

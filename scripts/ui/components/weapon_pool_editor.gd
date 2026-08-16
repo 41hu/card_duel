@@ -2,7 +2,7 @@
 # 布局：顶部标题 + 返回按钮；下方三列（近战/远程/法术武器），
 #   每列顶部=类型按钮（点击展开/收拢），已选武器金框在上，展开后未选武器白框在下。
 # 交互：点击切换（金→移出/白→加入）；拖动亦可（金框下拖=移出、白框上拖=加入）。
-# 校验：返回时每类型必须恰好 4 把，否则恢复默认池 + 红色提示"武器池只能为四把武器"。
+# 校验：返回时每类型必须恰好 5 把，否则恢复默认池 + 红色提示"武器池只能为五把武器"。
 extends Control
 
 const Style = preload("res://scripts/theme/style_const.gd")
@@ -35,7 +35,7 @@ func _build():
 	back.pressed.connect(_on_back)
 	add_child(back)
 	var title := Label.new()
-	title.text = "武器池编辑（每类型 4 把）"
+	title.text = "武器池编辑（每类型 5 把）"
 	title.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
 	title.offset_top = 24
 	title.offset_bottom = 110
@@ -45,7 +45,7 @@ func _build():
 	title.add_theme_font_size_override("font_size", Style.fs(40))
 	title.add_theme_color_override("font_color", Style.MODE_TITLE)
 	add_child(title)
-	# 红色错误提示（4 把校验失败时显示）
+	# 红色错误提示（5 把校验失败时显示）
 	_error_label = Label.new()
 	_error_label.visible = false
 	_error_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
@@ -198,7 +198,7 @@ func _remove_weapon(wid: String, wtype: String):
 	pool[wtype] = arr
 	_refresh()
 
-# 返回卡组编辑：恰好 4 把才保存；否则恢复默认池 + 红色提示
+# 返回卡组编辑：恰好 5 把才保存；否则恢复默认池 + 红色提示
 func _on_back():
 	if DeckData.validate_weapon_pool(pool):
 		if _on_save.is_valid():
@@ -207,5 +207,5 @@ func _on_back():
 		return
 	pool = DeckData.default_weapon_pool()
 	_refresh()
-	_error_label.text = "武器池只能为四把武器"
+	_error_label.text = "武器池只能为五把武器"
 	_error_label.visible = true

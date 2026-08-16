@@ -7,6 +7,7 @@ const WEAPON_DB = {
 	"frost_bite":     {name="霜咬",     type="near",  effect="freeze_move", value=0, desc="命中后对方下回合位移=0"},
 	"bloodthirst":    {name="嗜血",     type="near",  effect="vampire",    value=2, desc="近战≥3伤害时回复2HP"},
 	"lunge":          {name="突刺",     type="near",  effect="lunge",      value=3, desc="近战+1，移动贴脸后额外+3"},
+	"hammer":         {name="重锤",     type="near",  effect="hammer_pierce", value=1, desc="命中后对方护甲额外-1耐久；伤害归0时（闪避/格挡）不触发"},
 
 	# 远程武器
 	"longbow":        {name="长弓",     type="range", effect="range_buff", value=1, desc="远程+1，距离衰减-1"},

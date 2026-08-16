@@ -85,6 +85,8 @@
 ## 5. 工作流约定（用户规则）
 
 - **git push 必须先经用户明确同意**（历史教训：自动 push 越界过）。
+- **每次 push 后立即部署服务器**（用户规则 2026-08-16）：推送 → 服务器 `git pull` + 重启（见 5.1 的四步姿势），不用再问。
+- **版本号不要每个小修都 bump**：攒一批 bug 修复统一 bump 一次再发布（用户规则 2026-08-16）。
 - 版本发布链：改 `scripts/version.gd` bump → commit → push → CI 自动打包 APK + GitHub Release + 上传 version.json 到服务器 → 客户端比对提示更新。
 - **改了 `scripts/server/server_main.gd` 必须提醒重启服务器**（root@47.107.47.251，deploy.sh/start_server.sh），否则新客户端跑旧服务器会出现协议不一致。
 - 实现新功能每一步先问用户采用哪种方案。

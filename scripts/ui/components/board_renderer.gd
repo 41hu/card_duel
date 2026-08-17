@@ -144,9 +144,7 @@ func update(players: Array, items: Array, my_index: int):
 			var col = Style.ME_GREEN if p.index == my_index else Style.OPP_RED
 			lbl.add_theme_color_override("font_color", col)
 
-	# 道具按类型差异化显示（新增道具类型时在此补充标记）
-	var item_marks = {"trap": "X", "snare": "S"}
-	# 有道具的格子红色边框高亮（存在标记，与选中态区分）
+	# 有道具的格子红色边框高亮（存在标记；不再在格内加文字标记，红框+长按悬浮框即可）
 	var has_item := {}
 	for it in items:
 		var pos2: Vector2i = _geo.from_dict(it.position)
@@ -160,10 +158,6 @@ func update(players: Array, items: Array, my_index: int):
 		else:
 			sb.border_color = Style.CELL_BORDER
 			sb.set_border_width_all(2)
-	for it in items:
-		var pos: Vector2i = _geo.from_dict(it.position)
-		if _cells.has(pos):
-			_cells[pos].get_child(0).text += " " + item_marks.get(it.item_type, "?")
 
 # ==================== HEX 自绘（六边形蜂窝） ====================
 # 像素布局：尖顶六边形，轴向 (q, r) → 像素（棋盘局部坐标，中心格 (0,0) 在原点）
@@ -198,14 +192,6 @@ func _draw():
 			# 格坐标编号（小字）
 			draw_string(font, c + Vector2(-14, 4), "%d,%d" % [q, r],
 				HORIZONTAL_ALIGNMENT_LEFT, -1, Style.fs(16), Style.CELL_TEXT)
-	# 道具标记
-	var item_marks = {"trap": "X", "snare": "S"}
-	for it in _items_draw:
-		var pos: Vector2i = _geo.from_dict(it.position)
-		if not _geo.is_valid(pos): continue
-		var c = _hex_center(pos)
-		draw_string(font, c + Vector2(-10, 30), item_marks.get(it.item_type, "?"),
-			HORIZONTAL_ALIGNMENT_LEFT, -1, Style.fs(20), Color(1, 0.9, 0.5))
 	# 玩家棋子
 	for p in _players_draw:
 		if p.get("eliminated", false): continue

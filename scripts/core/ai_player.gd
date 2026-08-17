@@ -1024,6 +1024,18 @@ func decide_weapon(player_idx: int, weapon: Dictionary) -> bool:
 	if wtype == "": return true
 	return wtype == _current_role(player_idx)
 
+# 风神弓：AI 选择控制对方移动的方向（简单策略：近战拉近、远程/法术推远）
+func decide_wind_bow(attacker_idx: int, target_idx: int) -> Vector2i:
+	var match = _ms
+	var role = _current_role(attacker_idx)
+	var my_pos = match.players[attacker_idx].position
+	var t_pos = match.players[target_idx].position
+	if role == "near":
+		# 近战：拉近对方（朝自己方向）
+		return match.movement.geometry.direction_between(t_pos, my_pos)
+	# 远程/法术：推远对方（远离自己）
+	return match.movement.geometry.direction_between(my_pos, t_pos)
+
 # ---------- 记录对手用过的响应（hard 读牌） ----------
 func remember_response(player_idx: int, card_type: String):
 	if difficulty < DIFF_HARD: return

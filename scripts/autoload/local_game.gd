@@ -10,6 +10,7 @@ signal game_starting(data: Dictionary)
 signal state_updated(state: Dictionary)
 signal bp_state_updated(bp_state: Dictionary)
 signal weapon_prompt(weapon_data: Dictionary)
+signal wind_bow_prompt(target_idx: int)  # 风神弓：穿心命中后控制对方移动（弹方向选择）
 signal response_needed(attack_info: Dictionary)
 signal game_ended(result: Dictionary)
 signal hand_revealed(cards: Array)
@@ -73,6 +74,7 @@ func start_local_game(p1_char: String, p2_char: String, first_idx: int = -1, cus
 	game.rapid_mode = rapid_mode
 	game.state_changed.connect(_on_state)
 	game.weapon_prompt.connect(_on_weapon)
+	game.wind_bow_prompt.connect(_on_wind_bow)
 	game.response_needed.connect(_on_response)
 	game.game_ended.connect(_on_ended)
 	# custom_decks[idx] = 该玩家卡组 type_id 列表（空 = 默认 78 张）；
@@ -92,6 +94,7 @@ func start_local_game_multi(char_ids: Array):
 	game.rapid_mode = rapid_mode
 	game.state_changed.connect(_on_state)
 	game.weapon_prompt.connect(_on_weapon)
+	game.wind_bow_prompt.connect(_on_wind_bow)
 	game.response_needed.connect(_on_response)
 	game.game_ended.connect(_on_ended)
 	game.init_match_multi(char_ids)
@@ -109,6 +112,7 @@ func start_tutorial():
 	game.rapid_mode = false  # 教程固定标准模式
 	game.state_changed.connect(_on_state)
 	game.weapon_prompt.connect(_on_weapon)
+	game.wind_bow_prompt.connect(_on_wind_bow)
 	game.response_needed.connect(_on_response)
 	game.game_ended.connect(_on_ended)
 	game.init_match("assassin", "berserker", 0)
@@ -162,6 +166,7 @@ func start_ai_game(p1_char: String, p2_char: String, difficulty: int):
 	game.rapid_mode = rapid_mode
 	game.state_changed.connect(_on_state)
 	game.weapon_prompt.connect(_on_weapon)
+	game.wind_bow_prompt.connect(_on_wind_bow)
 	game.response_needed.connect(_on_response)
 	game.game_ended.connect(_on_ended)
 	game.init_match(p1_char, p2_char, randi() % 2)
@@ -250,6 +255,14 @@ func _on_weapon(player_idx: int, weapon: Dictionary):
 		return
 	weapon_prompt.emit(weapon)
 
+# 风神弓：AI 攻击者自动选方向（拉近对方）；教程/人机人类玩家走弹窗
+func _on_wind_bow(attacker_idx: int, target_idx: int):
+	if ai_mode and attacker_idx == ai_idx:
+		var dir = _ai.decide_wind_bow(attacker_idx, target_idx)
+		game.process_action(attacker_idx, {"action": "wind_bow_move", "direction": {"x": dir.x, "y": dir.y}})
+		return
+	wind_bow_prompt.emit(target_idx)
+
 func _on_response(defender_idx: int, attack_info: Dictionary):
 	attack_info["t"] = "response_needed"
 	if ai_mode and defender_idx == ai_idx:
@@ -303,6 +316,11 @@ func send_response(respond: bool, card_uid: int = -1):
 		game.process_response(defender, true, card_uid)
 	else:
 		game.skip_response(defender)
+
+# 风神弓：选择控制对方移动的方向（direction = {x,y}；cancel = 放弃控制）
+func send_wind_bow_move(direction: Dictionary = {}, cancel: bool = false):
+	if not game: return
+	game.process_action(game._response_attacker, {"action": "wind_bow_move", "direction": direction, "cancel": cancel})
 
 func send_weapon_choice(accept: bool):
 	if not game: return

@@ -60,6 +60,9 @@ var _ignore_distance: bool = false  # 魔力引导等技能：本次攻击无视
 var _hammer_pierce: bool = false
 # 共鸣武器：法术攻击被完全抵挡时额外造成2点伤害（穿透反震）
 var _resonance_rebound: bool = false
+# 风神弓：穿心命中后控制对方移动1格（方向自由，待攻击者选择方向）
+var _wind_bow_pending: bool = false
+var _wind_bow_target: int = -1
 # 调试发牌的 uid 计数器（保证唯一，与正常卡 uid 0-77 隔离）
 var _cheat_uid_counter: int = -1000
 var char_skills
@@ -100,6 +103,7 @@ func bp_timer_active() -> bool:
 
 signal state_changed(data: Dictionary)
 signal weapon_prompt(player_idx: int, weapon: Dictionary)
+signal wind_bow_prompt(attacker_idx: int, target_idx: int)  # 风神弓：穿心命中后控制对方移动（方向自由）
 signal response_needed(defender_idx: int, attack_info: Dictionary)
 signal game_ended(result: Dictionary)
 signal bp_state_changed(bp_state: Dictionary)
@@ -332,6 +336,9 @@ func _action_phase():
 	state_changed.emit(get_full_state())
 
 func process_action(player_idx: int, action_data: Dictionary) -> Dictionary:
+	# 风神弓方向选择：攻击结算后的独立交互，不受阶段限制（放在回合校验前）
+	if action_data.get("action", "") == "wind_bow_move":
+		return _handle_wind_bow_move(player_idx, action_data)
 	if player_idx != current_player: return {success=false, msg="不是你的回合"}
 	if waiting_for_discard:
 		var act = action_data.get("action", "")
@@ -647,6 +654,12 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		# 命中特效在死亡判定前（与重构前顺序一致：统计→日志→特效→判定）
 		combat.apply_on_hit_effects(attacker_idx, defender_idx, final_damage, attacker_last_type)
 		char_skills.on_attack_hit(attacker_idx, defender_idx, final_damage, attacker_last_type)
+		# 风神弓：穿心命中并造成伤害后，控制对方移动1格（方向自由；多段攻击只触发一次）
+		if not _wind_bow_pending and not players[attacker_idx].weapon.is_empty() \
+				and players[attacker_idx].weapon.id == "wind_god_bow" and pending_attack_card == "pierce":
+			_wind_bow_pending = true
+			_wind_bow_target = defender_idx
+			wind_bow_prompt.emit(attacker_idx, defender_idx)
 		_damage_player(defender_idx, final_damage)  # 统一伤害入口（内部含死亡判定）
 	else:
 		# 0 伤害：闪避 / 格挡牵制到 0 / 满耐久防具免疫
@@ -692,6 +705,30 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 	state_changed.emit(get_full_state())
 
 func skip_response(defender_idx: int): process_response(defender_idx, false)
+
+# 风神弓：控制对方移动1格（方向自由；无方向/取消 = 放弃；无法移动 = 效果无效）
+func _handle_wind_bow_move(player_idx: int, data: Dictionary) -> Dictionary:
+	if not _wind_bow_pending: return {success=false, msg="无待决的风神弓控制"}
+	if player_idx != _response_attacker: return {success=false, msg="不是你的控制权"}
+	var target = _wind_bow_target
+	_wind_bow_pending = false
+	_wind_bow_target = -1
+	if target < 0 or target >= players.size(): return {success=false, msg="目标无效"}
+	var dir = movement.geometry.from_dict(data.get("direction", {}))
+	if data.get("cancel", false) or dir == Vector2i.ZERO:
+		add_log(player_idx, "风神弓: 放弃控制移动")
+		state_changed.emit(get_full_state())
+		return {success=true}
+	var before = players[target].position
+	# 冻结/神隐等无法移动、边界、位置被占 → move_player 失败或未位移 → 效果无效
+	if not movement.move_player(target, dir, false) or players[target].position == before:
+		add_log(player_idx, "风神弓: 对方无法移动")
+		state_changed.emit(get_full_state())
+		return {success=true}
+	add_log(player_idx, "风神弓: 控制%s移动1格" % _target_name(target))
+	_check_any_death()  # 位移可能踩陷阱致死
+	state_changed.emit(get_full_state())
+	return {success=true}
 
 # 共鸣：法术攻击被完全抵挡时额外造成2点伤害（穿透反震，不再受响应/防具影响）
 func _apply_resonance_rebound(attacker_idx: int, defender_idx: int):

@@ -499,7 +499,7 @@ func _on_save():
 	else:
 		_flash(r.msg, Style.ERROR_RED)
 
-# 打开武器幻化池编辑器（覆盖层组件；返回时校验恰好 5 把，见 weapon_pool_editor.gd）
+# 打开武器幻化池编辑器（覆盖层组件；返回时校验恰好 4 把，见 weapon_pool_editor.gd）
 func _open_weapon_pool_editor():
 	var ed = load("res://scripts/ui/components/weapon_pool_editor.gd").new()
 	ed.z_index = 15

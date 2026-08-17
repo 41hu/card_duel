@@ -90,6 +90,7 @@ func _handle_message(peer_idx: int, raw: String):
 		"use_skill": _on_use_skill(peer_idx, data)
 		"reveal_hand": _on_reveal_hand(peer_idx)
 		"fighter_choice": _on_fighter_choice(peer_idx, data)
+		"wind_bow_move": _on_wind_bow_move(peer_idx, data)
 		"deck_ready": _on_deck_ready(peer_idx, data)
 
 func _create_room(peer_idx: int, data: Dictionary):
@@ -150,6 +151,7 @@ func _start_ffa(room):
 	room.match.rapid_mode = room.rapid_mode
 	room.match.state_changed.connect(_on_match_state_changed.bind(room))
 	room.match.weapon_prompt.connect(_on_weapon_prompt.bind(room))
+	room.match.wind_bow_prompt.connect(_on_wind_bow_prompt.bind(room))
 	room.match.response_needed.connect(_on_response_needed.bind(room))
 	room.match.game_ended.connect(_on_game_ended.bind(room))
 	room.match.bp_state_changed.connect(_on_bp_timeout.bind(room))
@@ -172,6 +174,7 @@ func _start_bp(room):
 	room.stage = "bp"; room.match = MatchStateClass.new()
 	room.match.state_changed.connect(_on_match_state_changed.bind(room))
 	room.match.weapon_prompt.connect(_on_weapon_prompt.bind(room))
+	room.match.wind_bow_prompt.connect(_on_wind_bow_prompt.bind(room))
 	room.match.response_needed.connect(_on_response_needed.bind(room))
 	room.match.game_ended.connect(_on_game_ended.bind(room))
 	room.match.bp_state_changed.connect(_on_bp_timeout.bind(room))
@@ -268,6 +271,14 @@ func _on_end_turn(peer_idx: int):
 	if room == null or room.match == null: return
 	room.match.process_action(peer.player_index, {"action":"end_turn"})
 
+# 风神弓：攻击者选择控制方向（process_action 内校验待决状态与归属）
+func _on_wind_bow_move(peer_idx: int, data: Dictionary):
+	var peer = _peers[peer_idx]; var room = _find_room(peer.room_id)
+	if room == null or room.match == null: return
+	var result = room.match.process_action(peer.player_index, data)
+	if not result.get("success", false):
+		_send_to(peer_idx, {"t":"error","msg":result.get("msg","失败")})
+
 func _on_response(peer_idx: int, data: Dictionary):
 	var peer = _peers[peer_idx]; var room = _find_room(peer.room_id)
 	if room == null or room.match == null: return
@@ -323,6 +334,13 @@ func _on_weapon_prompt(player_idx: int, weapon: Dictionary, room):
 	for p_idx in room.peer_indices:
 		if _peers[p_idx].player_index == player_idx:
 			_send_to(p_idx, {"t":"weapon_prompt","weapon":weapon})
+
+# 风神弓：控制权在攻击者，把提示发给攻击者（客户端弹方向选择）
+func _on_wind_bow_prompt(attacker_idx: int, target_idx: int, room):
+	for p_idx in room.peer_indices:
+		if _peers[p_idx].player_index == attacker_idx:
+			_send_to(p_idx, {"t":"wind_bow_prompt","target":target_idx})
+			return
 
 func _on_response_needed(defender_idx: int, attack_info: Dictionary, room):
 	for p_idx in room.peer_indices:

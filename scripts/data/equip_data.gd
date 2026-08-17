@@ -14,6 +14,7 @@ const WEAPON_DB = {
 	"repeater":       {name="连弩",     type="range", effect="restrain_penalty", value=2, desc="牵制额外-2"},
 	"hawkeye":        {name="鹰眼",     type="range", effect="reveal_hand", value=0, desc="命中后查看对方手牌"},
 	"toxic_fang":     {name="毒牙",     type="range", effect="poison",     value=2, desc="中毒2层（每回合-1HP，可叠加）"},
+	"wind_god_bow":   {name="风神弓",   type="range", effect="pierce_move", value=1, desc="穿心命中并造成伤害后，可控制对方移动1格（方向自由）"},
 
 	# 法术武器
 	"sage_book":      {name="贤者之书", type="magic", effect="magic_dmg",  value=2, desc="魔法伤害+2"},

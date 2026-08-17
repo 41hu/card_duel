@@ -653,7 +653,7 @@ func _flash_status(text: String):
 	_flash_label = l
 	get_tree().create_timer(1.5).timeout.connect(l.queue_free)
 
-# 打开武器幻化池编辑器（覆盖层组件；返回时校验恰好 5 把，见 weapon_pool_editor.gd）
+# 打开武器幻化池编辑器（覆盖层组件；返回时校验恰好 4 把，见 weapon_pool_editor.gd）
 func _open_weapon_pool_editor():
 	var ed = load("res://scripts/ui/components/weapon_pool_editor.gd").new()
 	ed.z_index = 15

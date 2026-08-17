@@ -9,6 +9,7 @@ signal game_starting(data: Dictionary)
 signal state_updated(state: Dictionary)
 signal bp_state_updated(bp_state: Dictionary)
 signal weapon_prompt(weapon_data: Dictionary)
+signal wind_bow_prompt(target_idx: int)  # 风神弓：穿心命中后控制对方移动（弹方向选择）
 signal response_needed(attack_info: Dictionary)
 signal game_ended(result: Dictionary)
 signal hand_revealed(cards: Array)
@@ -146,6 +147,10 @@ func send_use_skill(skill_name: String, extra: Dictionary = {}):
 func send_fighter_choice(choice: String):
 	send({"t": "fighter_choice", "choice": choice})
 
+# 风神弓：选择控制对方移动的方向（direction = {x,y}；cancel = 放弃控制）
+func send_wind_bow_move(direction: Dictionary = {}, cancel: bool = false):
+	send({"t": "wind_bow_move", "direction": direction, "cancel": cancel})
+
 func send_reveal_hand():
 	send({"t": "reveal_hand"})
 
@@ -176,6 +181,8 @@ func _handle_packet(raw: String):
 				state_updated.emit(data)
 		"weapon_prompt":
 			weapon_prompt.emit(data.get("weapon", {}))
+		"wind_bow_prompt":
+			wind_bow_prompt.emit(int(data.get("target", -1)))
 		"response_needed":
 			response_needed.emit(data)
 		"game_over":

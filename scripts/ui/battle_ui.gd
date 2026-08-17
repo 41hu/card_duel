@@ -81,6 +81,7 @@ func _ready():
 	_n().response_needed.connect(_on_response_needed)
 	_n().hand_revealed.connect(_on_hand_revealed)
 	_n().weapon_prompt.connect(_on_weapon_prompt)
+	_n().wind_bow_prompt.connect(_on_wind_bow_prompt)
 	_n().game_ended.connect(_on_game_ended)
 	_n().network_error.connect(_on_error)
 	Network.server_disconnected.connect(_on_server_disconnected)
@@ -109,6 +110,8 @@ func _exit_tree():
 		n.hand_revealed.disconnect(_on_hand_revealed)
 	if n.weapon_prompt.is_connected(_on_weapon_prompt):
 		n.weapon_prompt.disconnect(_on_weapon_prompt)
+	if n.wind_bow_prompt.is_connected(_on_wind_bow_prompt):
+		n.wind_bow_prompt.disconnect(_on_wind_bow_prompt)
 	if n.game_ended.is_connected(_on_game_ended):
 		n.game_ended.disconnect(_on_game_ended)
 	if n.network_error.is_connected(_on_error):
@@ -1062,6 +1065,66 @@ func _on_weapon_prompt(weapon: Dictionary):
 	_wpn_popup.find_child("WpnTitle", true, false).text = "获得武器: " + wd.get("name", "?")
 	_wpn_popup.find_child("WpnDesc", true, false).text = wd.get("desc", "")
 	_wpn_popup.visible = true
+
+# 风神弓：穿心命中后选择控制对方移动的方向（取消 = 放弃控制）
+func _on_wind_bow_prompt(_target_idx: int):
+	var c = Control.new()
+	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
+	var vb = _popup_box(c, 620, 420)
+	vb.add_child(_lbl("风神弓：控制对方移动1格"))
+	var send_dir := func(dir: Vector2i):
+		c.queue_free()
+		_n().send_wind_bow_move({"x": dir.x, "y": dir.y})
+	if _board_hex:
+		# 六边形：米字格布局（与移动弹窗一致）
+		var grid = GridContainer.new()
+		grid.columns = 3
+		grid.add_theme_constant_override("h_separation", 16)
+		grid.add_theme_constant_override("v_separation", 10)
+		vb.add_child(grid)
+		var cells = [
+			["西北", Vector2i(0, -1), false],
+			["北", Vector2i.ZERO, true],
+			["东北", Vector2i(1, -1), false],
+			["西", Vector2i(-1, 0), false],
+			["取消", Vector2i.ZERO, true],
+			["东", Vector2i(1, 0), false],
+			["西南", Vector2i(-1, 1), false],
+			["南", Vector2i.ZERO, true],
+			["东南", Vector2i(0, 1), false],
+		]
+		for cell in cells:
+			var text: String = cell[0]
+			var dir: Vector2i = cell[1]
+			var placeholder: bool = cell[2]
+			if text == "取消":
+				var cb = _mkbtn("取消")
+				cb.pressed.connect(func(): c.queue_free(); _n().send_wind_bow_move({}, true))
+				grid.add_child(cb)
+				continue
+			if placeholder:
+				var d = _mkbtn(text)
+				d.disabled = true
+				grid.add_child(d)
+				continue
+			var b = _mkbtn("%s1格" % text)
+			b.pressed.connect(func(dd=dir): send_dir.call(dd))
+			grid.add_child(b)
+	else:
+		var hb = HBoxContainer.new()
+		vb.add_child(hb)
+		var lb = _mkbtn("左1格")
+		lb.pressed.connect(func(): send_dir.call(Vector2i(-1, 0)))
+		hb.add_child(lb)
+		var rb = _mkbtn("右1格")
+		rb.pressed.connect(func(): send_dir.call(Vector2i(1, 0)))
+		hb.add_child(rb)
+	var cb2 = _mkbtn("取消（放弃控制）")
+	cb2.pressed.connect(func(): c.queue_free(); _n().send_wind_bow_move({}, true))
+	vb.add_child(cb2)
+	add_child(c)
 
 func _on_game_ended(r: Dictionary):
 	if LocalGame.tutorial_mode:

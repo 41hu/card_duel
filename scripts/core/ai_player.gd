@@ -1026,7 +1026,7 @@ func decide_weapon(player_idx: int, weapon: Dictionary) -> bool:
 
 # 风神弓：AI 选择控制对方移动的方向（简单策略：近战拉近、远程/法术推远）
 func decide_wind_bow(attacker_idx: int, target_idx: int) -> Vector2i:
-	var match = _ms
+	var match = match_ref
 	var role = _current_role(attacker_idx)
 	var my_pos = match.players[attacker_idx].position
 	var t_pos = match.players[target_idx].position

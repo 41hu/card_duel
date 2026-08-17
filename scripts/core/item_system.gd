@@ -138,26 +138,39 @@ func trigger_on_step(player_idx: int) -> int:
 	return total
 
 # ---- 摧毁 ----
-# 指定格子摧毁：按目标道具类型的 destroy_rule 执行（不同道具类型与摧毁卡的交互规则）
-#   "one"（默认）：拆除该格一个道具（后放的先拆）
-#   "all"：一张摧毁清掉该格全部同类道具
-#   "none"：该类型道具不可被摧毁卡拆除（如某些特殊道具，免疫摧毁）
+# 指定格子摧毁：同格所有可摧毁道具类型**同时**各执行一次自己的 destroy_rule：
+#   "one"（默认）：该类型拆除一层（后放的先拆）
+#   "all"：该类型同格全部拆除（如捕兽夹堆叠）
+#   "none"：该类型免疫摧毁（跳过，不影响同格其他类型）
+# 例：捕兽夹(可堆叠, all) + 逐层道具(one) 同格 → 一次摧毁：夹子全清 + 逐层道具拆一层
 func destroy_item_at(pos: Vector2i) -> bool:
-	for i in range(match_ref.items.size() - 1, -1, -1):
+	var removed = false
+	var types_seen := {}
+	# while 循环：每次迭代后重新读数组长度（循环中 remove_at 会缩短数组，
+	# 若用 for i in range(size) 上限固定，删除后索引越界）
+	var i = match_ref.items.size() - 1
+	while i >= 0:
+		if i >= match_ref.items.size():
+			# all 分支删除了多个元素（含当前 i 处），索引前移：重新对齐到最后一项
+			i = match_ref.items.size() - 1
+			if i < 0:
+				break
 		var it = match_ref.items[i]
-		if it.position != pos:
-			continue
-		match str(get_item_type(it.item_type).get("destroy_rule", "one")):
-			"none":
-				return false  # 该类型道具免疫摧毁（整格都不拆）
-			"all":
-				var removed = false
-				for j in range(match_ref.items.size() - 1, -1, -1):
-					if match_ref.items[j].position == pos and match_ref.items[j].item_type == it.item_type:
-						match_ref.items.remove_at(j)
-						removed = true
-				return removed
-			_:
-				match_ref.items.remove_at(i)
-				return true
-	return false
+		if it.position == pos and not types_seen.has(it.item_type):
+			types_seen[it.item_type] = true  # 同类已按规则处理过（all 已全清 / one 只拆一层）
+			var t = get_item_type(it.item_type)
+			match str(t.get("destroy_rule", "one")):
+				"none":
+					pass  # 免疫类型：跳过，同格其他类型照常拆
+				"all":
+					var j = match_ref.items.size() - 1
+					while j >= 0:
+						if match_ref.items[j].position == pos and match_ref.items[j].item_type == it.item_type:
+							match_ref.items.remove_at(j)
+							removed = true
+						j -= 1
+				_:
+					match_ref.items.remove_at(i)
+					removed = true
+		i -= 1
+	return removed

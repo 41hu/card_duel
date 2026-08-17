@@ -441,7 +441,6 @@ func _assassin_move(player_idx: int, params: Dictionary) -> Dictionary:
 
 # 猎人埋伏：把一张远程攻击牌转为捕兽夹道具放置（不触发攻击）
 func _hunter_ambush(player_idx: int, params: Dictionary) -> Dictionary:
-	var p = _ms.players[player_idx]
 	var uid = int(params.get("card_uid", -1))
 	var cs = _ms.card_systems[player_idx]
 	# 校验选中的卡在手牌且是远程攻击牌
@@ -450,10 +449,7 @@ func _hunter_ambush(player_idx: int, params: Dictionary) -> Dictionary:
 		if c.uid == uid: card = c; break
 	if card.is_empty() or not card.type_id in ["range", "pierce"]:
 		return {success=false, msg="请选择远程攻击牌"}
-	# 远程卡：耗1攻击点放1个夹子；穿心卡：耗2攻击点放2个夹子
-	var cost = 1 if card.type_id == "range" else 2
-	if p.ap_attack < cost:
-		return {success=false, msg="攻击行动点不足"}
+	# 埋伏不消耗攻击行动点（平衡调整 2026-08：猎人道具流加强）；次数限制由 use_skill 的 turn_limit 兜底（每回合 1 次）
 	var geo = _ms.movement.geometry
 	var positions: Array = []
 	positions.append(geo.from_dict(params.get("pos", params.get("trap_pos", {}))))
@@ -468,7 +464,6 @@ func _hunter_ambush(player_idx: int, params: Dictionary) -> Dictionary:
 			return {success=false, msg="无法放置"}
 	for pos in positions:
 		_ms.item_system.place_item(player_idx, "snare", pos)
-	p.ap_attack -= cost
 	cs.play_card(uid)  # 卡进弃牌堆，不触发攻击/响应
 	var pos_str = geo.to_text(positions[0])
 	for i in range(1, positions.size()):

@@ -11,7 +11,7 @@ const CHARACTER_DB = {
 	"berserker":   {name="狂战士", hp=28, near=8, range=2, magic=2, skill="berserker",    skill_desc="受直接攻击后获得狂化（近战+1，持续3回合，可叠加）"},
 	"warlock":     {name="邪术师", hp=24, near=1, range=2, magic=3, skill="warlock",      skill_desc="功能点+1；未用功能牌则回合结束抽1张；自身回血效果-2"},
 	"gunslinger":  {name="快枪手", hp=26, near=2, range=6, magic=2, skill="gunslinger",   skill_desc="远程双发：固定消耗2攻击点，造成两段伤害，两段各需一次响应"},
-	"hunter":      {name="猎人",   hp=26, near=4, range=5, magic=2, skill="hunter",       skill_desc="埋伏：弃「远程」卡耗1攻击点放1个捕兽夹；弃「穿心」卡耗2攻击点放2个捕兽夹（每回合限一次）"},
+	"hunter":      {name="猎人",   hp=26, near=4, range=5, magic=2, skill="hunter",       skill_desc="埋伏：弃「远程」卡放1个捕兽夹；弃「穿心」卡放2个捕兽夹，不耗攻击点（每回合限一次）；猎人踩捕兽夹免疫"},
 	"tracker":     {name="寻踪者", hp=24, near=4, range=5, magic=2, skill="tracker",      skill_desc="远程/法术命中获得1层校准（每层远程伤害+1，永久叠加）；远程/法术攻击未造成伤害则校准清空"},
 	"wardsmith":   {name="铸甲师", hp=27, near=4, range=2, magic=4, skill="wardsmith",    skill_desc="护甲注魔：装备一种护甲（限一次）；修复：耗2攻击点+弃强化攻击卡修1耐久；护甲耐久+1"},
 	"spellblade":  {name="魔剑士", hp=23, near=6, range=2, magic=4, skill="spellblade",   skill_desc="魔力引导：装备近战武器时，弃「魔法」卡耗1攻击点视作打出「近战」，弃「吟唱」卡耗2攻击点视作打出「重击」，均无视距离（可被格挡）", skill_turn_limit=-1},

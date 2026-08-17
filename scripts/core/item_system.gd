@@ -121,6 +121,9 @@ func trigger_on_step(player_idx: int) -> int:
 		var t = get_item_type(it.item_type)
 		if t.has("on_step") and t.get("on_step") != null:
 			continue  # 收益类（鸟居）第二遍处理
+		# 猎人无视捕兽夹（平衡调整）：踩上不受伤、夹子保留在原格
+		if it.item_type == "snare" and player.char_id == "hunter":
+			continue
 		var dmg = int(t.get("damage", 0))
 		if dmg > 0:
 			total += dmg
@@ -132,6 +135,7 @@ func trigger_on_step(player_idx: int) -> int:
 		match_ref.stats[player_idx]["damage_taken"] += total
 		match_ref.stats[player_idx]["damage_from_trap"] += total
 	# 第二遍：收益/特殊类道具（on_step 回调：鸟居回血/神隐等）——扣血后再结算
+	# 只移除带 on_step 的道具：猎人免疫的捕兽夹（无 on_step）在第一遍被跳过，须保留在原格
 	for i in range(match_ref.items.size() - 1, -1, -1):
 		var it = match_ref.items[i]
 		if it.position != player.position:
@@ -139,7 +143,7 @@ func trigger_on_step(player_idx: int) -> int:
 		var t = get_item_type(it.item_type)
 		if t.has("on_step") and t.get("on_step") != null:
 			int(t["on_step"].call(player_idx, it))
-		match_ref.items.remove_at(i)  # 触发即消耗（一次性道具）
+			match_ref.items.remove_at(i)  # 触发即消耗（一次性道具）
 	return total
 
 # ---- 摧毁 ----

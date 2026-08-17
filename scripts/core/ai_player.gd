@@ -886,30 +886,30 @@ func decide_action(player_idx: int) -> Dictionary:
 							best_score = s
 							best_action = {"action": "use_skill", "skill": "wardsmith_repair", "card_uid": repair_uid}
 			"hunter_ambush":
-				if p.ap_attack >= 1:
-					var ambush_uid = -1
-					var rng_count = 0
-					for card in hand:
-						if card.type_id in ["range", "pierce"]:
-							rng_count += 1
-							if ambush_uid < 0: ambush_uid = card.uid
-					if ambush_uid >= 0:
-						var geo = match_ref.movement.geometry
-						var hpos: Vector2i = geo.step(opp.position, geo.direction_between(opp.position, p.position))
-						if geo.is_valid(hpos) and hpos != p.position and hpos != opp.position:
-							# 价值判断：埋伏消耗 1 张远程输出牌，火力充足才划算
-							var s = 0
-							var deck_left = _global_left(player_idx, "range") + _global_left(player_idx, "pierce")
-							if rng_count >= 2 or deck_left >= 4:
-								s = 9  # 远程火力充足 → 转一张不心疼
-							elif rng_count == 1 and deck_left >= 2:
-								s = 5  # 勉强：转一张还有牌堆补充
-							# 否则 s=0：只剩一张远程牌且牌堆枯竭 → 保留输出
-							if stance.get("stance", "") == "flee" and s > 0:
-								s = max(s, 12)  # 保命：防守陷阱价值高
-							if s > best_score:
-								best_score = s
-								best_action = {"action": "use_skill", "skill": "hunter_ambush", "card_uid": ambush_uid, "pos": geo.to_dict(hpos)}
+				# 埋伏不消耗攻击行动点（平衡调整 2026-08），不再受 AP 限制
+				var ambush_uid = -1
+				var rng_count = 0
+				for card in hand:
+					if card.type_id in ["range", "pierce"]:
+						rng_count += 1
+						if ambush_uid < 0: ambush_uid = card.uid
+				if ambush_uid >= 0:
+					var geo = match_ref.movement.geometry
+					var hpos: Vector2i = geo.step(opp.position, geo.direction_between(opp.position, p.position))
+					if geo.is_valid(hpos) and hpos != p.position and hpos != opp.position:
+						# 价值判断：埋伏消耗 1 张远程输出牌，火力充足才划算
+						var s = 0
+						var deck_left = _global_left(player_idx, "range") + _global_left(player_idx, "pierce")
+						if rng_count >= 2 or deck_left >= 4:
+							s = 9  # 远程火力充足 → 转一张不心疼
+						elif rng_count == 1 and deck_left >= 2:
+							s = 5  # 勉强：转一张还有牌堆补充
+						# 否则 s=0：只剩一张远程牌且牌堆枯竭 → 保留输出
+						if stance.get("stance", "") == "flee" and s > 0:
+							s = max(s, 12)  # 保命：防守陷阱价值高
+						if s > best_score:
+							best_score = s
+							best_action = {"action": "use_skill", "skill": "hunter_ambush", "card_uid": ambush_uid, "pos": geo.to_dict(hpos)}
 
 	# 13. 负分动作不执行（无有效动作就结束，不浪费牌/不送低价值攻击）
 	if best_action.is_empty() or best_score <= 0:

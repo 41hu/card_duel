@@ -770,7 +770,9 @@ func _show_armor_confirm(card_uid: int, _attack_type: String):
 	for p in _game_state.players:
 		if p.index != _player_index and not p.armor.is_empty():
 			armor_name = p.armor.data.name
-			is_full_durability = p.armor.durability >= p.armor.get("max_durability", 3)
+			# 活铠（饲甲人魔甲）无完全免疫：满耐久也只提示减免一半
+			is_full_durability = p.armor.get("id", "") != "demon_armor" \
+					and p.armor.durability >= p.armor.get("max_durability", 3)
 			break
 	vb.add_child(_lbl("对方装备了%s" % armor_name))
 	# 按耐久区分提示：满耐久才完全免疫，其余是减免一半

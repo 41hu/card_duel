@@ -1085,25 +1085,35 @@ func _exec_skill(sk_id: String):
 	if sk_id == "mage_discard": _show_mage_pick()
 	elif sk_id == "assassin_move": _popup_move(-1)
 	elif sk_id == "hunter_ambush": _show_hunter_pick()
-	elif sk_id == "wardsmith_imbue": _show_wardsmith_imbue()
+	elif sk_id == "wardsmith_infuse": _show_wardsmith_infuse()
 	elif sk_id == "wardsmith_repair": _show_wardsmith_repair()
 	elif sk_id == "spellblade_channel": _show_spellblade_pick()
 	else: _n().send_use_skill(sk_id)
 
-# 铸甲师护甲注魔：直接选择一种护甲装备（限一次，不耗卡）
-func _show_wardsmith_imbue():
+# 铸甲师注魔：护甲满耐久时消耗一张攻击卡，把护甲换成该卡对应类型（每回合限一次）
+func _show_wardsmith_infuse():
 	var c = Control.new()
-	c.name = "WardsmithImbue"
+	c.name = "WardsmithInfuse"
 	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
-	var vb = _popup_box(c, 560, 380)
-	vb.add_child(_lbl("护甲注魔：选择要装备的护甲（限一次）"))
-	var options = [["near_armor", "近战防具"], ["range_armor", "远程防具"], ["magic_armor", "法术防具"]]
-	for opt in options:
-		var b = _mkbtn(opt[1])
-		b.pressed.connect(func(at=opt[0]): c.queue_free(); _n().send_use_skill("wardsmith_imbue", {"armor_type": at}))
-		vb.add_child(b)
+	var vb = _popup_box(c, 640, 440)
+	var me = _find_self()
+	var armor_name = "护甲"
+	var armor = me.get("armor", {})
+	if not armor.is_empty() and Config.ARMOR_DB.has(armor.get("id", "")):
+		armor_name = Config.ARMOR_DB[armor.id].name
+	var arm_map = {"near": "近战防具", "heavy": "近战防具", "range": "远程防具", "pierce": "远程防具", "magic": "法术防具", "chant": "法术防具"}
+	vb.add_child(_lbl("注魔：护甲满耐久时，消耗一张攻击卡\n将「%s」更换为该卡对应类型（每回合限一次）" % armor_name))
+	var has_any = false
+	for card in me.get("hand", []):
+		if card.type_id in arm_map:
+			has_any = true
+			var b = _mkbtn("%s → %s" % [Config.card_name(card.type_id), arm_map[card.type_id]])
+			b.pressed.connect(func(uid=card.uid): c.queue_free(); _n().send_use_skill("wardsmith_infuse", {"card_uid": uid}))
+			vb.add_child(b)
+	if not has_any:
+		vb.add_child(_lbl("手牌没有可消耗的攻击卡"))
 	var close = _mkbtn("取消")
 	close.pressed.connect(func(): c.queue_free())
 	vb.add_child(close)
@@ -1128,7 +1138,7 @@ func _show_wardsmith_repair():
 			"near_armor": expect_type = "heavy"
 			"range_armor": expect_type = "pierce"
 			"magic_armor": expect_type = "chant"
-	vb.add_child(_lbl("修复：选择%s（耗2攻击点，耐久+1）" % armor_name))
+	vb.add_child(_lbl("修复：选择%s（耗1攻击点，耐久+2）" % armor_name))
 	var has_any = false
 	for card in me.get("hand", []):
 		if card.type_id == expect_type:

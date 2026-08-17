@@ -76,6 +76,10 @@ func destroy_equipment(player_idx: int, equip_type: String) -> String:
 			if player.armor.is_empty(): return "对方没有防具"
 			var old = player.armor
 			if old.id == "demon_armor": return "活铠免疫摧毁"
+			if player.char_id == "wardsmith":
+				# 精铸韧性（铸甲师被动）：摧毁只打掉耐久，护甲保留 1 耐久不消失
+				player.armor.durability = 1
+				return "精铸韧性: %s耐久降至1" % old.data.name
 			player.armor = {}
 			return "摧毁了" + old.data.name
 	return "无效选择"

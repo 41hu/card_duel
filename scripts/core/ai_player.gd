@@ -863,21 +863,26 @@ func decide_action(player_idx: int) -> Dictionary:
 					if s > best_score:
 						best_score = s
 						best_action = {"action": "use_skill", "skill": "assassin_move", "direction": geo.to_dict(dir)}
-			"wardsmith_imbue":
-				# 护甲注魔（改版）：不耗卡，直接选护甲装备（铸甲师 4 耐久强生存）；
-				# 按对方主要进攻手段选对应护甲（与防具牌同逻辑）；价值高于防具牌（免费且4耐久，
-				# 防具牌仅3耐久还要耗卡）→ 无防具时注魔优先，避免浪费核心技能；
-				# 危险/保命档价值更高
-				if p.armor.is_empty():
-					var imbue_atype = _opp_main_attack_type(player_idx)
-					var imbue_armor = {"near": "near_armor", "range": "range_armor", "magic": "magic_armor"}.get(imbue_atype, "near_armor")
-					var s = 20
-					if stance.get("stance", "") in ["flee", "danger"]: s = 22  # 危险时防御优先
-					if s > best_score:
-						best_score = s
-						best_action = {"action": "use_skill", "skill": "wardsmith_imbue", "armor_type": imbue_armor}
+			"wardsmith_infuse":
+				# 注魔：护甲满耐久 + 手牌有攻击卡 → 当前护甲类型不针对对方主要攻击时换甲
+				if not p.armor.is_empty() and p.armor.get("durability", 0) >= p.armor.get("max_durability", 4):
+					var want = _opp_main_attack_type(player_idx)
+					var want_armor = {"near": "near_armor", "range": "range_armor", "magic": "magic_armor"}.get(want, "")
+					if want_armor != "" and p.armor.id != want_armor:
+						var infuse_uid = -1
+						for card in hand:
+							if card.type_id in ["near", "range", "magic", "heavy", "pierce", "chant"]:
+								infuse_uid = card.uid
+								break
+						if infuse_uid >= 0:
+							# 优先消耗「非输出」的攻击卡（低价值近战/与自己主攻不匹配的），火力充足才换甲
+							var s = 10
+							if stance.get("stance", "") in ["flee", "danger"]: s = 14  # 危险时换对甲价值高
+							if s > best_score:
+								best_score = s
+								best_action = {"action": "use_skill", "skill": "wardsmith_infuse", "card_uid": infuse_uid}
 			"wardsmith_repair":
-				# 修复：护甲破损 + 手牌有匹配强化卡 + 2攻击点 → 弃卡修复1耐久（满耐久可完全免疫对方一次攻击）
+				# 修复：护甲破损 + 手牌有匹配强化卡 + 1攻击点 → 弃卡修复2耐久（满耐久可完全免疫对方一次攻击）
 				if not p.armor.is_empty() and p.armor.get("durability", 0) < p.armor.get("max_durability", 3):
 					var expect_type = {"near_armor": "heavy", "range_armor": "pierce", "magic_armor": "chant"}.get(p.armor.id, "")
 					var repair_uid = -1
@@ -885,12 +890,12 @@ func decide_action(player_idx: int) -> Dictionary:
 						if card.type_id == expect_type:
 							repair_uid = card.uid
 							break
-					if repair_uid >= 0 and p.ap_attack >= 2:
+					if repair_uid >= 0 and p.ap_attack >= 1:
 						# 护甲能防住对方主要攻击才值得修；保命档破损也修（总比碎了裸奔好）
 						var atype = "near" if p.armor.id == "near_armor" else ("range" if p.armor.id == "range_armor" else "magic")
 						var s = 0
-						if atype == _opp_main_attack_type(player_idx): s = 14
-						elif stance.get("stance", "") in ["flee", "danger"]: s = 10
+						if atype == _opp_main_attack_type(player_idx): s = 16
+						elif stance.get("stance", "") in ["flee", "danger"]: s = 12
 						if s > best_score:
 							best_score = s
 							best_action = {"action": "use_skill", "skill": "wardsmith_repair", "card_uid": repair_uid}

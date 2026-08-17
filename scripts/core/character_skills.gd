@@ -184,8 +184,10 @@ func has_active_skills(player_idx: int) -> Array:
 			# 埋伏：手牌有远程攻击牌（range/pierce）时才显示
 			if _has_range_attack(player_idx): skills.append("hunter_ambush")
 		"wardsmith":
-			# 护甲注魔：始终可用（整局限一次由 skill_game_limit 控制）
-			skills.append("wardsmith_imbue")
+			# 注魔：装备护甲且满耐久、手牌有攻击卡（near/range/magic/heavy/pierce/chant）时可用
+			if not p.armor.is_empty() and p.armor.durability >= p.armor.get("max_durability", 4) \
+					and _has_infuse_card(player_idx):
+				skills.append("wardsmith_infuse")
 			# 修复：装备护甲且耐久未满时可用
 			if not p.armor.is_empty() and p.armor.durability < p.armor.get("max_durability", 3):
 				skills.append("wardsmith_repair")
@@ -204,7 +206,6 @@ func has_active_skills(player_idx: int) -> Array:
 		if turn_limit >= 0 and turn_used >= turn_limit: continue
 		# 整局限次（数据表 skill_game_limit，默认 -1 无限）
 		var game_limit = int(cd.get("skill_game_limit", -1))
-		if game_limit < 0 and sk == "wardsmith_imbue": game_limit = 1  # 铸甲师护甲注魔限整局一次（数据缺省兜底）
 		if game_limit > 0:
 			var used = p.skill_counts.get(sk, 0)
 			if used >= game_limit: continue
@@ -218,12 +219,19 @@ func _has_range_attack(player_idx: int) -> bool:
 			return true
 	return false
 
+# 手牌是否含可注魔的攻击卡（铸甲师注魔按钮条件；不含 freeze）
+func _has_infuse_card(player_idx: int) -> bool:
+	for c in _ms.card_systems[player_idx].hand:
+		if c.type_id in ["near", "range", "magic", "heavy", "pierce", "chant"]:
+			return true
+	return false
+
 func skill_button_name(skill: String) -> String:
 	match skill:
 		"mage_discard": return "法术强化"
 		"assassin_move": return "暗影步"
 		"hunter_ambush": return "埋伏"
-		"wardsmith_imbue": return "护甲注魔"
+		"wardsmith_infuse": return "注魔"
 		"wardsmith_repair": return "修复"
 		"spellblade_channel": return "魔力引导"
 	return skill
@@ -237,7 +245,6 @@ func use_skill(player_idx: int, skill: String, params: Dictionary) -> Dictionary
 	#   skill_turn_limit: 每回合限次（默认 1）；skill_game_limit: 整局限次（默认 -1 无限）
 	var cd = Config.CHARACTER_DB[p.char_id]
 	var game_limit = int(cd.get("skill_game_limit", -1))
-	if game_limit < 0 and skill == "wardsmith_imbue": game_limit = 1  # 铸甲师护甲注魔限整局一次（数据缺省兜底）
 	var used = 0
 	if game_limit > 0:
 		used = p.skill_counts.get(skill, 0)
@@ -257,7 +264,7 @@ func use_skill(player_idx: int, skill: String, params: Dictionary) -> Dictionary
 		"mage_discard": skill_result = _mage_discard(player_idx, params)
 		"assassin_move": skill_result = _assassin_move(player_idx, params)
 		"hunter_ambush": skill_result = _hunter_ambush(player_idx, params)
-		"wardsmith_imbue": skill_result = _wardsmith_imbue(player_idx, params)
+		"wardsmith_infuse": skill_result = _wardsmith_infuse(player_idx, params)
 		"wardsmith_repair": skill_result = _wardsmith_repair(player_idx, params)
 		"spellblade_channel": skill_result = _spellblade_channel(player_idx, params)
 		_: skill_result = {success=false, msg="未知技能"}
@@ -266,16 +273,33 @@ func use_skill(player_idx: int, skill: String, params: Dictionary) -> Dictionary
 		if game_limit > 0: p.skill_counts[skill] = used
 	return skill_result
 
-# 护甲注魔（铸甲师，限整局一次）：直接选择一种护甲装备（不消耗卡牌）
-func _wardsmith_imbue(player_idx: int, params: Dictionary) -> Dictionary:
-	var armor_id = str(params.get("armor_type", ""))
-	if not armor_id in ["near_armor", "range_armor", "magic_armor"]:
-		return {success=false, msg="请选择护甲类型"}
-	_ms.equipment.equip_armor(player_idx, armor_id)
-	_ms.add_log(player_idx, "护甲注魔: 装备%s" % Config.ARMOR_DB[armor_id].name)
+# 注魔（铸甲师主动技，每回合限一次）：护甲满耐久时，消耗一张攻击卡
+# （near/range/magic/heavy/pierce/chant，不含 freeze），把护甲更换为该卡对应类型
+func _wardsmith_infuse(player_idx: int, params: Dictionary) -> Dictionary:
+	var p = _ms.players[player_idx]
+	if p.armor.is_empty():
+		return {success=false, msg="未装备护甲"}
+	var max_dur = int(p.armor.get("max_durability", 4))
+	if int(p.armor.durability) < max_dur:
+		return {success=false, msg="护甲未满耐久"}
+	var uid = int(params.get("card_uid", -1))
+	var cs = _ms.card_systems[player_idx]
+	var card = {}
+	for c in cs.hand:
+		if c.uid == uid: card = c; break
+	if card.is_empty() or not card.type_id in ["near", "range", "magic", "heavy", "pierce", "chant"]:
+		return {success=false, msg="请选择攻击卡"}
+	# 攻击卡类型 → 对应护甲（普通+强化一一映射）
+	var armor_id = {"near": "near_armor", "heavy": "near_armor", "range": "range_armor", "pierce": "range_armor", "magic": "magic_armor", "chant": "magic_armor"}[card.type_id]
+	cs.play_card(uid)  # 消耗攻击卡进弃牌堆（卡结构 {uid,type_id} 干净，不污染牌堆）
+	var old_name = str(p.armor.get("data", {}).get("name", "护甲"))
+	var new_dur = 3 + armor_durability_bonus(player_idx)  # 铸甲师精铸：4 耐久
+	# 旧护甲直接消失（不进牌堆）；data 用 duplicate 防未来代码误改 data 污染 ARMOR_DB 常量表
+	p.armor = {id=armor_id, data=Config.ARMOR_DB[armor_id].duplicate(), durability=new_dur, max_durability=new_dur}
+	_ms.add_log(player_idx, "注魔: 消耗%s，%s→%s(%d/%d)" % [Config.card_name(card.type_id), old_name, Config.ARMOR_DB[armor_id].name, new_dur, new_dur])
 	return {success=true}
 
-# 修复（铸甲师）：装备破损护甲时，消耗2攻击点 + 弃一张与装备护甲匹配的强化攻击卡，修复1点耐久
+# 修复（铸甲师）：装备破损护甲时，消耗1攻击点 + 弃一张与装备护甲匹配的强化攻击卡，修复2点耐久
 # 重击→近战防具、穿心→远程防具、吟唱→法术防具（一一对应 ARMOR_DB 类型）
 func _wardsmith_repair(player_idx: int, params: Dictionary) -> Dictionary:
 	var p = _ms.players[player_idx]
@@ -284,7 +308,7 @@ func _wardsmith_repair(player_idx: int, params: Dictionary) -> Dictionary:
 	var max_dur = p.armor.get("max_durability", 3)
 	if p.armor.durability >= max_dur:
 		return {success=false, msg="护甲未破损"}
-	if p.ap_attack < 2:
+	if p.ap_attack < 1:
 		return {success=false, msg="攻击行动点不足"}
 	var uid = int(params.get("card_uid", -1))
 	var cs = _ms.card_systems[player_idx]
@@ -298,9 +322,9 @@ func _wardsmith_repair(player_idx: int, params: Dictionary) -> Dictionary:
 	if p.armor.id != expect_armor:
 		return {success=false, msg="卡牌类型与装备护甲不匹配"}
 	cs.play_card(uid)  # 丢弃进弃牌堆
-	p.armor.durability = min(max_dur, p.armor.durability + 1)
-	p.ap_attack -= 2
-	_ms.add_log(player_idx, "修复: %s耐久+1(%d/%d)" % [p.armor.data.name, p.armor.durability, max_dur])
+	p.armor.durability = min(max_dur, p.armor.durability + 2)
+	p.ap_attack -= 1
+	_ms.add_log(player_idx, "修复: %s耐久+2(%d/%d)" % [p.armor.data.name, p.armor.durability, max_dur])
 	return {success=true}
 
 # 魔力引导（魔剑士）：装备近战武器时，弃「魔法」卡视作打出「近战」、弃「吟唱」卡视作打出「重击」（均无视距离，可被格挡）

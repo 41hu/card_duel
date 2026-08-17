@@ -95,6 +95,14 @@
 
 ### 5.1 SSH 部署服务器的坑（2026-08 实测）
 - **启动命令与验证分开**：`pkill` + `nohup &` 串一条命令链会 ssh 挂起（远端 shell 持有后台进程 fd 不退出）+ pkill 返回码污染。正确姿势：① `git pull` ② `pkill` ③ `setsid nohup ... > log 2>&1 < /dev/null & exit 0`（这条 ssh 会超时/hang 是正常现象，远端已执行）④ **单独一条 ssh 验证** `ps aux | grep`。
+- **pkill -f 自匹配陷阱（2026-08-17 实测）**：`pkill -f "scenes/server.tscn"` 的模式会匹配**当前 ssh 会话自身的命令行**（命令行里就含这个字符串）→ 远程 shell 被杀 → 后续启动命令根本没执行、服务器裸奔。安全写法：`pkill -f 'server\.tscn'` 也仍匹配 ssh 自身，正确做法是 pkill 与启动拆成两条 ssh，或先 `pgrep -f 'godot.*server'` 拿 PID 精确 kill；重启后必须 `ps aux` 验证进程真的在。
 - **PowerShell 调 ssh 的引用符规则**：远端命令只用**单引号**（PowerShell 外层双引号 + 内层单引号）；内层用双引号会被 ssh 剥掉——`grep -E "服务端启动|监听端口"` 传到远端变成 `grep -E 服务端启动|监听端口`，管道符被 bash 解释执行报"command not found"。
 - 服务器免密登录已配置（本机 id_ed25519），`ssh root@47.107.47.251` 直接用；服务器代码版本、进程状态可随时只读检查。
 - 协作者用 Godot 3 类名（如 `WrapContainer`）会直接编译失败——Godot 4 已改名 `FlowContainer`；合入协作者代码后先 `validate_scripts` 再跑。
+
+### 5.2 WebSocket 缓冲上限（2026-08-17 联机结算卡死元凶）
+- **Godot WebSocketPeer 收发缓冲默认各 65535 字节（64KB）**，超限 `put_packet` 直接返回 ERR_OUT_OF_MEMORY、消息静默丢弃（引擎打 ERROR 但不抛异常）。
+- 长对局结算 `game_over` 消息含 battle_record（每回合快照）+ action_log + stats，实测 130KB+ → 服务端广播失败 → 客户端永远收不到 → **卡在战斗界面不跳结算**（对局拖长/多次复活时必现）。
+- 修法：服务端 `ws.outbound_buffer_size = 16MB`（accept_stream 前）、客户端 `_socket.inbound_buffer_size = 16MB`（connect_to_url 前）；两端都要改，只改一端仍断。
+- 排查姿势：服务器 `server.log` 里搜 `ERR_OUT_OF_MEMORY` + backtrace 指向 `_send_to`；本地 eval 里 `JSON.stringify(模拟结果).to_utf8_buffer().size()` 评估消息体积。
+- 附带改进：`_send_to` 里检查 put_packet 返回值并 log（消息类型/错误码/字节数），下次再炸一眼可见。

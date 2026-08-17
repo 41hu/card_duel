@@ -201,12 +201,16 @@ func _nearest_alive_opponent(player_idx: int) -> int:
 	return best
 
 func _create_player(idx: int, char_id: String, char_data: Dictionary) -> Dictionary:
+	# 饲甲人开局自带活铠（魔甲）：耐久上限 2，全类型减半，无完全免疫，不碎裂
+	var init_armor = {}
+	if char_id == "armor_feeder":
+		init_armor = {id="demon_armor", data=Config.ARMOR_DB["demon_armor"], durability=2, max_durability=2}
 	return {
 		index=idx, char_id=char_id,
 		hp=char_data.hp, max_hp=char_data.hp,
 		near_power=char_data.near, range_power=char_data.range, magic_power=char_data.magic,
 		position=movement.geometry.initial_position(idx),
-		weapon={}, armor={}, buffs=[], dots=[],
+		weapon={}, armor=init_armor, buffs=[], dots=[],
 		eliminated=false,  # 多人混战：淘汰标记（2 人局不使用）
 		frozen=false, frozen_lockout=0, frozen_move=false,
 		damage_reduction_used=false, skill_used_this_turn=false, free_move_used=false,
@@ -262,6 +266,9 @@ func _start_game():
 func _judgment_phase():
 	if phase == Config.Phase.GAME_OVER: return
 	turn_phase = Config.TurnPhase.JUDGMENT
+	# 回合开始钩子（判定阶段最前，DoT 之前）：活铠献祭等
+	char_skills.on_judgment_start(current_player)
+	if phase == Config.Phase.GAME_OVER: return  # 献祭扣血致死淘汰
 	var player = players[current_player]
 	if player.dots.size() > 0:
 		# 先快照本回合将造成伤害的 DoT 类型（牧师净化用）
@@ -705,8 +712,8 @@ func _handle_destroy(player_idx: int, card: Dictionary) -> Dictionary:
 	var et = card.get("equip_type", "weapon")
 	if et != "weapon" and et != "armor": return {success=false, msg="无效装备类型"}
 	var msg = equipment.destroy_equipment(opp, et)
-	if "没有" in msg:
-		return {success=false, msg=msg}  # 目标不存在：卡不消耗
+	if "没有" in msg or "免疫" in msg:
+		return {success=false, msg=msg}  # 目标不存在/免疫摧毁（活铠）：卡不消耗
 	_use_card(player_idx, card); add_log(player_idx, msg); return {success=true}
 
 func _handle_seize(player_idx: int, card: Dictionary) -> Dictionary:

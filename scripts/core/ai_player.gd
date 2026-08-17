@@ -594,8 +594,8 @@ func decide_action(player_idx: int) -> Dictionary:
 			if d_target.is_empty() and not opp.weapon.is_empty():
 				s = 14  # 拆武器（对方输出核心）最值
 				d_target = {"destroy_target": "equip", "equip_type": "weapon"}
-			elif d_target.is_empty() and not opp.armor.is_empty():
-				s = 12  # 拆防具次之
+			elif d_target.is_empty() and not opp.armor.is_empty() and opp.armor.id != "demon_armor":
+				s = 12  # 拆防具次之（活铠免疫摧毁，不选——服务端会拒绝白耗卡）
 				d_target = {"destroy_target": "equip", "equip_type": "armor"}
 			elif d_target.is_empty() and match_ref.card_systems[opp_idx].hand.size() > 0:
 				s = 8 + min(4, match_ref.card_systems[opp_idx].hand.size() * 2)  # 拆手牌（对手牌越多越值）
@@ -782,6 +782,15 @@ func decide_action(player_idx: int) -> Dictionary:
 	for card in hand:
 		if p.ap_function < 1: break
 		if card.type_id in ["near_armor", "range_armor", "magic_armor"]:
+			# 饲甲人：护甲卡=修复活铠（耐久不满才有价值，满耐久打出纯浪费）
+			if p.char_id == "armor_feeder":
+				if not p.armor.is_empty() and p.armor.id == "demon_armor" \
+						and int(p.armor.durability) < int(p.armor.get("max_durability", 2)):
+					var s_repair = 8 if int(p.armor.durability) == 0 else 5  # 0耐久修复收益更高（免献祭+恢复减半）
+					if s_repair > best_score:
+						best_score = s_repair
+						best_action = {"action": "play_card", "card_uid": card.uid}
+				continue
 			var atype = "near" if card.type_id == "near_armor" else ("range" if card.type_id == "range_armor" else "magic")
 			var s = 0
 			if atype == opp_main_atk:

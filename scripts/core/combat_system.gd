@@ -120,9 +120,11 @@ func _calc_armor(defender, damage_type: int, damage: int) -> Dictionary:
 	var armor_type = Config.ARMOR_DB[armor_id].type
 	var durability = defender.armor.durability
 
-	# 检查防具类型是否匹配
+	# 检查防具类型是否匹配（活铠 type="all"：全类型匹配）
 	var matches = false
 	match armor_type:
+		"all":
+			matches = true
 		"physical":
 			matches = (damage_type == Config.DamageType.PHYSICAL)
 		"ranged":
@@ -133,8 +135,12 @@ func _calc_armor(defender, damage_type: int, damage: int) -> Dictionary:
 	if not matches:
 		return {blocked=false, damage=damage, armor_hit=false, msg=""}
 
-	# 第1次（满耐久）：完全免疫
-	if durability == defender.armor.get("max_durability", 3):
+	# 活铠（饲甲人魔甲）：耐久 0 时无减伤（不碎裂但破甲空窗）
+	if armor_id == "demon_armor" and durability <= 0:
+		return {blocked=false, damage=damage, armor_hit=false, msg=""}
+
+	# 第1次（满耐久）：完全免疫（活铠无此能力，只有对半抵挡）
+	if durability == defender.armor.get("max_durability", 3) and armor_id != "demon_armor":
 		return {blocked=true, damage=0, armor_hit=true, msg="防具完全免疫了伤害！"}
 
 	# 第2、3次：减半
@@ -144,9 +150,9 @@ func _calc_armor(defender, damage_type: int, damage: int) -> Dictionary:
 func consume_armor(defender_idx: int):
 	var defender = match_ref.get_player(defender_idx)
 	if defender.armor.is_empty(): return
-	defender.armor.durability -= 1
-	if defender.armor.durability <= 0:
-		defender.armor = {}  # 碎裂
+	defender.armor.durability = max(0, defender.armor.durability - 1)
+	if defender.armor.durability <= 0 and defender.armor.id != "demon_armor":
+		defender.armor = {}  # 碎裂（活铠不碎裂：耐久钳在 0，回合开始献祭回复）
 
 # 穿甲：强化攻击（heavy/pierce/chant）命中时，防具额外损失耐久（默认2点）。
 # 无论防具是否完全免疫伤害都生效——强化攻击对防具的威慑价值。
@@ -154,9 +160,9 @@ func pierce_armor(defender_idx: int, amount: int = 2) -> bool:
 	var defender = match_ref.get_player(defender_idx)
 	if defender.armor.is_empty():
 		return false
-	defender.armor.durability -= amount
-	if defender.armor.durability <= 0:
-		defender.armor = {}  # 碎裂
+	defender.armor.durability = max(0, defender.armor.durability - amount)
+	if defender.armor.durability <= 0 and defender.armor.id != "demon_armor":
+		defender.armor = {}  # 碎裂（活铠不碎裂：耐久钳在 0）
 	return true
 
 # ---------- 响应处理 ----------

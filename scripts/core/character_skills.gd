@@ -92,6 +92,19 @@ func on_turn_start(player_idx: int):
 	p.ap_attack = max(0, 2 + _ms.status.query_modifier(player_idx, "ap_attack"))
 	p.ap_move = 1
 
+# 判定阶段最前钩子（DoT 结算之前）：活铠献祭等
+func on_judgment_start(player_idx: int):
+	var p = _ms.players[player_idx]
+	if p.char_id != "armor_feeder": return
+	if p.armor.is_empty() or p.armor.id != "demon_armor": return
+	var max_dur = int(p.armor.get("max_durability", 2))
+	if int(p.armor.durability) >= max_dur: return
+	var before = int(p.armor.durability)
+	_ms._damage_player(player_idx, 1)  # 统一伤害入口：扣血可致死、触发复活/淘汰
+	if _ms.phase == Config.Phase.GAME_OVER: return
+	p.armor.durability = min(max_dur, before + 1)
+	_ms.add_log(player_idx, "活铠献祭: -1HP 耐久+1(%d→%d)" % [before, p.armor.durability])
+
 func on_turn_end(player_idx: int):
 	var p = _ms.players[player_idx]
 	if p.char_id == "warlock" and not p.used_function_card:

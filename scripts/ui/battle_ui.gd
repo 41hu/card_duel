@@ -715,10 +715,11 @@ func _show_target_pick(card_uid: int, type_id: String, extra: Dictionary = {}):
 	vb.add_child(close)
 	add_child(c)
 
-# 已有防具时再装备防具卡：弹确认（旧防具会被直接覆盖消失）
+# 已有防具时再装备防具卡：弹确认（旧防具会被直接覆盖消失）；饲甲人活铠不可覆盖（护甲卡=修复）
 func _is_armor_override(type_id: String) -> bool:
 	if not type_id.ends_with("_armor"): return false
 	var me = _find_self()
+	if me.get("char_id", "") == "armor_feeder": return false
 	return not me.get("armor", {}).is_empty()
 
 func _show_armor_override_confirm(card_uid: int):
@@ -751,6 +752,7 @@ func _has_matching_armor(attack_type: String) -> bool:
 	if need == "": return false
 	for p in _game_state.players:
 		if p.index != _player_index and not p.armor.is_empty():
+			if p.armor.data.type == "all": return true  # 活铠全类型
 			return p.armor.data.type == need
 	return false
 
@@ -1013,9 +1015,14 @@ func _popup_destroy(card_uid: int):
 		)
 		vb.add_child(wb)
 	if multi or not opp.armor.is_empty():
-		var ab = _mkbtn("摧毁对方防具" + ((": " + opp.armor.data.name) if not opp.armor.is_empty() else ""))
+		# 活铠（饲甲人魔甲）免疫摧毁：2人局按钮直接标注免疫，点击不消耗卡只提示
+		var immune = (not multi) and (not opp.armor.is_empty()) and opp.armor.get("id", "") == "demon_armor"
+		var ab = _mkbtn("对方防具: 活铠（免疫摧毁）" if immune else ("摧毁对方防具" + ((": " + opp.armor.data.name) if not opp.armor.is_empty() else "")))
 		ab.pressed.connect(func():
 			c.queue_free()
+			if immune:
+				status_label.text = "活铠免疫摧毁"
+				return
 			if multi:
 				_show_target_pick(card_uid, "destroy", {"destroy_target": "equip", "equip_type": "armor"})
 			else:

@@ -25,6 +25,8 @@ const ARMOR_DB = {
 	"near_armor":  {name="近战防具", type="physical", desc="防近战/重击"},
 	"range_armor": {name="远程防具", type="ranged",   desc="防远程/穿心"},
 	"magic_armor": {name="法术防具", type="magical",  desc="防魔法/吟唱"},
+	# 饲甲人专属魔甲：全类型减半、无满耐久免疫、0 耐久无减伤、不碎裂（规则特判见 combat_system）
+	"demon_armor": {name="活铠",     type="all",      desc="全类型攻击伤害减半（无完全免疫；0耐久无减伤）"},
 }
 
 const RESPONSE_BY = {

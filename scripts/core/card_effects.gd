@@ -129,19 +129,19 @@ func _magic_weapon(player_idx: int, card: Dictionary):
 
 func _near_armor(player_idx: int, card: Dictionary):
 	_m.card_systems[player_idx].play_card(card.uid)
-	_m.equipment.equip_armor(player_idx, "near_armor")
-	_m.add_log(player_idx, "装备防具")
+	var r = _m.equipment.equip_armor(player_idx, "near_armor")
+	_m.add_log(player_idx, str(r.get("msg", "装备防具")))
 	return {success=true}
 
 func _range_armor(player_idx: int, card: Dictionary):
 	_m.card_systems[player_idx].play_card(card.uid)
-	_m.equipment.equip_armor(player_idx, "range_armor")
-	_m.add_log(player_idx, "装备防具")
+	var r = _m.equipment.equip_armor(player_idx, "range_armor")
+	_m.add_log(player_idx, str(r.get("msg", "装备防具")))
 	return {success=true}
 
 func _magic_armor(player_idx: int, card: Dictionary):
 	_m.card_systems[player_idx].play_card(card.uid)
-	_m.equipment.equip_armor(player_idx, "magic_armor")
-	_m.add_log(player_idx, "装备防具")
+	var r = _m.equipment.equip_armor(player_idx, "magic_armor")
+	_m.add_log(player_idx, str(r.get("msg", "装备防具")))
 	return {success=true}
 

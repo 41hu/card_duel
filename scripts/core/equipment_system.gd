@@ -43,9 +43,18 @@ func discard_weapon_offer(_weapon_id: String):
 	pass  # 放弃幻化：武器未装备、未入独占集合，无需处理（回池语义由场上集合天然实现）
 
 func equip_armor(player_idx: int, armor_type_id: String) -> Dictionary:
+	var player = match_ref.get_player(player_idx)
+	# 饲甲人：无法装备其他护甲——护甲卡改为修复活铠（满耐久时打出无效果）
+	if player.char_id == "armor_feeder":
+		if not player.armor.is_empty() and player.armor.id == "demon_armor":
+			var max_dur = int(player.armor.get("max_durability", 2))
+			if int(player.armor.durability) < max_dur:
+				player.armor.durability = max_dur
+				return {success=true, msg="活铠修复: 耐久回满"}
+			return {success=true, msg="活铠已满耐久，无事发生"}
+		return {success=true, msg="活铠"}
 	var reject = match_ref.char_skills.can_equip(player_idx, "armor")
 	if reject != "": return {success=false, msg=reject}
-	var player = match_ref.get_player(player_idx)
 	# 耐久上限：基础 3 + 角色被动加成（铸甲师 +1 → 4）
 	var dur = 3 + match_ref.char_skills.armor_durability_bonus(player_idx)
 	# 旧防具直接消失（防具卡打出时已进弃牌堆；若把 {id,data} 结构塞进弃牌堆会污染牌堆）
@@ -66,6 +75,7 @@ func destroy_equipment(player_idx: int, equip_type: String) -> String:
 		"armor":
 			if player.armor.is_empty(): return "对方没有防具"
 			var old = player.armor
+			if old.id == "demon_armor": return "活铠免疫摧毁"
 			player.armor = {}
 			return "摧毁了" + old.data.name
 	return "无效选择"

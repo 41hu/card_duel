@@ -51,6 +51,10 @@ var _moved_to_adjacent_this_turn: bool = false
 var _armor_hit: bool = false
 # 本次攻击是否触发穿甲（强化攻击 heavy/pierce/chant 命中防具时额外-2耐久）
 var _armor_pierce: bool = false
+# 满耐久防具完全免疫：攻击进入响应窗口（玩家可闪避保甲），结算时防具免疫才生效
+var _pending_blocked: bool = false
+# 本次响应效果（block/restrain/dodge/""）：0 伤害结算时判断是否闪避保住防具
+var _resp_effect: String = ""
 var _ignore_distance: bool = false  # 魔力引导等技能：本次攻击无视贴脸距离限制
 # 调试发牌的 uid 计数器（保证唯一，与正常卡 uid 0-77 隔离）
 var _cheat_uid_counter: int = -1000
@@ -491,6 +495,7 @@ func _handle_attack_card(player_idx: int, card: Dictionary) -> Dictionary:
 # 开始攻击的一段：计算伤害 → 进入响应窗口；段间推进由 process_response 处理
 func _begin_attack_segment(player_idx: int) -> Dictionary:
 	pending_attack_segment += 1
+	_pending_blocked = false  # 每段独立判定（防上一段免疫标记残留）
 	var type_id = pending_attack_card
 	var opp = _pending_target
 	var distance = movement.get_distance(opp)
@@ -515,24 +520,15 @@ func _begin_attack_segment(player_idx: int) -> Dictionary:
 		if calc.get("reason", "") == "distance":
 			# 距离不够（穿心）：攻击无效，不消耗卡
 			return {success=false, msg=calc.get("msg", "距离不够")}
-		# 强化攻击（heavy/pierce/chant）命中防具：只掉 2 点耐久（穿甲），不叠加正常消耗 -1
-		# （满耐久 3 的防具需两次强化攻击命中才碎裂——玩家要求，勿改回）；
-		# 普通攻击免疫照常消耗 1 点
-		if _armor_pierce:
-			combat.pierce_armor(opp)
-			add_log(player_idx, "穿甲: 防具耐久-2")
-		else:
-			combat.consume_armor(opp)
-		_armor_pierce = false
-		# 满耐久护甲完全免疫：该击伤害计入"完全抵挡"统计（战术大师称号）
-		stats[opp]["blocked_dmg"] += attacker_last_damage
-		add_log(player_idx, "被防具挡下")
-		# 多段攻击：本段被免疫则继续下一段（防具耐久已消耗，下一段按减半结算）
-		if pending_attack_segment < pending_attack_segments:
-			return _begin_attack_segment(player_idx)
-		_use_card(player_idx, {uid=pending_attack_uid, type_id=pending_attack_card})
-		state_changed.emit(get_full_state())
-		return {success=true, msg="被防具挡下"}
+		# 满耐久防具免疫：进入响应窗口——玩家可用魔法卡闪避躲开攻击、保住防具耐久；
+		# 不响应/格挡/牵制则防具免疫生效（消耗耐久，强化攻击附带穿甲）
+		_pending_blocked = true
+		add_log(player_idx, "%s打出%s" % [Config.char_name(players[player_idx].char_id), Config.card_name(type_id)])
+		phase = Config.Phase.RESPONSE_WINDOW
+		response_pending = true
+		_action_deadline = Time.get_ticks_msec() + RESPONSE_TIME * 1000
+		response_needed.emit(opp, {attacker=player_idx, card=type_id, damage=0, distance=distance, segment=pending_attack_segment, segments=pending_attack_segments})
+		return {success=true, phase="response", damage=0}
 	if attacker_last_damage <= 0:
 		# 防具把伤害减半到 0：防具本次已生效（armor_hit=true），照常消耗耐久，
 		# 否则 1 伤害攻击可以无限白嫖防具减半；同时清空穿甲标记防残留
@@ -568,11 +564,13 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 	var final_damage = attacker_last_damage
 	var formula = _pending_formula
 	_pending_formula = ""
+	_resp_effect = ""
 	if respond and card_uid >= 0:
 		var rr = combat.process_response(attacker_idx, defender_idx, pending_attack_card, card_uid)
 		if rr.success:
 			stats[defender_idx]["responses"] += 1
 			var rname = Config.card_name(rr.get("response_card", ""))
+			_resp_effect = str(rr.effect)
 			match rr.effect:
 				"block": final_damage = floori(final_damage / 2.0); formula += "/2"; add_log(defender_idx, "用%s格挡" % rname)
 				"restrain":
@@ -625,10 +623,26 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		char_skills.on_attack_hit(attacker_idx, defender_idx, final_damage, attacker_last_type)
 		_damage_player(defender_idx, final_damage)  # 统一伤害入口（内部含死亡判定）
 	else:
-		# 0 伤害（被闪避/格挡到0等）：补充攻击方记录；穿甲不触发（未击中防具）
+		# 0 伤害：闪避 / 格挡牵制到 0 / 满耐久防具免疫
+		var was_blocked = _pending_blocked
+		if was_blocked and _resp_effect != "dodge":
+			# 防具免疫生效：消耗耐久（强化攻击只穿甲-2，不叠加正常消耗——玩家要求）
+			if _armor_pierce:
+				combat.pierce_armor(defender_idx)
+				add_log(attacker_idx, "穿甲: 防具耐久-2")
+			else:
+				combat.consume_armor(defender_idx)
+			stats[defender_idx]["blocked_dmg"] += attacker_last_damage
+			add_log(attacker_idx, "被防具挡下")
+		elif was_blocked and _resp_effect == "dodge":
+			pass  # 闪避躲开：防具不消耗耐久（保甲成功，日志已在响应块记录"用X闪避"）
+		_pending_blocked = false
+		_armor_hit = false
 		_armor_pierce = false
 		char_skills.on_attack_failed_no_damage(attacker_idx, attacker_last_type)
-		add_log(attacker_idx, "%s使用%s攻击未造成伤害" % [Config.char_name(players[attacker_idx].char_id), Config.card_name(pending_attack_card)])
+		if _resp_effect == "" and not was_blocked:
+			# 无任何响应且非防具免疫（纯 0 伤害攻击）：补充记录
+			add_log(attacker_idx, "%s使用%s攻击未造成伤害" % [Config.char_name(players[attacker_idx].char_id), Config.card_name(pending_attack_card)])
 	if phase == Config.Phase.GAME_OVER: return  # 死亡判定已由 _damage_player 统一处理
 	# 多段攻击：还有段则进入下一段响应窗口（每段独立结算；末段才消耗卡）
 	# 注意：_begin_attack_segment 内部会自增段号，这里不能重复自增

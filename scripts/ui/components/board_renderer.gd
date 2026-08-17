@@ -9,10 +9,40 @@ extends Control
 const Style = preload("res://scripts/theme/style_const.gd")
 const Geometry = preload("res://scripts/core/map_geometry.gd")
 signal cell_clicked(cell_pos: Vector2i)
+signal cell_long_pressed(cell_pos: Vector2i)  # 长按有道具的地格：查看道具详情
+signal cell_released(cell_pos: Vector2i)      # 松手（无论是否长按，用于隐藏悬浮框）
+
+const LONG_PRESS_MS = 500  # 长按判定：按住超过 0.5 秒
 
 var _geo = Geometry.new()
 var _cells: Dictionary = {}  # Vector2i → Panel（仅 LINEAR 模式使用）
 var _mode: int = Geometry.MODE_LINEAR
+
+# 长按检测状态（LINEAR/HEX 共用）
+var _press_time: int = 0
+var _pressed_cell: Vector2i = Vector2i(-999, -999)  # -999 = 未按下
+var _long_fired: bool = false
+var _press_pos_px: Vector2 = Vector2.ZERO
+
+func _process(_delta):
+	# 长按判定：按住超过阈值且未滑动取消 → 发长按信号（弹道具悬浮框）
+	if _pressed_cell != Vector2i(-999, -999) and not _long_fired:
+		if Time.get_ticks_msec() - _press_time >= LONG_PRESS_MS:
+			_long_fired = true
+			cell_long_pressed.emit(_pressed_cell)
+	# 长按已触发但鼠标/触摸已释放（滑出格子后松手收不到 release 事件）：补发释放信号
+	if _long_fired and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		_long_fired = false
+		_pressed_cell = Vector2i(-999, -999)
+		cell_released.emit(Vector2i(-999, -999))
+
+# 格子全局中心点（悬浮框定位用；LINEAR 用 Panel 位置，HEX 用自绘六边形中心）
+func cell_global_center(pos: Vector2i) -> Vector2:
+	if _mode == Geometry.MODE_HEX:
+		return global_position + _hex_center(pos)
+	if _cells.has(pos):
+		return _cells[pos].global_position + Vector2(50, 50)
+	return global_position
 
 # HEX 自绘状态
 var _players_draw: Array = []
@@ -74,13 +104,24 @@ func _create_cell(pos: Vector2i) -> Panel:
 	p.add_child(l)
 	return p
 
-# 处理格子点击事件（坐标传给上层；仅 LINEAR 模式，HEX 走 _gui_input）
+# 处理格子点击事件（LINEAR 模式）：按下记录起点，短按=选格点击，长按=道具详情，
+# 滑动超过阈值取消（既不点击也不长按）；HEX 模式走 _gui_input
 func _on_cell_input(event: InputEvent, cell_pos: Vector2i):
-	if not (event is InputEventMouseButton):
-		return
-	if not event.pressed or event.button_index != MOUSE_BUTTON_LEFT:
-		return
-	cell_clicked.emit(cell_pos)
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			_pressed_cell = cell_pos
+			_press_time = Time.get_ticks_msec()
+			_long_fired = false
+			_press_pos_px = event.position
+		else:
+			var was_long = _long_fired
+			_pressed_cell = Vector2i(-999, -999)
+			cell_released.emit(cell_pos)
+			if not was_long:
+				cell_clicked.emit(cell_pos)  # 短按=正常点击；长按后松手不触发点击（防误触）
+	elif event is InputEventMouseMotion and _pressed_cell != Vector2i(-999, -999):
+		if (event.position - _press_pos_px).length() > 12.0:
+			_pressed_cell = Vector2i(-999, -999)  # 滑动取消长按与点击
 
 # 根据玩家和地格道具数据刷新棋盘显示（position 为 {x,y} 协议结构或 Vector2i）
 func update(players: Array, items: Array, my_index: int):
@@ -105,6 +146,20 @@ func update(players: Array, items: Array, my_index: int):
 
 	# 道具按类型差异化显示（新增道具类型时在此补充标记）
 	var item_marks = {"trap": "X", "snare": "S"}
+	# 有道具的格子红色边框高亮（存在标记，与选中态区分）
+	var has_item := {}
+	for it in items:
+		var pos2: Vector2i = _geo.from_dict(it.position)
+		if _cells.has(pos2):
+			has_item[pos2] = true
+	for key in _cells:
+		var sb: StyleBoxFlat = _cells[key].get_theme_stylebox("panel")
+		if has_item.has(key):
+			sb.border_color = Color(1, 0.35, 0.3, 0.95)
+			sb.set_border_width_all(3)
+		else:
+			sb.border_color = Style.CELL_BORDER
+			sb.set_border_width_all(2)
 	for it in items:
 		var pos: Vector2i = _geo.from_dict(it.position)
 		if _cells.has(pos):
@@ -124,12 +179,22 @@ func _draw():
 	if _mode != Geometry.MODE_HEX: return
 	var radius = 40.0
 	var font = ThemeDB.fallback_font
+	# 有道具的格子：红色六边形边框（存在标记）
+	var has_item := {}
+	for it in _items_draw:
+		has_item[_geo.from_dict(it.position)] = true
 	for q in range(-Geometry.HEX_RADIUS, Geometry.HEX_RADIUS + 1):
 		for r in range(-Geometry.HEX_RADIUS, Geometry.HEX_RADIUS + 1):
 			var pos = Vector2i(q, r)
 			if not _geo.is_valid(pos): continue
 			var c = _hex_center(pos)
 			_draw_hex_cell(c, radius)
+			if has_item.has(pos):
+				var pts2 = PackedVector2Array()
+				for i2 in range(6):
+					var ang2 = PI / 180.0 * (60.0 * i2 - 30.0)
+					pts2.append(c + Vector2(cos(ang2), sin(ang2)) * radius)
+				draw_polyline(pts2 + PackedVector2Array([pts2[0]]), Color(1, 0.35, 0.3, 0.95), 4.0)
 			# 格坐标编号（小字）
 			draw_string(font, c + Vector2(-14, 4), "%d,%d" % [q, r],
 				HORIZONTAL_ALIGNMENT_LEFT, -1, Style.fs(16), Style.CELL_TEXT)
@@ -175,19 +240,29 @@ func _pixel_to_hex(px: Vector2) -> Vector2i:
 				best = pos
 	return best
 
-# HEX 输入：左键拖动平移视图；短按（位移 < 8px）视为点击选格
+# HEX 输入：左键拖动平移视图；短按（位移 < 8px 且未长按）视为点击选格；
+# 按住 0.5 秒=长按道具详情（与 LINEAR 一致的手势语义）
 func _gui_input(event: InputEvent):
 	if _mode != Geometry.MODE_HEX: return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
 			_dragging = true
 			_drag_start = event.position
+			_pressed_cell = _pixel_to_hex(event.position)
+			_press_time = Time.get_ticks_msec()
+			_long_fired = false
 		else:
 			_dragging = false
-			if (_drag_start - event.position).length() < 8.0:
-				cell_clicked.emit(_pixel_to_hex(event.position))
+			var was_long = _long_fired
+			var clicked = _pixel_to_hex(event.position)
+			_pressed_cell = Vector2i(-999, -999)
+			cell_released.emit(clicked)
+			if not was_long and (_drag_start - event.position).length() < 8.0:
+				cell_clicked.emit(clicked)
 	elif event is InputEventMouseMotion and _dragging:
 		_drag_offset += event.relative
 		_drag_offset.x = clampf(_drag_offset.x, -400, 400)  # 防拖飞：限制平移范围
 		_drag_offset.y = clampf(_drag_offset.y, -300, 300)
+		if (_drag_start - event.position).length() > 8.0:
+			_pressed_cell = Vector2i(-999, -999)  # 拖动取消长按与点击
 		queue_redraw()

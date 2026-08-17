@@ -61,6 +61,11 @@ func _init(match):
 func get_item_type(item_type: String) -> Dictionary:
 	return _item_types.get(item_type, {})
 
+# 道具类型按结算优先级的展示顺序（伤害类在前、收益类在后 = 注册表定义顺序）：
+# 地格道具悬浮框按此顺序排列（如"陷阱:1|捕兽夹:2|鸟居:1"）
+func get_type_order() -> Array:
+	return _item_types.keys()
+
 # 场上所有道具（引用 match_state.items，避免拷贝）
 func get_items() -> Array:
 	return match_ref.items

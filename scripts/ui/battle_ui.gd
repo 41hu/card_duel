@@ -5,6 +5,7 @@ const Style = preload("res://scripts/theme/style_const.gd")
 const CardWidget = preload("res://scripts/ui/components/card_widget.gd")
 const MapGeometry = preload("res://scripts/core/map_geometry.gd")
 const InfoPanel = preload("res://scripts/ui/components/info_panel.gd")
+const ItemSys = preload("res://scripts/core/item_system.gd")
 
 @onready var phase_label = $PhaseLabel
 @onready var hand_area = $HandScroll/HandArea
@@ -66,6 +67,8 @@ func _find_opponent(pls: Array = []) -> Dictionary:
 func _ready():
 	Style.scale_node_fonts(self)  # 移动端字号适配（tscn 写死的字号）
 	board.cell_clicked.connect(_on_board_cell_clicked)
+	board.cell_long_pressed.connect(_on_cell_long_pressed)  # 长按查看地格道具
+	board.cell_released.connect(_on_cell_released)  # 松手隐藏道具悬浮框
 	_create_self_panel()
 	_build_popups()
 	# 日志加宽后左缘与棋盘第 0/1 格有重叠：PASS 让点按穿透到棋盘，
@@ -781,6 +784,67 @@ func _refresh_highlight():
 	for child in hand_area.get_children():
 		if child is CardWidget:
 			child.set_selected(child.card_uid == _selected_uid)
+
+# ---------- 地格道具详情悬浮框（长按查看） ----------
+var _item_popup: Label = null
+
+func _on_cell_long_pressed(cell_pos: Vector2i):
+	_show_item_popup(cell_pos)
+
+func _on_cell_released(_cell_pos: Vector2i):
+	_hide_item_popup()
+
+func _show_item_popup(cell_pos: Vector2i):
+	# 统计该格道具（按结算优先级=伤害类在前/收益类在后，即 item_system 注册表顺序）
+	var counts := {}
+	for it in _game_state.get("items", []):
+		var p = it.get("position", {})
+		var itp = Vector2i(int(p.get("x", 0)), int(p.get("y", 0)))
+		if itp == cell_pos:
+			var tid = str(it.get("item_type", "?"))
+			counts[tid] = int(counts.get(tid, 0)) + 1
+	if counts.is_empty():
+		return
+	var isys = ItemSys.new(null)  # 临时实例：仅查道具注册表（名称/排序）
+	var parts: Array = []
+	for tid in isys.get_type_order():
+		if counts.has(str(tid)):
+			parts.append("%s:%d" % [str(isys.get_item_type(str(tid)).get("name", tid)), counts[str(tid)]])
+	if parts.is_empty():
+		return
+	if _item_popup == null:
+		_item_popup = Label.new()
+		_item_popup.name = "ItemPopup"
+		_item_popup.z_index = 25
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(0.05, 0.05, 0.08, 0.92)
+		sb.border_color = Color(1, 0.85, 0.3, 0.95)
+		sb.set_border_width_all(2)
+		sb.set_corner_radius_all(10)
+		sb.content_margin_left = 16.0
+		sb.content_margin_right = 16.0
+		sb.content_margin_top = 8.0
+		sb.content_margin_bottom = 8.0
+		_item_popup.add_theme_stylebox_override("normal", sb)
+		_item_popup.add_theme_font_size_override("font_size", Style.fs(24))
+		_item_popup.add_theme_color_override("font_color", Color(1, 0.9, 0.6))
+		add_child(_item_popup)
+	_item_popup.text = " | ".join(parts)
+	_item_popup.reset_size()
+	# 定位：地格中心上方；屏幕边缘翻转/夹紧防溢出
+	var center = board.cell_global_center(cell_pos)
+	var px = center.x - _item_popup.size.x / 2.0
+	var py = center.y - _item_popup.size.y - 70.0
+	if py < 8.0:
+		py = center.y + 70.0  # 上方放不下：翻转到下方
+	px = clampf(px, 8.0, size.x - _item_popup.size.x - 8.0)
+	py = clampf(py, 8.0, size.y - _item_popup.size.y - 8.0)
+	_item_popup.position = Vector2(px, py)
+	_item_popup.visible = true
+
+func _hide_item_popup():
+	if _item_popup != null:
+		_item_popup.visible = false
 
 func _on_board_cell_clicked(cell_pos: Vector2i):
 	# 教程限制：当前步骤只允许特定格子放夹子（穿心/陷阱），保证教学流程可控

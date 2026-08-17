@@ -54,7 +54,7 @@ func on_heal(player_idx: int, amount: int) -> int:
 		amount = min(amount, allowed)
 		p.healed_this_turn = healed + amount
 	if p.char_id == "priest": amount += 2
-	if p.char_id == "warlock": amount = max(0, amount - 2)  # 邪术师被动：自身回血效果-2（+1/+2→0）
+	if p.char_id == "warlock": amount = max(0, amount - 1)  # 邪术师被动「枯萎」：自身回血效果-1（+1→0）
 	return amount
 
 func _heal_limit(player_idx: int) -> int:

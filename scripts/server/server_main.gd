@@ -35,6 +35,9 @@ func _process(_delta):
 		var conn = _tcp_server.take_connection()
 		if conn:
 			var ws = WebSocketPeer.new()
+			# 发送缓冲区默认仅 64KB：长对局结算 game_over 消息（含对局记录/战报/统计）
+			# 会超限 → put_packet 返回 ERR_OUT_OF_MEMORY → 客户端收不到结算，卡在战斗界面
+			ws.outbound_buffer_size = 16 * 1024 * 1024
 			ws.accept_stream(conn)
 			_peers.append({ws=ws, room_id="", player_index=-1, peer_name="Unknown", ready=false})
 			log_msg("新连接: %d" % _peers.size())
@@ -337,7 +340,10 @@ func _on_game_ended(result: Dictionary, room):
 func _send_to(peer_idx: int, msg: Dictionary):
 	var peer = _peers[peer_idx]
 	if peer.get("dead", false): return  # 断线 peer 保留槽位（索引对齐），但不再发送
-	peer.ws.put_packet(JSON.stringify(msg).to_utf8_buffer())
+	var data = JSON.stringify(msg)
+	var err = peer.ws.put_packet(data.to_utf8_buffer())
+	if err != OK:
+		log_msg("发送失败 P%d %s: %d (消息%d字节)" % [peer.player_index, msg.get("t", "?"), err, data.to_utf8_buffer().size()])
 
 func _broadcast_to_room(room, msg: Dictionary):
 	for p_idx in room.peer_indices:

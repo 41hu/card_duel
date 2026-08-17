@@ -67,6 +67,9 @@ func connect_to_server(url: String = ""):
 
 	print("[Network] 正在连接 %s" % url)
 	_socket = WebSocketPeer.new()
+	# 接收缓冲区默认仅 64KB：长对局结算 game_over 消息（含对局记录/战报/统计）
+	# 超限会收不到结算，卡在战斗界面；与服务器 outbound_buffer_size 同步调大
+	_socket.inbound_buffer_size = 16 * 1024 * 1024
 	var err = _socket.connect_to_url(url)
 	if err != OK:
 		print("[Network] connect_to_url 失败: %d" % err)

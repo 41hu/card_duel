@@ -65,6 +65,11 @@ func connect_to_server(url: String = ""):
 		url = "wss://shiyaohu.xyz/ws" if OS.has_feature("web") else "ws://47.107.47.251:17890"
 	if not url.begins_with("ws"):
 		url = "ws://" + url.replace("http://", "")
+	# 已连接则幂等返回：重复 connect 会新建 socket，新连接 OPEN 时 _active 已是 true，
+	# connected_to_server 信号不再触发，await 该信号的调用方会永久挂起（"正在连接"卡死）
+	if _active and _socket != null and _socket.get_ready_state() == WebSocketPeer.STATE_OPEN:
+		print("[Network] 已连接，跳过重复连接")
+		return
 
 	print("[Network] 正在连接 %s" % url)
 	_socket = WebSocketPeer.new()

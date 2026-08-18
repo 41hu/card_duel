@@ -197,13 +197,29 @@ func _flash_status(text: String, color: Color):
 	status_label.add_theme_color_override("font_color", color)
 
 func _on_join():
+	if j_join_btn.disabled:
+		return  # 连接/加入进行中防重入（连点会重复走流程）
+	j_join_btn.disabled = true
 	var rid = j_room.text.strip_edges()
 	if rid == "":
 		_flash_status("请输入房间号", Style.ERROR_RED)
+		j_join_btn.disabled = false
 		return
-	_flash_status("正在连接...", Color(1, 1, 1))
-	Network.connect_to_server(j_server.text.strip_edges())
-	await Network.connected_to_server
+	# 未连接才走连接流程（已连接时直接加入，避免重复 connect 后 connected_to_server
+	# 信号不再触发导致 await 永久挂起卡在"正在连接"）；连接带 12 秒超时兜底
+	if not Network.get_connected():
+		_flash_status("正在连接...", Color(1, 1, 1))
+		Network.connect_to_server(j_server.text.strip_edges())
+		var timer := get_tree().create_timer(12.0)
+		# GDScript lambda 不能修改外层局部变量，用数组引用标记超时（改元素有效）
+		var timed_out := [false]
+		timer.timeout.connect(func(): timed_out[0] = true)
+		while not Network.get_connected() and not timed_out[0]:
+			await get_tree().process_frame
+		if not Network.get_connected():
+			_flash_status("连接失败或超时，请检查网络", Style.ERROR_RED)
+			j_join_btn.disabled = false
+			return
 	var pname = j_name.text.strip_edges()
 	if pname == "": pname = "Player2"
 	Network.join_room(rid, pname)
@@ -215,6 +231,7 @@ func _on_disconnected():
 	_flash_status("断开连接", Color(1, 1, 1))
 	# 恢复加入面板：掉线后加入按钮复位、清除残留的准备按钮
 	j_join_btn.visible = true
+	j_join_btn.disabled = false
 	for c in join_panel.get_children():
 		if c is Button and "准备" in c.text:
 			c.queue_free()
@@ -350,6 +367,7 @@ func _popup_btn(text: String) -> Button:
 
 func _on_error(msg: String):
 	_flash_status("错误: " + msg, Style.ERROR_RED)
+	j_join_btn.disabled = false  # 加入失败（房间不存在/已满等）恢复按钮可重试
 
 func _exit_tree():
 	# 场景卸载时清空回调，避免 BackHandler 调用已释放的 Callable

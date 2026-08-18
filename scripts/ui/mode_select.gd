@@ -426,6 +426,14 @@ func _final_config() -> Dictionary:
 
 func _do_create_room():
 	action_btn.disabled = true
+	# 已连接（如输错房间号重试场景）：跳过连接流程直接创建，避免 await 信号挂起
+	if Network.get_connected():
+		status_label.text = "已连接，创建房间..."
+		var pname = _name_input.text.strip_edges()
+		if pname == "":
+			pname = "Player1"
+		Network.create_room(pname, _selected_mode, _player_count, _final_config())
+		return
 	status_label.text = "正在连接..."
 	_pending_connect = true
 	var tw := get_tree().create_timer(12.0)

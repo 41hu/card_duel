@@ -697,7 +697,8 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		stats[defender_idx]["damage_from_attack"] += final_damage
 		var attacker_name = Config.char_name(players[attacker_idx].char_id)
 		var defender_name = Config.char_name(players[defender_idx].char_id)
-		var card_name = Config.card_name(pending_attack_card)
+		# 真言为技能攻击：战报显示中文名（card_name 对无卡池条目返回英文 id）
+		var card_name = "真言" if pending_attack_card == "priest_chant" else Config.card_name(pending_attack_card)
 		add_log(attacker_idx, "%s使用%s对%s造成：%s=%d点伤害" % [attacker_name, card_name, defender_name, formula, final_damage])
 		# 命中特效在死亡判定前（与重构前顺序一致：统计→日志→特效→判定）
 		# 真言为技能攻击：不触发武器命中效果（毒牙/灼烧等）
@@ -735,7 +736,8 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		char_skills.on_attack_failed_no_damage(attacker_idx, attacker_last_type)
 		if _resp_effect == "" and not was_blocked:
 			# 无任何响应且非防具免疫（纯 0 伤害攻击）：补充记录
-			add_log(attacker_idx, "%s使用%s攻击未造成伤害" % [Config.char_name(players[attacker_idx].char_id), Config.card_name(pending_attack_card)])
+			add_log(attacker_idx, "%s使用%s攻击未造成伤害" % [Config.char_name(players[attacker_idx].char_id),
+				"真言" if pending_attack_card == "priest_chant" else Config.card_name(pending_attack_card)])
 		# 共鸣：法术攻击被完全抵挡（护甲免疫生效/闪避/牵制归零）→ 额外造成2点伤害。
 		# 0 伤害分支必然是完全抵挡（免疫挡下或响应归零），统一在此触发一次
 		_apply_resonance_rebound(attacker_idx, defender_idx)

@@ -73,6 +73,8 @@ func _ready():
 		export_btn.pressed.connect(func():
 			var result = LocalGame.game.game_result if LocalGame.game != null else Network.last_game_result
 			var path = _export_record(result)
+			# 保存原始获胜信息，导出提示 3 秒后恢复（防残留遮住获胜信息）
+			var orig = detail_label.text
 			if path != "":
 				# 导出平台（APK 等）：文件在应用数据目录（用户不可见），提示已复制到剪贴板可直接粘贴分享
 				if OS.has_feature("editor"):
@@ -82,6 +84,9 @@ func _ready():
 				detail_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			else:
 				detail_label.text = "导出失败"
+			await get_tree().create_timer(3.0).timeout
+			if is_instance_valid(detail_label):
+				detail_label.text = orig
 		)
 		add_child(export_btn)
 	_n().game_ended.connect(_on_game_ended)

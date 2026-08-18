@@ -274,7 +274,7 @@ func _show_resp_popup(atk_card: String):
 	var seg = int(_game_state.get("pending_attack_segment", 0))
 	var segs = int(_game_state.get("pending_attack_segments", 1))
 	var seg_txt = "（第%d/%d段）" % [seg, segs] if segs > 1 else ""
-	var t = _lbl("对方使用「%s」攻击%s！选择响应卡：" % [Config.card_name(atk_card), seg_txt])
+	var t = _lbl("对方使用「%s」攻击%s！选择响应卡：" % ["真言" if atk_card == "priest_chant" else Config.card_name(atk_card), seg_txt])
 	t.add_theme_font_size_override("font_size", Style.fs(30))
 	t.add_theme_color_override("font_color", Color(1, 0.9, 0.6))
 	t.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
@@ -481,6 +481,9 @@ func _refresh_all(state: Dictionary):
 	# 数据驱动玩家面板：自己面板 + 所有对手面板（数量随玩家数动态，2/4/N 人统一）
 	var me = _find_self(pls)
 	_self_panel.refresh(me, "自己", Color(0.5, 0.8, 1))
+	# 面板高度随内容自适应（装备行出现/buff 行换行时向上增长，避免被 clip 裁切）
+	var want_h = _self_panel.get_combined_minimum_size().y
+	_self_panel.offset_top = -max(160.0, min(420.0, want_h + 8))
 	_refresh_opp_panels(pls)
 	for p in pls:
 		if p.hp != _last_hp[p.index]:
@@ -1059,7 +1062,9 @@ func _on_response_needed(data: Dictionary):
 	if tutorial != null and tutorial.handle_response_needed():
 		return
 	var atk = data.get("card", "")
-	status_label.text = "对方发动%s攻击！" % atk
+	# 真言为技能攻击：显示中文名（card_name 对无卡池条目返回英文 id）
+	var atk_display = "真言" if atk == "priest_chant" else Config.card_name(str(atk))
+	status_label.text = "对方发动%s攻击！" % atk_display
 	_show_resp_popup(atk)
 
 func _on_weapon_prompt(weapon: Dictionary):

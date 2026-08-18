@@ -1154,6 +1154,7 @@ func _exec_skill(sk_id: String):
 	elif sk_id == "wardsmith_repair": _show_wardsmith_repair()
 	elif sk_id == "spellblade_channel": _show_spellblade_pick()
 	elif sk_id == "priest_chant": _show_priest_chant_pick()
+	elif sk_id == "mage_phantom": _show_mage_phantom_pick()
 	else: _n().send_use_skill(sk_id)
 
 # 铸甲师注魔：护甲满耐久时消耗一张攻击卡，把护甲换成该卡对应类型（每回合限一次）
@@ -1259,6 +1260,33 @@ func _show_spellblade_pick():
 			has_any = true
 			var b = _mkbtn(Config.card_name(card.type_id))
 			b.pressed.connect(func(uid=card.uid): c.queue_free(); _n().send_use_skill("spellblade_channel", {"card_uid": uid}))
+			vb.add_child(b)
+	if not has_any:
+		vb.add_child(_lbl("没有魔法/吟唱卡"))
+	var close = _mkbtn("取消")
+	close.pressed.connect(func(): c.queue_free())
+	vb.add_child(close)
+	add_child(c)
+
+# 幻影（法师）：选一张魔法/吟唱卡弃置 → 获得 1/2 层幻影（50%概率闪避攻击）
+func _show_mage_phantom_pick():
+	var c = Control.new()
+	c.name = "MagePhantomPick"
+	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
+	var vb = _popup_box(c, 620, 420)
+	vb.add_child(_lbl("幻影：弃魔法/吟唱卡，获得 1/2 层幻影（50%概率闪避攻击，持续本回合）"))
+	var me = _find_self()
+	var has_any = false
+	for card in me.get("hand", []):
+		if card.type_id in ["magic", "chant"]:
+			has_any = true
+			var layers = 2 if card.type_id == "chant" else 1
+			var b = _mkbtn("%s（获得%d层幻影）" % [Config.card_name(card.type_id), layers])
+			b.pressed.connect(func(uid=card.uid):
+				c.queue_free()
+				_n().send_use_skill("mage_phantom", {"card_uid": uid}))
 			vb.add_child(b)
 	if not has_any:
 		vb.add_child(_lbl("没有魔法/吟唱卡"))

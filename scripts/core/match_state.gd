@@ -569,6 +569,18 @@ func _begin_attack_segment(player_idx: int) -> Dictionary:
 	# 共鸣标记：装备共鸣且打出法术攻击时，被完全抵挡则额外造成2点伤害
 	_resonance_rebound = not player.weapon.is_empty() and player.weapon.id == "resonance" \
 			and type_id in ["magic", "chant"]
+	# 幻影（法师）：50%概率闪避本段攻击——先判定幻影，成功则本段无效（不进响应窗口、护甲不消耗）；
+	# 多段攻击每段独立判定（每段消耗一层机会）
+	if status.try_phantom_dodge(opp):
+		char_skills.on_attack_failed_no_damage(player_idx, attacker_last_type)
+		add_log(opp, "幻影闪避: 攻击落空")
+		if pending_attack_segment < pending_attack_segments:
+			state_changed.emit(get_full_state())
+			return _begin_attack_segment(player_idx)
+		if pending_attack_uid >= 0 or card_systems[player_idx].has_card(pending_attack_uid):
+			_use_card(player_idx, {uid=pending_attack_uid, type_id=pending_attack_card})
+		state_changed.emit(get_full_state())
+		return {success=true, msg="被幻影闪避"}
 	# 防具完全免疫优先于伤害加成判定（技能加成不能穿透满耐久防具）
 	if calc.get("blocked", false):
 		char_skills.on_attack_failed_no_damage(player_idx, attacker_last_type)

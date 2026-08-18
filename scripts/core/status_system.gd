@@ -56,6 +56,19 @@ func add_buff(player_idx: int, buff_type: String, value: int, duration: int):
 			return
 	player.buffs.append({type=buff_type, value=value, duration=duration})
 
+# 幻影（法师）：50% 概率闪避一次攻击，成功消耗 1 层（失败保留）；无幻影返回 false
+func try_phantom_dodge(player_idx: int) -> bool:
+	var player = match_ref.get_player(player_idx)
+	for i in range(player.buffs.size() - 1, -1, -1):
+		if player.buffs[i].type == "mage_phantom" and player.buffs[i].value > 0:
+			if randf() < 0.5:
+				player.buffs[i].value -= 1
+				if player.buffs[i].value <= 0:
+					player.buffs.remove_at(i)
+				return true
+			return false
+	return false
+
 # 添加凋零（虚空魔典）：持续2回合，回复量-1；再次命中只刷新持续时间为2回合（不叠加层数）
 func add_wither(player_idx: int):
 	add_buff(player_idx, "wither_weapon", -1, 2)

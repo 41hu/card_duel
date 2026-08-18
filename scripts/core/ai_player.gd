@@ -846,6 +846,15 @@ func decide_action(player_idx: int) -> Dictionary:
 							if s > best_score:
 								best_score = s
 								best_action = {"action": "use_skill", "skill": "priest_chant", "card_uid": card.uid, "target": opp_idx}
+			"mage_phantom":
+				# 幻影：危险/濒死档且无其他更好行动时，弃魔法卡换闪避保命
+				if stance.get("stance", "") in ["danger", "flee"]:
+					for card in hand:
+						if card.type_id in ["magic", "chant"]:
+							var s = 8 if card.type_id == "chant" else 6
+							if s > best_score:
+								best_score = s
+								best_action = {"action": "use_skill", "skill": "mage_phantom", "card_uid": card.uid}
 			"assassin_move":
 				if distance > 0:
 					var has_near = false

@@ -195,6 +195,7 @@ func _show_debug_menu():
 # 偏移量 clamp 到 [32, 100]：下限 32 覆盖全面屏圆角（横屏时右上/右下角圆角会切贴边面板，
 # 即使刘海在左、safe area 右值为 0 也要内缩）；上限 100 防部分设备 safe area 报告异常值把面板推飞。
 var _safe_right: float = 32.0
+var _safe_bottom: float = 0.0  # 底部不安全区（self_panel 每次刷新按此上移，防手势条/圆角裁切）
 
 func _apply_safe_area():
 	var sa = DisplayServer.get_display_safe_area()
@@ -209,8 +210,15 @@ func _apply_safe_area():
 	var bottom = (win.y - sa.end.y) / sy
 	# 敌方面板统一按右侧不安全区 clamp 内缩（最小 32 避开圆角，上限 100 防异常值）
 	_safe_right = clampf(right, 32.0, 100.0)
+	_safe_bottom = clampf(bottom, 0.0, 100.0)
+	# 我方面板（左下）：左缘与底缘始终内缩——clamp 下限 32 覆盖全面屏圆角/刘海，
+	# 避免 buff/装备行贴边被裁切（与敌方面板对称处理；刘海时再多 12 间距）
+	var safe_left = clampf(left, 32.0, 100.0) + 12.0
+	_self_panel.offset_left = safe_left
+	if _safe_bottom > 0:
+		_self_panel.offset_top -= _safe_bottom
+		_self_panel.offset_bottom -= _safe_bottom
 	if left > 0:
-		_self_panel.offset_left = left + 12
 		skill_row.offset_left += left
 		skill_row.offset_right += left
 		action_log.offset_left += left
@@ -457,6 +465,7 @@ func _process(delta):
 
 var _timer_elapsed: float = 0.0
 var _status_msg_timer: float = 0.0
+var _end_confirm_at: int = 0  # 结束出牌防误触：进入确认态的时间戳（0=未确认）
 
 func _refresh_all(state: Dictionary):
 	card_info.text = ""
@@ -483,9 +492,11 @@ func _refresh_all(state: Dictionary):
 	# 数据驱动玩家面板：自己面板 + 所有对手面板（数量随玩家数动态，2/4/N 人统一）
 	var me = _find_self(pls)
 	_self_panel.refresh(me, "自己", Color(0.5, 0.8, 1))
-	# 面板高度随内容自适应（装备行出现/buff 行换行时向上增长，避免被 clip 裁切）
+	# 面板高度随内容自适应（装备行出现/buff 行换行时向上增长，避免被 clip 裁切）；
+	# 底缘按安全区上移（_safe_bottom），防止手势条/圆角裁切 buff 展示
 	var want_h = _self_panel.get_combined_minimum_size().y
-	_self_panel.offset_top = -max(160.0, min(420.0, want_h + 8))
+	_self_panel.offset_top = -max(160.0, min(420.0, want_h + 8)) - _safe_bottom
+	_self_panel.offset_bottom = -20.0 - _safe_bottom
 	_refresh_opp_panels(pls)
 	for p in pls:
 		if p.hp != _last_hp[p.index]:
@@ -566,7 +577,9 @@ func _refresh_all(state: Dictionary):
 		confirm_btn.visible = false
 	else:
 		_discard_selected.clear()
+		_end_confirm_at = 0  # 状态刷新（出牌等操作）取消结束确认态
 		end_turn_btn.text = "结束出牌"
+		end_turn_btn.remove_theme_color_override("font_color")
 		end_turn_btn.visible = _is_my_turn
 		confirm_btn.visible = false
 		cancel_btn.visible = false
@@ -1447,5 +1460,27 @@ func _on_end_turn():
 	if _game_state.get("waiting_for_discard", false):
 		_n().send_confirm_discard(_discard_selected.duplicate())
 		_discard_selected.clear()
-	else:
-		_n().send_end_turn()
+		return
+	# 结束出牌防误触：首次点击进入"确认中"（按钮变橙+提示），3 秒内再点才真正结束；
+	# 超时或操作其他卡牌（状态刷新）自动还原。撤销结束出牌需回滚弃牌/回合流转，
+	# 服务端权威下风险高，双击确认是更稳妥的方案。
+	var now = Time.get_ticks_msec()
+	if _end_confirm_at == 0 or now - _end_confirm_at > 3000:
+		_end_confirm_at = now
+		end_turn_btn.text = "再点一次确认结束"
+		end_turn_btn.add_theme_color_override("font_color", Color(1, 0.6, 0.3))
+		status_label.text = "再次点击「结束出牌」确认（3 秒后自动取消）"
+		var click_at: int = now
+		get_tree().create_timer(3.0).timeout.connect(func():
+			# 期间若有新的确认点击（_end_confirm_at 更新）或已真正结束，跳过还原
+			if is_instance_valid(self) and _end_confirm_at != 0 and _end_confirm_at == click_at:
+				_end_confirm_at = 0
+				end_turn_btn.text = "结束出牌"
+				end_turn_btn.remove_theme_color_override("font_color")
+				status_label.text = ""
+		)
+		return
+	_end_confirm_at = 0
+	end_turn_btn.text = "结束出牌"
+	end_turn_btn.remove_theme_color_override("font_color")
+	_n().send_end_turn()

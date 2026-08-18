@@ -28,6 +28,7 @@ var _package_id: String = DeckData.DEFAULT_PACKAGE  # 当前选中卡组的回�
 @onready var back_btn: Button
 @onready var pick_root: Control
 @onready var edit_root: Control
+var wait_root: Control = null  # 联机确认卡组后的等待页（隐藏配置界面）
 var _edit_count_label: Label
 var _edit_pool_box: VBoxContainer
 var _edit_sel_box: VBoxContainer
@@ -294,6 +295,33 @@ func _build_layout():
 	_edit_sel_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_edit_sel_box.add_theme_constant_override("separation", Style.fs(6))
 	sel_scroll.add_child(_edit_sel_box)
+	# 等待进入对局页（联机确认卡组后显示）：隐藏配置界面，提示等待其他玩家
+	wait_root = Control.new()
+	wait_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	wait_root.visible = false
+	add_child(wait_root)
+	var wt := Label.new()
+	wt.text = "卡组已确认"
+	wt.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	wt.offset_top = 220
+	wt.offset_bottom = 320
+	wt.offset_left = -450
+	wt.offset_right = 450
+	wt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	wt.add_theme_font_size_override("font_size", Style.fs(44))
+	wt.add_theme_color_override("font_color", Style.MODE_SELECTED)
+	wait_root.add_child(wt)
+	var wd := Label.new()
+	wd.text = "等待其他玩家确认...\n全部就绪后自动进入对局"
+	wd.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	wd.offset_top = 330
+	wd.offset_bottom = 450
+	wd.offset_left = -450
+	wd.offset_right = 450
+	wd.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	wd.add_theme_font_size_override("font_size", Style.fs(28))
+	wd.add_theme_color_override("font_color", Style.CONFIG_VALUE)
+	wait_root.add_child(wd)
 	# back_btn 最后添加：树序最靠后 → 输入命中优先于全屏 pick_root/edit_root
 	add_child(back_btn)
 
@@ -338,6 +366,8 @@ func _show_pick():
 	_show_pick_page_text(false)
 	pick_root.visible = true
 	edit_root.visible = false
+	if wait_root != null:
+		wait_root.visible = false
 	if _is_online():
 		_step = int(Network.player_index)  # 联机：只选自己的
 		if Network.deck_config_data.get("chars", []).size() < 2:
@@ -460,11 +490,13 @@ func _on_edit():
 
 func _next_step():
 	if _is_online():
-		# 联机：上报自己的卡组，等对手（服务端双方就绪后发 game_starting）
+		# 联机：上报自己的卡组，进入等待页（隐藏配置界面，等对手就绪后服务端发 game_starting）
 		Network.send_deck_ready(_decks[_step], _package_id, _weapon_pools[_step])
-		title.text = "已上报卡组，等待对手选择..."
-		confirm_btn.disabled = true
-		edit_btn.disabled = true
+		pick_root.visible = false
+		edit_root.visible = false
+		wait_root.visible = true
+		_page = "wait"
+		_show_pick_page_text(false)
 		return
 	if _step == 0:
 		_step = 1
@@ -478,6 +510,8 @@ func _show_edit():
 	_show_pick_page_text(true)
 	pick_root.visible = false
 	edit_root.visible = true
+	if wait_root != null:
+		wait_root.visible = false
 	# 双方角色信息行（编辑时可见自己与对手数值；点此看技能）
 	var me_cd: Dictionary = Config.CHARACTER_DB.get(_current_char_id(), {})
 	var opp_cd: Dictionary = Config.CHARACTER_DB.get(_opponent_char_id(), {})

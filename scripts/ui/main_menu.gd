@@ -72,6 +72,9 @@ func _ready():
 			return true
 		return false
 	j_join_btn.pressed.connect(_on_join)
+	# 输入房间号/服务器时清空残留错误提示（避免旧错误红字一直挂着）
+	j_room.text_changed.connect(func(_t: String): _flash_status("", Color(1, 1, 1)))
+	j_server.text_changed.connect(func(_t: String): _flash_status("", Color(1, 1, 1)))
 	Network.connected_to_server.connect(_on_connected)
 	Network.server_disconnected.connect(_on_disconnected)
 	Network.room_joined.connect(_on_room_joined)
@@ -188,19 +191,28 @@ func _show_main():
 	main_panel.visible = true
 	join_panel.visible = false
 
+# 状态提示统一入口：正常/错误提示分别着色，避免错误红字残留到后续正常提示
+func _flash_status(text: String, color: Color):
+	status_label.text = text
+	status_label.add_theme_color_override("font_color", color)
+
 func _on_join():
 	var rid = j_room.text.strip_edges()
-	if rid == "": status_label.text = "请输入房间号"; return
-	status_label.text = "正在连接..."
+	if rid == "":
+		_flash_status("请输入房间号", Style.ERROR_RED)
+		return
+	_flash_status("正在连接...", Color(1, 1, 1))
 	Network.connect_to_server(j_server.text.strip_edges())
 	await Network.connected_to_server
 	var pname = j_name.text.strip_edges()
 	if pname == "": pname = "Player2"
 	Network.join_room(rid, pname)
 
-func _on_connected(): status_label.text = "已连接"
+func _on_connected():
+	_flash_status("已连接", Color(1, 1, 1))
+
 func _on_disconnected():
-	status_label.text = "断开连接"
+	_flash_status("断开连接", Color(1, 1, 1))
 	# 恢复加入面板：掉线后加入按钮复位、清除残留的准备按钮
 	j_join_btn.visible = true
 	for c in join_panel.get_children():
@@ -209,7 +221,7 @@ func _on_disconnected():
 
 func _on_room_joined(room_id: String, _players: Array, mode: String):
 	var mode_name = ModeData.get_mode(mode).get("name", "标准模式")
-	status_label.text = "已加入房间 %s（%s）" % [room_id, mode_name]
+	_flash_status("已加入房间 %s（%s）" % [room_id, mode_name], Style.ME_GREEN)
 	# 房间已加入：隐藏加入按钮，保留返回按钮（等待时可返回主界面，断开连接）
 	j_join_btn.visible = false
 	var btn = _make_ready_btn(join_panel, 560)
@@ -337,8 +349,7 @@ func _popup_btn(text: String) -> Button:
 	return b
 
 func _on_error(msg: String):
-	status_label.text = "错误: " + msg
-	status_label.add_theme_color_override("font_color", Style.ERROR_RED)
+	_flash_status("错误: " + msg, Style.ERROR_RED)
 
 func _exit_tree():
 	# 场景卸载时清空回调，避免 BackHandler 调用已释放的 Callable

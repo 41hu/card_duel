@@ -108,7 +108,9 @@ func _build_mode_cards():
 func _make_mode_card(mode: Dictionary) -> Button:
 	var btn := Button.new()
 	btn.name = "Card_%s" % mode.id
-	btn.flat = true
+	# flat=false 关键：flat=true 时 Godot 在 normal 状态不绘制样式盒，
+	# 导致自定义的金色选中边框不显示（只看得见右上角角标）。样式盒已全量 override，无默认外观。
+	btn.flat = false
 	btn.custom_minimum_size = Vector2(Style.fs(460), Style.fs(300))
 	# PASS：放行触摸拖动给 CardsScroll（横向滑动选模式）；Button 释放判定自带"拖出区域不触发"
 	btn.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -148,6 +150,15 @@ func _make_mode_card(mode: Dictionary) -> Button:
 		cnt_lbl.add_theme_color_override("font_color", Style.CONFIG_LABEL)
 		cnt_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		vb.add_child(cnt_lbl)
+	# 选中角标（右上角）：默认隐藏，选中时显示"✓ 已选择"
+	var badge := Label.new()
+	badge.name = "SelectedBadge"
+	badge.text = "✓ 已选择"
+	badge.visible = false
+	badge.position = Vector2(Style.fs(316), 10)
+	badge.add_theme_font_size_override("font_size", Style.fs(24))
+	badge.add_theme_color_override("font_color", Style.MODE_SELECTED)
+	btn.add_child(badge)
 	_apply_card_style(btn, false, mode.selectable)
 	return btn
 
@@ -159,9 +170,13 @@ func _apply_card_style(btn: Button, selected: bool, selectable: bool):
 		sb.border_color = Style.MODE_DISABLED
 		sb.set_border_width_all(2)
 	elif selected:
-		sb.bg_color = Style.MODE_CARD_BG.lightened(0.06)
-		sb.border_color = Style.MODE_SELECTED
-		sb.set_border_width_all(4)
+		# 选中态：金框相框效果——亮金粗边框 + 金色投影，背景暗化衬托金框更醒目
+		sb.bg_color = Style.MODE_CARD_BG.darkened(0.08)
+		sb.border_color = Style.WIN_GOLD
+		sb.set_border_width_all(7)
+		sb.shadow_color = Style.WIN_GOLD
+		sb.shadow_size = 14
+		sb.shadow_offset = Vector2(0, 2)
 	else:
 		sb.bg_color = Style.MODE_CARD_BG
 		sb.border_color = Style.MODE_CARD_BORDER
@@ -170,6 +185,10 @@ func _apply_card_style(btn: Button, selected: bool, selectable: bool):
 	btn.add_theme_stylebox_override("hover", sb)
 	btn.add_theme_stylebox_override("pressed", sb)
 	btn.add_theme_stylebox_override("focus", sb)
+	# 同步选中角标显隐
+	var badge: Label = btn.get_node_or_null("SelectedBadge")
+	if badge != null:
+		badge.visible = selected
 
 func _on_card_pressed(mode_id: String):
 	if not ModeData.is_selectable(mode_id):

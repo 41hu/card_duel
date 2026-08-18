@@ -224,11 +224,28 @@ func _on_clear_slot(slot: int):
 # ---------- 页面 3：卡组编辑 ----------
 func _show_edit():
 	var page = _add_page("编辑卡组 · %s（槽位%d）" % [Config.char_name(_char_id), _slot], "← 返回槽位")
+	# 角色面板信息行（HP/近战/远程/魔法 + 技能一句话；点击展开技能详情）
+	var cd: Dictionary = Config.CHARACTER_DB.get(_char_id, {})
+	var role_btn := Button.new()
+	role_btn.flat = true
+	role_btn.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	role_btn.offset_top = 96
+	role_btn.offset_bottom = 150
+	role_btn.offset_left = -480
+	role_btn.offset_right = 480
+	role_btn.add_theme_font_size_override("font_size", Style.fs(26))
+	role_btn.add_theme_color_override("font_color", Style.SELECTED_CYAN)
+	role_btn.text = "%s ｜ HP%d ｜ 近战%d ｜ 远程%d ｜ 魔法%d 　（点此看技能）" % [
+		cd.get("name", "?"), cd.get("hp", 0), cd.get("near", 0), cd.get("range", 0), cd.get("magic", 0)]
+	role_btn.pressed.connect(func():
+		_show_role_skill_popup(cd)
+	)
+	page.add_child(role_btn)
 	# 顶栏：命名 + 张数 + 保存
 	var top := HBoxContainer.new()
 	top.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
-	top.offset_top = 100
-	top.offset_bottom = 176
+	top.offset_top = 152
+	top.offset_bottom = 228
 	top.offset_left = -480
 	top.offset_right = 480
 	top.add_theme_constant_override("separation", Style.fs(14))
@@ -254,8 +271,8 @@ func _show_edit():
 	# 第二行：回复套餐选择 + 大池预算
 	var top2 := HBoxContainer.new()
 	top2.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
-	top2.offset_top = 182
-	top2.offset_bottom = 258
+	top2.offset_top = 234
+	top2.offset_bottom = 310
 	top2.offset_left = -480
 	top2.offset_right = 480
 	top2.add_theme_constant_override("separation", Style.fs(12))
@@ -285,7 +302,7 @@ func _show_edit():
 	# 中部：左卡池 / 右已选（上下分栏更适合手机）
 	var mid := HBoxContainer.new()
 	mid.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	mid.offset_top = 270
+	mid.offset_top = 322
 	mid.offset_bottom = -120
 	mid.add_theme_constant_override("separation", Style.fs(10))
 	page.add_child(mid)
@@ -507,3 +524,49 @@ func _open_weapon_pool_editor():
 	ed.setup(_draft_weapon_pool, func(pool: Dictionary):
 		_draft_weapon_pool = pool.duplicate(true)
 	)
+
+# 角色技能详情弹窗（编辑页点击角色面板信息行展开）
+func _show_role_skill_popup(cd: Dictionary):
+	var c := Control.new()
+	c.z_index = 15
+	c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var bg := ColorRect.new()
+	bg.color = Color(0, 0, 0, 0.75)
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	c.add_child(bg)
+	var box := PanelContainer.new()
+	box.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	box.custom_minimum_size = Vector2(Style.fs(700), Style.fs(360))
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.1, 0.12, 0.18, 1)
+	sb.set_corner_radius_all(14)
+	sb.border_color = Style.MODE_SELECTED
+	sb.set_border_width_all(2)
+	box.add_theme_stylebox_override("panel", sb)
+	c.add_child(box)
+	var vb := VBoxContainer.new()
+	vb.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	vb.offset_left = 32; vb.offset_right = -32
+	vb.offset_top = 28; vb.offset_bottom = -28
+	vb.add_theme_constant_override("separation", Style.fs(14))
+	box.add_child(vb)
+	var t := Label.new()
+	t.text = "%s ｜ HP%d ｜ 近战%d ｜ 远程%d ｜ 魔法%d" % [
+		cd.get("name", "?"), cd.get("hp", 0), cd.get("near", 0), cd.get("range", 0), cd.get("magic", 0)]
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	t.add_theme_font_size_override("font_size", Style.fs(30))
+	t.add_theme_color_override("font_color", Style.SELECTED_CYAN)
+	vb.add_child(t)
+	var d := Label.new()
+	d.text = "技能：%s" % cd.get("skill_desc", "无")
+	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	d.add_theme_font_size_override("font_size", Style.fs(24))
+	d.add_theme_color_override("font_color", Color(0.92, 0.92, 0.92))
+	vb.add_child(d)
+	var close := Button.new()
+	close.text = "关闭"
+	close.custom_minimum_size = Vector2(0, Style.fs(72))
+	close.add_theme_font_size_override("font_size", Style.fs(26))
+	close.pressed.connect(func(): c.queue_free())
+	vb.add_child(close)
+	add_child(c)

@@ -40,6 +40,7 @@ var _flash_label: Label  # 临时提示（新提示覆盖旧的防残留）
 func _ready():
 	Style.scale_node_fonts(self)
 	_build_layout()
+	_apply_safe_area()  # 手机端刘海屏：选择页/编辑页整体右移避开
 	BackHandler.scene_back = func() -> bool:
 		if _page == "edit":
 			_show_pick()
@@ -62,6 +63,23 @@ func _exit_tree():
 		Network.game_ended.disconnect(_on_game_ended)
 	if Network.server_disconnected.is_connected(_on_server_disconnected):
 		Network.server_disconnected.disconnect(_on_server_disconnected)
+
+# 全面屏/刘海屏安全区：横屏刘海在左时，选择页/编辑页整体右移、返回按钮右移避开
+func _apply_safe_area():
+	var sa = DisplayServer.get_display_safe_area()
+	var win = DisplayServer.window_get_size()
+	var vp = get_viewport_rect().size
+	if vp.x <= 0 or vp.y <= 0:
+		return
+	var sx = win.x / vp.x if vp.x > 0 else 1.0
+	var left = sa.position.x / sx
+	var right = (win.x - sa.end.x) / sx
+	for r in [pick_root, edit_root]:
+		if r != null:
+			r.offset_left = left
+			r.offset_right = -right
+	back_btn.offset_left += left
+	back_btn.offset_right += left
 
 # 联机模式判断：本地时 LocalGame.game 非空；联机时 deck_config_data 由服务端下发
 func _is_online() -> bool:
@@ -328,6 +346,9 @@ func _show_pick():
 			return
 	var pname = "P1" if _step == 0 else "P2"
 	title.text = "为 %s（%s）配置卡组" % [pname, Config.char_name(_current_char_id())]
+	# 本地流程按钮文案：P1 确认进入下一人；P2（最后一人）确认直接进入对局
+	if not _is_online():
+		confirm_btn.text = "确认（进入对局）" if _step >= 1 else "确认（进入下一人）"
 	# 常驻展示双方角色：玩家看清对手再决定卡组
 	vs_label.text = "你：%s　vs　对手：%s" % [
 		Config.char_name(_current_char_id()), Config.char_name(_opponent_char_id())]
@@ -460,8 +481,12 @@ func _show_edit():
 	_edit_vs_info.text = "你：%s 近%d远%d魔%d HP%d　vs　对手：%s 近%d远%d魔%d HP%d　（点此看技能）" % [
 		me_cd.get("name", "?"), me_cd.get("near", 0), me_cd.get("range", 0), me_cd.get("magic", 0), me_cd.get("hp", 0),
 		opp_cd.get("name", "?"), opp_cd.get("near", 0), opp_cd.get("range", 0), opp_cd.get("magic", 0), opp_cd.get("hp", 0)]
-	# 联机只配自己的卡组：确认按钮文案改为"准备完成"，不再提示"下一人"
-	_edit_ok_btn.text = "准备完成（等待对手）" if _is_online() else "确认（进入下一人）"
+	# 联机只配自己的卡组：确认按钮文案改为"准备完成"，不再提示"下一人"；
+	# 本地流程：P2（最后一人）确认直接进入对局
+	if _is_online():
+		_edit_ok_btn.text = "准备完成（等待对手）"
+	else:
+		_edit_ok_btn.text = "确认（进入对局）" if _step >= 1 else "确认（进入下一人）"
 	# 重建卡池（remove_child 立即移出树，避免 queue_free 延迟删除导致
 	# 第二次进入编辑页时 _refresh_edit 按索引取到旧行、数量显示到已销毁节点上）
 	for c in _edit_pool_box.get_children():

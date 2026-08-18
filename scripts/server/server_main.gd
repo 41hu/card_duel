@@ -116,7 +116,13 @@ func _create_room(peer_idx: int, data: Dictionary):
 func _join_room(peer_idx: int, data: Dictionary):
 	var rid = data.get("room_id", ""); var peer = _peers[peer_idx]; var room = _find_room(rid)
 	if room == null: _send_to(peer_idx, {"t":"error","msg":"房间不存在"}); return
-	if room.peer_indices.size() >= room.max_players: _send_to(peer_idx, {"t":"error","msg":"房间已满"}); return
+	if room.peer_indices.size() >= room.max_players:
+		# 满员时区分「对局已开始」与「人满」，避免误导（对局已开始无法再加入）
+		if room.stage != "waiting":
+			_send_to(peer_idx, {"t":"error","msg":"对局已开始，无法加入"})
+		else:
+			_send_to(peer_idx, {"t":"error","msg":"房间已满"})
+		return
 	var pidx = room.peer_indices.size()  # 动态分配玩家序号（2 人房 0/1，4 人房 0-3）
 	if room.ready.size() <= pidx:
 		room.ready.append(false)  # 有人退出压缩过 ready 数组，补位时扩展保持下标对齐
@@ -209,6 +215,7 @@ func _after_bp(room):
 		room.stage = "deck"
 		room.decks = [[], []]  # 与 deck_ready 赋值的数组类型一致
 		room.weapon_pools = [{}, {}]  # 武器幻化池随卡组上报
+		room.deck_locked = [false, false]  # 上报一次即锁定（准备阶段不可再调整，防重复上报覆盖）
 		room.bp_chars = chars
 		room.bp_first = bf
 		room.deck_deadline = Time.get_ticks_msec() + DECK_TIME * 1000
@@ -225,6 +232,10 @@ func _after_bp(room):
 func _on_deck_ready(peer_idx: int, data: Dictionary):
 	var peer = _peers[peer_idx]; var room = _find_room(peer.room_id)
 	if room == null or room.stage != "deck": return
+	# 已上报过（准备阶段锁定）：拒绝再次调整，防止重复上报覆盖已确认卡组
+	if room.deck_locked.size() > peer.player_index and room.deck_locked[peer.player_index]:
+		_send_to(peer_idx, {"t": "error", "msg": "卡组已确认锁定，无法再次调整"})
+		return
 	var cards: Array = data.get("cards", [])
 	var pkg = str(data.get("package", DeckData.DEFAULT_PACKAGE))
 	var v = DeckData.validate_deck(cards, pkg)
@@ -233,6 +244,7 @@ func _on_deck_ready(peer_idx: int, data: Dictionary):
 		log_msg("P%d 非法卡组被拒：%s" % [peer.player_index, v.msg])
 		return
 	room.decks[peer.player_index] = cards
+	room.deck_locked[peer.player_index] = true  # 进入准备阶段：锁定本次卡组
 	# 武器幻化池：非法/缺失 → 默认池（不因此拒绝整个卡组，宽容处理）
 	room.weapon_pools[peer.player_index] = DeckData.normalize_weapon_pool(data.get("weapon_pool", {}))
 	log_msg("P%d 卡组就绪（%d张，套餐%s，武器池%s）" % [peer.player_index, cards.size(), pkg,
@@ -444,6 +456,10 @@ func _on_peer_disconnected(peer_idx: int):
 		for p_idx in room.peer_indices:
 			if p_idx != peer_idx:
 				var winner = _peers[p_idx].player_index
+				var endp: Array = []
+				for p in room.match.players:
+					endp.append({char_id=p.char_id, name=Config.char_name(p.char_id),
+						hp=p.hp, max_hp=p.max_hp, near=p.near_power, range=p.range_power, magic=p.magic_power})
 				var result = {
 					"t": "game_over",
 					"winner": winner,
@@ -454,6 +470,7 @@ func _on_peer_disconnected(peer_idx: int):
 						Config.char_name(room.match.players[0].char_id), Config.char_name(room.match.players[1].char_id)],
 					"titles": room.match._calc_titles(winner, true),
 					"titles_loser": [],  # 对手断线：不给败者称号
+					"end_players": endp,
 					"battle_record": room.match.battle_record.duplicate(),
 					"action_log": room.match.action_log.duplicate(),
 				}

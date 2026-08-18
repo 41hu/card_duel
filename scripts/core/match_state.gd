@@ -966,6 +966,7 @@ func _check_permanent_death(player_idx: int):
 			# 每名玩家的称号（结算界面统计卡片"查看称号"展开用；自己视角只看顶部自己的）
 			player_titles=[_calc_titles(0, winner == 0), _calc_titles(1, winner == 1)],
 			eliminated=[players[0].get("eliminated", false), players[1].get("eliminated", false)],
+			end_players=_end_player_snapshot(),  # 结束时各方面板（结算界面查看成长）
 			battle_record=battle_record.duplicate(),
 			action_log=action_log.duplicate(),
 		}
@@ -995,11 +996,23 @@ func _check_multi_winner():
 			titles_loser=[],
 			player_titles=pts,
 			eliminated=eli,
+			end_players=_end_player_snapshot(),  # 结束时各方面板（结算界面查看成长）
 			battle_record=battle_record.duplicate(),
 			action_log=action_log.duplicate(),
 		}
 		state_changed.emit(get_full_state())
 		game_ended.emit(game_result)
+
+# 对局结束时的玩家面板快照（结算界面显示"成长"：结束时 vs 初始 CHARCTER_DB）
+func _end_player_snapshot() -> Array:
+	var out: Array = []
+	for p in players:
+		out.append({
+			char_id=p.char_id, name=Config.char_name(p.char_id),
+			hp=p.hp, max_hp=p.max_hp,
+			near=p.near_power, range=p.range_power, magic=p.magic_power,
+		})
+	return out
 
 func _player_names() -> Array:
 	var names: Array = []

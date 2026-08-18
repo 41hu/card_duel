@@ -305,6 +305,33 @@ func _build_stat_cards(result: Dictionary, names: Array, winner: int):
 		stat_l.add_theme_color_override("font_color", Color(1, 1, 1, 1))
 		stat_l.add_theme_font_size_override("font_size", Style.fs(24))
 		v.add_child(stat_l)
+		# 结束时面板（对局结束状态，方便查看成长：与初始 HP/近/远/魔对比）
+		var endp: Array = result.get("end_players", [])
+		if i < endp.size():
+			var ep: Dictionary = endp[i]
+			var init_cd: Dictionary = Config.CHARACTER_DB.get(str(ep.get("char_id", "")), {})
+			var end_l := Label.new()
+			end_l.text = "结束时：HP %d/%d ｜ 近%d 远%d 魔%d" % [
+				int(ep.get("hp", 0)), int(ep.get("max_hp", 0)),
+				int(ep.get("near", 0)), int(ep.get("range", 0)), int(ep.get("magic", 0))]
+			end_l.add_theme_color_override("font_color", Style.SELECTED_CYAN)
+			end_l.add_theme_font_size_override("font_size", Style.fs(22))
+			v.add_child(end_l)
+			# 成长对比：面板相对初始角色的变化（+n / -n）
+			var init_n = int(init_cd.get("near", 0)); var init_r = int(init_cd.get("range", 0)); var init_m = int(init_cd.get("magic", 0))
+			var dn = int(ep.get("near", 0)) - init_n
+			var dr = int(ep.get("range", 0)) - init_r
+			var dm = int(ep.get("magic", 0)) - init_m
+			var parts: Array = []
+			if dn != 0: parts.append("近%+d" % dn)
+			if dr != 0: parts.append("远%+d" % dr)
+			if dm != 0: parts.append("魔%+d" % dm)
+			if not parts.is_empty():
+				var g_l := Label.new()
+				g_l.text = "成长：" + "  ".join(parts)
+				g_l.add_theme_color_override("font_color", Color(0.55, 0.9, 0.6))
+				g_l.add_theme_font_size_override("font_size", Style.fs(20))
+				v.add_child(g_l)
 		# 该玩家称号：默认隐藏，"查看称号 ▸"点击展开。
 		# 自己的卡片不展示（自己的称号已在顶部查看）；自我对战时胜者卡片不重复（顶部已展示胜者称号）
 		var pts: Array = ptitles[i] if i < ptitles.size() else []

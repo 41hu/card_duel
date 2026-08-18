@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://bp7m2n8k4q1x"]
 
 [ext_resource type="Script" uid="uid://dvio2p65cq7gf" path="res://scripts/ui/bp_ui.gd" id="1_bp"]
+[ext_resource type="Script" path="res://scripts/ui/components/drag_scroll.gd" id="2_drag"]
 
 [node name="BPScene" type="Control" unique_id=674156191]
 layout_mode = 3
@@ -70,6 +71,7 @@ offset_right = 540.0
 offset_bottom = 860.0
 grow_horizontal = 2
 horizontal_scroll_mode = 0
+script = ExtResource("2_drag")
 
 [node name="CharGrid" type="GridContainer" parent="CharScroll"]
 layout_mode = 2

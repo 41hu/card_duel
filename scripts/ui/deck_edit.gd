@@ -65,7 +65,7 @@ func _flash(text: String, color: Color = Style.MODE_FEATURE):
 	_status.text = text
 	_status.add_theme_color_override("font_color", color)
 
-# 全面屏/刘海屏安全区：横屏刘海在左时，页面内容整体右移避开（卡池/列表贴左会被挡）
+# 全面屏/刘海屏安全区：横屏刘海在左时，页面内容在安全区内居中（左移避开左刘海、右缘内缩避开右刘海）
 func _apply_safe_area():
 	if _body == null:
 		return
@@ -76,8 +76,10 @@ func _apply_safe_area():
 		return
 	var sx = win.x / vp.x if vp.x > 0 else 1.0
 	var left = sa.position.x / sx
+	var right = (win.x - sa.end.x) / sx
+	# 注意：offset_right 必须是负值（内缩）；写成 +left 会把 body 整体右推、内容不居中
 	_body.offset_left = left
-	_body.offset_right = left
+	_body.offset_right = -right
 
 func _clear_body():
 	if _body != null and is_instance_valid(_body):

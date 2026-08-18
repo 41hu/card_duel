@@ -836,6 +836,16 @@ func decide_action(player_idx: int) -> Dictionary:
 					if s > best_score:
 						best_score = s
 						best_action = {"action": "use_skill", "skill": "mage_discard", "card_uid": discard_uid}
+			"priest_chant":
+				# 真言：弃回复卡换等值伤害（无视护甲、只能闪避）；血量过半才用（保回复续航）
+				if match_ref.players[player_idx].hp * 2 >= match_ref.players[player_idx].max_hp:
+					for card in hand:
+						if card.type_id in ["heal_3", "heal_5"]:
+							var dmg = 3 if card.type_id == "heal_3" else 5
+							var s = _attack_score(player_idx, dmg, opp_idx, stance)
+							if s > best_score:
+								best_score = s
+								best_action = {"action": "use_skill", "skill": "priest_chant", "card_uid": card.uid, "target": opp_idx}
 			"assassin_move":
 				if distance > 0:
 					var has_near = false

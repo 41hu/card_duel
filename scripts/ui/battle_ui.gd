@@ -1153,6 +1153,7 @@ func _exec_skill(sk_id: String):
 	elif sk_id == "wardsmith_infuse": _show_wardsmith_infuse()
 	elif sk_id == "wardsmith_repair": _show_wardsmith_repair()
 	elif sk_id == "spellblade_channel": _show_spellblade_pick()
+	elif sk_id == "priest_chant": _show_priest_chant_pick()
 	else: _n().send_use_skill(sk_id)
 
 # 铸甲师注魔：护甲满耐久时消耗一张攻击卡，把护甲换成该卡对应类型（每回合限一次）
@@ -1261,6 +1262,55 @@ func _show_spellblade_pick():
 			vb.add_child(b)
 	if not has_any:
 		vb.add_child(_lbl("没有魔法/吟唱卡"))
+	var close = _mkbtn("取消")
+	close.pressed.connect(func(): c.queue_free())
+	vb.add_child(close)
+	add_child(c)
+
+# 真言（牧师）：选一张回复卡弃置 → 对敌人造成等值法术伤害（多人局再选目标）
+func _show_priest_chant_pick():
+	var c = Control.new()
+	c.name = "PriestChantPick"
+	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
+	var vb = _popup_box(c, 620, 420)
+	vb.add_child(_lbl("真言：弃1张回复卡，对敌人造成等值法术伤害（无视护甲，只能魔法响应）"))
+	var me = _find_self()
+	var has_any = false
+	var multi = (_game_state.get("players", []).size() > 2)
+	for card in me.get("hand", []):
+		if card.type_id in ["heal_3", "heal_5"]:
+			has_any = true
+			var b = _mkbtn("%s（造成%d点伤害）" % [Config.card_name(card.type_id), 3 if card.type_id == "heal_3" else 5])
+			b.pressed.connect(func(uid=card.uid):
+				c.queue_free()
+				if multi:
+					# 多人局：选目标后发送
+					var t = Control.new()
+					t.name = "PriestChantTarget"
+					t.z_index = 10; t.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+					var bg2 = ColorRect.new(); bg2.color = Style.POPUP_BG
+					bg2.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); t.add_child(bg2)
+					var vb2 = _popup_box(t, 620, 420)
+					vb2.add_child(_lbl("真言：选择目标"))
+					for p in _game_state.get("players", []):
+						if p.index != _player_index:
+							var pb = _mkbtn(Config.char_name(str(p.char_id)))
+							pb.pressed.connect(func(tidx=p.index):
+								t.queue_free()
+								_n().send_use_skill("priest_chant", {"card_uid": uid, "target": tidx}))
+							vb2.add_child(pb)
+					var cl = _mkbtn("取消")
+					cl.pressed.connect(func(): t.queue_free())
+					vb2.add_child(cl)
+					add_child(t)
+				else:
+					_n().send_use_skill("priest_chant", {"card_uid": uid})
+			)
+			vb.add_child(b)
+	if not has_any:
+		vb.add_child(_lbl("没有回复卡"))
 	var close = _mkbtn("取消")
 	close.pressed.connect(func(): c.queue_free())
 	vb.add_child(close)

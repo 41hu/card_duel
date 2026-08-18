@@ -481,6 +481,38 @@ func _use_card(player_idx: int, card: Dictionary):
 	s["cards_played"][tid] = s["cards_played"].get(tid, 0) + 1
 	s["card_total"] += 1
 
+# 真言（牧师）：回复卡等值法术伤害，无视护甲，只能魔法响应（闪避），无卡消耗
+func _begin_priest_chant(player_idx: int, card: Dictionary, target_idx: int) -> Dictionary:
+	var opp = get_opponent(player_idx, target_idx)
+	if opp < 0: return {success=false, msg="请选择目标"}
+	var dmg = 3 if card.type_id == "heal_3" else 5
+	_pending_target = opp
+	pending_attack_card = "priest_chant"
+	pending_attack_uid = -1  # 无卡消耗标记（_use_card 检查手牌持有再消耗）
+	_response_attacker = player_idx
+	pending_attack_segments = 1
+	pending_attack_segment = 0
+	attacker_last_damage = dmg
+	attacker_last_type = Config.DamageType.MAGICAL
+	_pending_formula = "真言(%s)" % Config.card_name(card.type_id)
+	# 无视护甲（不计算防具）；重置武器/共鸣/风神弓标记防残留
+	_armor_hit = false
+	_armor_pierce = false
+	_hammer_pierce = false
+	_resonance_rebound = false
+	_wind_bow_pending = false
+	_wind_bow_target = -1
+	_pending_blocked = false
+	add_log(player_idx, "%s咏唱真言: 弃%s，对%s造成%d点法术伤害" % [
+		Config.char_name(players[player_idx].char_id), Config.card_name(card.type_id),
+		_target_name(opp), dmg])
+	phase = Config.Phase.RESPONSE_WINDOW
+	response_pending = true
+	_action_deadline = Time.get_ticks_msec() + RESPONSE_TIME * 1000
+	response_needed.emit(opp, {attacker=player_idx, card="priest_chant", damage=dmg,
+		distance=movement.get_distance(opp), segment=1, segments=1})
+	return {success=true, phase="response", damage=dmg}
+
 func _handle_respondable_card(player_idx: int, card: Dictionary, kind: String) -> Dictionary:
 	var opp = get_opponent(player_idx, int(card.get("target", -1)))
 	if opp < 0: return {success=false, msg="请选择目标"}
@@ -652,7 +684,9 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		var card_name = Config.card_name(pending_attack_card)
 		add_log(attacker_idx, "%s使用%s对%s造成：%s=%d点伤害" % [attacker_name, card_name, defender_name, formula, final_damage])
 		# 命中特效在死亡判定前（与重构前顺序一致：统计→日志→特效→判定）
-		combat.apply_on_hit_effects(attacker_idx, defender_idx, final_damage, attacker_last_type)
+		# 真言为技能攻击：不触发武器命中效果（毒牙/灼烧等）
+		if pending_attack_card != "priest_chant":
+			combat.apply_on_hit_effects(attacker_idx, defender_idx, final_damage, attacker_last_type)
 		char_skills.on_attack_hit(attacker_idx, defender_idx, final_damage, attacker_last_type)
 		# 风神弓：穿心命中并造成伤害后，控制对方移动1格（方向自由；多段攻击只触发一次）
 		if not _wind_bow_pending and not players[attacker_idx].weapon.is_empty() \
@@ -696,7 +730,9 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		_begin_attack_segment(attacker_idx)
 		state_changed.emit(get_full_state())
 		return
-	_use_card(attacker_idx, {uid=pending_attack_uid, type_id=pending_attack_card})
+	# 无卡消耗标记（真言 -1）或卡已不在手牌时跳过；调试卡（负 uid）在手牌中照常消耗
+	if pending_attack_uid >= 0 or card_systems[attacker_idx].has_card(pending_attack_uid):
+		_use_card(attacker_idx, {uid=pending_attack_uid, type_id=pending_attack_card})
 	turn_phase = Config.TurnPhase.ACTION
 	# 响应方不限时清掉 deadline 后，攻击方（若限时）恢复出牌计时
 	if _action_deadline == 0 and _timeout_enabled(attacker_idx):

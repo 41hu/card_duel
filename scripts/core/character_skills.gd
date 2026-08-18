@@ -182,6 +182,9 @@ func has_active_skills(player_idx: int) -> Array:
 			# 法术强化：始终可用（每回合限一次由 skill_turn_limit 控制；效果可叠加，打出魔法攻击后清除）
 			skills.append("mage_discard")
 		"assassin": skills.append("assassin_move")
+		"priest":
+			# 真言：手牌有回复卡（heal_3/heal_5）时才可用（每回合限1次由 skill_turn_limit 控制）
+			if _has_heal_card(player_idx): skills.append("priest_chant")
 		"hunter":
 			# 埋伏：手牌有远程攻击牌（range/pierce）时才显示
 			if _has_range_attack(player_idx): skills.append("hunter_ambush")
@@ -228,6 +231,13 @@ func _has_infuse_card(player_idx: int) -> bool:
 			return true
 	return false
 
+# 手牌是否含回复卡（牧师真言条件）
+func _has_heal_card(player_idx: int) -> bool:
+	for c in _ms.card_systems[player_idx].hand:
+		if c.type_id in ["heal_3", "heal_5"]:
+			return true
+	return false
+
 func skill_button_name(skill: String) -> String:
 	match skill:
 		"mage_discard": return "法术强化"
@@ -236,6 +246,7 @@ func skill_button_name(skill: String) -> String:
 		"wardsmith_infuse": return "注魔"
 		"wardsmith_repair": return "修复"
 		"spellblade_channel": return "魔力引导"
+		"priest_chant": return "真言"
 	return skill
 
 func use_skill(player_idx: int, skill: String, params: Dictionary) -> Dictionary:
@@ -269,6 +280,7 @@ func use_skill(player_idx: int, skill: String, params: Dictionary) -> Dictionary
 		"wardsmith_infuse": skill_result = _wardsmith_infuse(player_idx, params)
 		"wardsmith_repair": skill_result = _wardsmith_repair(player_idx, params)
 		"spellblade_channel": skill_result = _spellblade_channel(player_idx, params)
+		"priest_chant": skill_result = _priest_chant(player_idx, params)
 		_: skill_result = {success=false, msg="未知技能"}
 	if not skill_result.get("success", false):
 		p.skills_used.pop_back()
@@ -345,6 +357,19 @@ func _spellblade_channel(player_idx: int, params: Dictionary) -> Dictionary:
 	var as_type = "near" if card.type_id == "magic" else "heavy"
 	# 复用出牌流程：以 near/heavy 打出（对应攻击点消耗），ignore_distance 绕过贴脸限制
 	return _ms._do_play_card(player_idx, {"card_uid": uid, "extra": {"as_type": as_type, "ignore_distance": true}})
+
+# 真言（牧师）：弃1张回复卡，对敌人造成等值法术伤害（无视护甲，只能魔法响应）
+func _priest_chant(player_idx: int, params: Dictionary) -> Dictionary:
+	var cs = _ms.card_systems[player_idx]
+	var uid = int(params.get("card_uid", -1))
+	var card = {}
+	for c in cs.hand:
+		if c.uid == uid: card = c; break
+	if card.is_empty() or not card.type_id in ["heal_3", "heal_5"]:
+		return {success=false, msg="请选择回复卡"}
+	# 弃置回复卡（进弃牌堆）
+	cs.discard_card(uid)
+	return _ms._begin_priest_chant(player_idx, card, int(params.get("target", -1)))
 
 # 被动：装备护甲耐久上限 +1（铸甲师 max_durability=4；由 equip_armor 调用）
 func armor_durability_bonus(player_idx: int) -> int:

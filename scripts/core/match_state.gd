@@ -986,7 +986,7 @@ func _check_multi_winner():
 		var pts: Array = []
 		var eli: Array = []
 		for i in range(players.size()):
-			pts.append(_calc_titles(i, i == winner))
+			pts.append(_calc_titles(i, i == winner, winner))
 			eli.append(players[i].get("eliminated", false))
 		game_result = {
 			winner=winner, loser=-1, reason="last_alive",
@@ -1023,18 +1023,19 @@ func _player_names() -> Array:
 # 称号难度分级（UI 徽章颜色）：gold=金色大框（最难）blue=蓝色框 white=白色框（最易）
 const TITLE_TIERS := {
 	"完美击杀": "gold", "毁灭之王": "gold", "耐杀王": "gold", "不死鸟": "gold",
-	"出师不利": "gold", "负隅顽抗": "gold", "武器专家": "gold", "战术大师": "gold",
+	"出师不利": "gold", "负隅顽抗": "gold", "虽败犹荣": "gold",
+	"武器专家": "gold", "战术大师": "gold",
 	"致命一击": "gold", "完美形态": "gold",
-	"险胜": "blue", "虽败犹荣": "blue", "伤痕累累": "blue", "苦战": "blue",
+	"险胜": "blue", "伤痕累累": "blue", "苦战": "blue",
 	"坚守阵地": "blue", "马拉松冠军": "blue", "火力压制": "blue",
 	"征服者": "white",
 }
 
 # 称号判定（is_winner: 胜者/败者归属），可同时获得多个
 # 同条件类型互斥：同组内按定义顺序只保留第一个（定义顺序=条件更苛刻的优先），
-# 例如胜者达成毁灭之王（伤害≥45）则不再给火力压制（伤害≥30）
+# 例如胜者达成毁灭之王（伤害>50）则不再给火力压制（伤害>30）
 # 主称号 = 难度最高档（gold > blue > white），同档保持判定顺序
-func _calc_titles(player_idx: int, is_winner: bool) -> Array:
+func _calc_titles(player_idx: int, is_winner: bool, winner_idx: int = -1) -> Array:
 	var w = stats[player_idx]
 	var groups := {
 		"dmg": [], "taken": [], "resurrect": [], "moves": [],
@@ -1044,25 +1045,26 @@ func _calc_titles(player_idx: int, is_winner: bool) -> Array:
 	if is_winner:
 		# 胜者专属
 		if w["damage_taken"] == 0: groups["taken"].append("完美击杀")
-		if w["damage_dealt"] >= 45: groups["dmg"].append("毁灭之王")
-		if w["damage_taken"] >= 50: groups["taken"].append("耐杀王")
+		if w["damage_dealt"] > 50: groups["dmg"].append("毁灭之王")
+		if w["damage_taken"] > 55: groups["taken"].append("耐杀王")
 		if w["resurrected"] >= 2: groups["resurrect"].append("不死鸟")
 		if players[player_idx].hp < 5: groups["hp_self"].append("险胜")
 	else:
 		# 败者专属
 		if w["damage_dealt"] == 0: groups["dmg"].append("出师不利")
 		if w["resurrected"] >= 2: groups["resurrect"].append("负隅顽抗")
-		# 虽败犹荣：败者伤害高于胜者——仅 2 人局成立（多人局无单一胜者对比对象，跳过）
-		if players.size() <= 2 and w["damage_dealt"] > stats[1 - player_idx]["damage_dealt"]:
+		# 虽败犹荣：败者伤害高于胜者（2 人局=唯一对手；多人局=最终胜者；平局无对比对象不判）
+		var cmp = winner_idx if winner_idx >= 0 else 1 - player_idx
+		if cmp >= 0 and cmp < players.size() and w["damage_dealt"] > stats[cmp]["damage_dealt"]:
 			groups["dmg"].append("虽败犹荣")
-		if w["damage_taken"] >= 50: groups["taken"].append("伤痕累累")
+		if w["damage_taken"] > 55: groups["taken"].append("伤痕累累")
 		if turn_number > 20: groups["turns"].append("苦战")
 	# 通用（不论胜负）
 	if w["weapons_used"].size() >= 6: groups["weapons"].append("武器专家")
-	if w["blocked_dmg"] > 45: groups["blocked"].append("战术大师")
+	if w["blocked_dmg"] > 60: groups["blocked"].append("战术大师")
 	if w["responses"] >= 15: groups["responses"].append("坚守阵地")
 	if w["moves"] > 10: groups["moves"].append("马拉松冠军")
-	if w["damage_dealt"] >= 30: groups["dmg"].append("火力压制")
+	if w["damage_dealt"] > 30: groups["dmg"].append("火力压制")
 	if w["max_hit"] > 15: groups["max_hit"].append("致命一击")
 	# 完美形态：游戏结束时三项数值面板均 > 6
 	var pp = players[player_idx]

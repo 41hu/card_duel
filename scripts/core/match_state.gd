@@ -521,9 +521,13 @@ func _handle_respondable_card(player_idx: int, card: Dictionary, kind: String) -
 	pending_attack_uid = card.uid
 	_response_attacker = player_idx
 	attacker_last_damage = 1
+	# 冻结为单段攻击：显式重置段号，防止沿用上一攻击（如快枪手双发）残留的段数
+	# 导致响应弹窗误显示"第2/2段"（battle_ui 从 get_full_state 读取段号）
+	pending_attack_segments = 1
+	pending_attack_segment = 1
 	phase = Config.Phase.RESPONSE_WINDOW
 	response_pending = true
-	response_needed.emit(opp, {attacker=player_idx, card=kind, damage=0, distance=0, target=opp})
+	response_needed.emit(opp, {attacker=player_idx, card=kind, damage=0, distance=0, target=opp, segment=1, segments=1})
 	return {success=true, phase="response"}
 
 func _handle_attack_card(player_idx: int, card: Dictionary) -> Dictionary:

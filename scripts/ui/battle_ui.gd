@@ -263,7 +263,7 @@ func _make_resp_popup() -> Control:
 	add_child(c)
 	return c
 
-func _show_resp_popup(atk_card: String):
+func _show_resp_popup(atk_card: String, dmg: int = 0):
 	var c = _resp_popup
 	for child in c.get_children():
 		if child is ColorRect: continue
@@ -274,7 +274,9 @@ func _show_resp_popup(atk_card: String):
 	var seg = int(_game_state.get("pending_attack_segment", 0))
 	var segs = int(_game_state.get("pending_attack_segments", 1))
 	var seg_txt = "（第%d/%d段）" % [seg, segs] if segs > 1 else ""
-	var t = _lbl("对方使用「%s」攻击%s！选择响应卡：" % ["真言" if atk_card == "priest_chant" else Config.card_name(atk_card), seg_txt])
+	var dmg_txt = "（伤害 %d）" % dmg if dmg > 0 else ""
+	var t = _lbl("对方使用「%s」攻击%s%s！选择响应卡：" % [
+		"真言" if atk_card == "priest_chant" else Config.card_name(atk_card), seg_txt, dmg_txt])
 	t.add_theme_font_size_override("font_size", Style.fs(30))
 	t.add_theme_color_override("font_color", Color(1, 0.9, 0.6))
 	t.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
@@ -1065,7 +1067,7 @@ func _on_response_needed(data: Dictionary):
 	# 真言为技能攻击：显示中文名（card_name 对无卡池条目返回英文 id）
 	var atk_display = "真言" if atk == "priest_chant" else Config.card_name(str(atk))
 	status_label.text = "对方发动%s攻击！" % atk_display
-	_show_resp_popup(atk)
+	_show_resp_popup(atk, int(data.get("damage", 0)))
 
 func _on_weapon_prompt(weapon: Dictionary):
 	var wd = weapon.get("data", {})

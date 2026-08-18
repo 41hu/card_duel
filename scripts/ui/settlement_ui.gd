@@ -232,9 +232,10 @@ func _on_game_ended(result: Dictionary):
 	cond_label.visible = false
 	var names: Array = result.get("names", [])
 	_build_stat_cards(result, names, winner)
-	# 获胜者一行：优先玩家名（联机为输入的名字），否则回退"玩家 N"
+	# 获胜者一行：优先玩家名（联机为输入的名字），否则回退"玩家 N"；附总回合数
 	var wname = names[winner] if winner < names.size() else "玩家 %d" % (winner + 1)
-	detail_label.text = "%s 获胜" % wname
+	var turns = int(result.get("turn_number", 0))
+	detail_label.text = "%s 获胜 · 共 %d 回合" % [wname, turns] if turns > 0 else "%s 获胜" % wname
 
 func _clear_title_row():
 	for c in title_row.get_children():

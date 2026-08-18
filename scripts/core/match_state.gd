@@ -1007,6 +1007,7 @@ func _check_permanent_death(player_idx: int):
 		var winner = 1 - player_idx
 		game_result = {
 			winner=winner, loser=player_idx, reason="permanent_death",
+			turn_number=turn_number,  # 结算显示总回合数
 			stats=stats.duplicate(),
 			names=_player_names(),
 			titles=_calc_titles(winner, true),
@@ -1038,6 +1039,7 @@ func _check_multi_winner():
 			eli.append(players[i].get("eliminated", false))
 		game_result = {
 			winner=winner, loser=-1, reason="last_alive",
+			turn_number=turn_number,  # 结算显示总回合数
 			stats=stats.duplicate(),
 			names=_player_names(),
 			titles=_calc_titles(winner, true) if winner >= 0 else [],

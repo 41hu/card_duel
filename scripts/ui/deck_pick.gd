@@ -66,6 +66,9 @@ func _exit_tree():
 
 # 全面屏/刘海屏安全区：横屏刘海在左时，选择页/编辑页整体右移、返回按钮右移避开
 func _apply_safe_area():
+	# 桌面端无刘海：跳过安全区（部分环境缩放/多屏返回值异常会把 UI 整体右推并裁切右侧）
+	if not (OS.has_feature("mobile") or OS.has_feature("web")):
+		return
 	var sa = DisplayServer.get_display_safe_area()
 	var win = DisplayServer.window_get_size()
 	var vp = get_viewport_rect().size

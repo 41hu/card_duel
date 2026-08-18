@@ -69,6 +69,11 @@ func _flash(text: String, color: Color = Style.MODE_FEATURE):
 func _apply_safe_area():
 	if _body == null:
 		return
+	# 桌面端无刘海：跳过安全区（部分环境缩放/多屏返回值异常会把 UI 整体右推并裁切右侧）
+	if not (OS.has_feature("mobile") or OS.has_feature("web")):
+		_body.offset_left = 0
+		_body.offset_right = 0
+		return
 	var sa = DisplayServer.get_display_safe_area()
 	var win = DisplayServer.window_get_size()
 	var vp = get_viewport_rect().size

@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://stmak3p6q2w7"]
 
 [ext_resource type="Script" uid="uid://bive25oxmlu7f" path="res://scripts/ui/settlement_ui.gd" id="1_s"]
+[ext_resource type="Script" uid="uid://dec8r11sb3mmw" path="res://scripts/ui/components/drag_scroll.gd" id="2_s"]
 
 [node name="Settlement" type="Control" unique_id=125419411]
 layout_mode = 3
@@ -82,6 +83,7 @@ offset_right = 620.0
 offset_bottom = 980.0
 grow_horizontal = 2
 horizontal_scroll_mode = 0
+script = ExtResource("2_s")
 
 [node name="StatsRow" type="HBoxContainer" parent="StatsScroll" unique_id=280878672]
 layout_mode = 2

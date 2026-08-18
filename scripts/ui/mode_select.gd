@@ -198,6 +198,7 @@ func _on_card_pressed(mode_id: String):
 
 func _select_mode(mode_id: String):
 	_selected_mode = mode_id
+	status_label.text = ""  # 清除上一个模式的提示（如"该模式开发中"），避免切换后残留
 	var mode = ModeData.get_mode(mode_id)
 	_player_count = mode.max_players if mode.max_players > 0 else 2
 	_config_defaults = ModeData.merge_config(mode_id)

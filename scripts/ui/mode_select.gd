@@ -457,14 +457,17 @@ func _do_create_room():
 
 func _do_start_local():
 	var mode = _selected_mode
+	var cfg = _final_config()
+	LocalGame.game_config = cfg  # 自定义房间规则：本地模式同样生效（共享牌堆/无限出牌等）
+	# 自定义卡组模式，或经典/快速模式关闭「共享牌堆」→ BP 后进入「选择卡组」环节（各自独立牌堆）
+	LocalGame.deck_mode = (mode == "custom_deck") or ((mode != "ffa") and not bool(cfg.get("shared_deck", true)))
 	if mode == "ffa":
 		LocalGame.rapid_mode = false
 		LocalGame.start_local_game_multi(_random_chars(4))
 		get_tree().change_scene_to_file("res://scenes/battle_scene.tscn")
-	elif mode == "custom_deck":
-		# 自定义卡组：BP 选完角色后进入「配置卡组」环节（deck_pick 场景），再开战
-		LocalGame.rapid_mode = false
-		LocalGame.deck_mode = true
+	elif mode == "custom_deck" or LocalGame.deck_mode:
+		# 自定义卡组 / 关闭共享牌堆：BP 选完角色后进入「配置卡组」环节（deck_pick 场景），再开战
+		LocalGame.rapid_mode = (mode == "rapid")
 		LocalGame.start_bp()
 		get_tree().change_scene_to_file("res://scenes/bp_scene.tscn")
 	else:

@@ -57,9 +57,9 @@ func _atk_deter(player_idx: int, card: Dictionary):
 	return {success=true}  # 死亡判定由 _damage_player 统一处理
 
 func _atk_freeze(player_idx: int, card: Dictionary):
-	# 冻结冷却中（不能连续冻结）：卡不消耗、明确提示（快速模式无冷却）
+	# 冻结冷却中（不能连续冻结）：卡不消耗、明确提示（快速模式/自定义「冻结无冷却」无冷却）
 	var opp = _m.get_opponent(player_idx, int(card.get("target", -1)))
-	if opp >= 0 and not _m.rapid_mode and _m.players[opp].frozen_lockout > 0:
+	if opp >= 0 and not (_m.rapid_mode or _m.freeze_no_cooldown) and _m.players[opp].frozen_lockout > 0:
 		return {success=false, msg="不能对同一目标连续冻结"}
 	# 冻结可被魔法闪避响应
 	return _m._handle_respondable_card(player_idx, card, "freeze")

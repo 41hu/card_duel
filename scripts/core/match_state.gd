@@ -137,7 +137,10 @@ func _setup_match(char_ids: Array, bp_first: int, custom_decks: Array, independe
 	# 默认共享牌堆（人机/联机原行为）；independent_decks=true（PVE/多人）每名玩家各自一副，
 	# custom_decks[idx] = 自定义 type_id 列表（PVE 构筑）
 	self.independent_decks = independent_decks
-	if independent_decks:
+	# 自定义房间规则：不勾「共享牌堆」→ 强制各自独立牌堆（即使调用方未传 independent）
+	if not game_config.is_empty() and not bool(game_config.get("shared_deck", true)):
+		self.independent_decks = true
+	if self.independent_decks:
 		card_systems = []
 		for i in range(n):
 			card_systems.append(_build_card_system(i, custom_decks))
@@ -238,6 +241,29 @@ var draw_suppressed: bool = false
 
 # 快速模式：出牌不消耗行动点（无限出牌）、天赐不限次数、冻结无冷却（可连续冻结）
 var rapid_mode: bool = false
+
+# ---- 自定义房间规则（客户端配置下发，服务端权威生效）----
+# 规则字段（与 mode_data.CONFIG_DEFAULTS 一致）：
+#   shared_deck / infinite_play / freeze_no_cooldown / blessing_unlimited / hand_limit / hand_min / resurrect_limit
+var game_config: Dictionary = {}
+var infinite_play: bool = false          # 无限出牌（不消耗行动点）
+var freeze_no_cooldown: bool = false     # 冻结无冷却（可连续冻结）
+var blessing_unlimited: bool = false     # 天赐不限次数
+var hand_limit_override: int = -1        # 手牌上限（-1 = 默认动态：距板边距离+1）
+var hand_min_override: int = 0           # 手牌下限（弃牌阶段不能低于此数）
+var resurrect_limit_override: int = -1   # 复活次数上限（-1 = 无限）
+
+# 应用自定义房间规则（对局创建后调用；服务器/本地共用）
+func _apply_game_config(cfg: Dictionary):
+	game_config = cfg.duplicate()
+	infinite_play = bool(cfg.get("infinite_play", false))
+	freeze_no_cooldown = bool(cfg.get("freeze_no_cooldown", false))
+	blessing_unlimited = bool(cfg.get("blessing_unlimited", false))
+	hand_limit_override = int(cfg.get("hand_limit", -1))
+	hand_min_override = int(cfg.get("hand_min", 0))
+	resurrect_limit_override = int(cfg.get("resurrect_limit", -1))
+	# rapid_mode 兼容旧检查点（任一快速规则开启即视为快速模式）
+	rapid_mode = infinite_play or freeze_no_cooldown or blessing_unlimited
 
 # 构建一副卡组（默认初始构成；custom_decks[idx] 为自定义 type_id 数组时用自定义）
 func _build_card_system(idx: int, custom_decks: Array) -> CardSys:
@@ -380,7 +406,7 @@ func _do_play_card(player_idx: int, data: Dictionary) -> Dictionary:
 	# 角色专属消耗覆盖（如快枪手远程 2AP）；-1 = 用卡牌默认消耗
 	var cost = char_skills.get_attack_cost(player_idx, type_id)
 	if cost < 0: cost = cd.cost
-	var ap_ok = rapid_mode  # 快速模式：无限出牌（不检查/不消耗行动点）
+	var ap_ok = rapid_mode or infinite_play  # 快速模式/自定义「无限出牌」：不检查/不消耗行动点
 	if not ap_ok:
 		match cd.ap:
 			Config.APType.ATTACK: ap_ok = (player.ap_attack >= cost)
@@ -389,17 +415,17 @@ func _do_play_card(player_idx: int, data: Dictionary) -> Dictionary:
 			Config.APType.NONE: ap_ok = true
 	if not ap_ok: return {success=false, msg="行动点不足"}
 	var free_sharpshooter = char_skills.can_attack_free(player_idx, type_id)
-	if type_id == "blessing" and not rapid_mode:  # 快速模式：天赐不限次数（抽牌效果保留）
+	if type_id == "blessing" and not (rapid_mode or blessing_unlimited):  # 快速/自定义「天赐不限」：抽牌效果保留
 		if player.free_move_used: return {success=false, msg="本回合已使用过天赐"}
 		player.free_move_used = true
-	if not rapid_mode and not free_sharpshooter and cd.ap != Config.APType.NONE:
+	if not (rapid_mode or infinite_play) and not free_sharpshooter and cd.ap != Config.APType.NONE:
 		match cd.ap:
 			Config.APType.ATTACK: player.ap_attack -= cost
 			Config.APType.MOVE: player.ap_move -= cost
 			Config.APType.FUNCTION: player.ap_function -= cost
 	var result = _execute_card_effect(player_idx, card)
 	if not result.get("success", false) and result.get("phase") != "choose":
-		if not rapid_mode and not free_sharpshooter and cd.ap != Config.APType.NONE:
+		if not (rapid_mode or infinite_play) and not free_sharpshooter and cd.ap != Config.APType.NONE:
 			match cd.ap:
 				Config.APType.ATTACK: player.ap_attack += cost
 				Config.APType.MOVE: player.ap_move += cost
@@ -878,6 +904,11 @@ func _discard_phase():
 	if phase == Config.Phase.GAME_OVER: return
 	turn_phase = Config.TurnPhase.DISCARD
 	_action_deadline = 0
+	# 自定义房间「手牌下限」：手牌已 ≤ 下限 → 无需弃牌，直接进入下一玩家
+	if hand_min_override > 0 and card_systems[current_player].hand.size() <= hand_min_override:
+		waiting_for_discard = false
+		_finish_discard()
+		return
 	waiting_for_discard = true
 	_discard_deadline = Time.get_ticks_msec() + DISCARD_TIME * 1000
 	state_changed.emit(get_full_state())
@@ -948,6 +979,10 @@ func _handle_death(player_idx: int):
 			state_changed.emit(get_full_state())  # 淘汰也要广播（UI 显示"已淘汰"）
 		return
 	add_log(player_idx, "HP归零，复活...")
+	# 自定义房间「复活次数上限」：达到上限直接淘汰（不再进入复活流程）
+	if resurrect_limit_override >= 0 and stats[player_idx]["resurrected"] >= resurrect_limit_override:
+		_check_permanent_death(player_idx)
+		return
 	phase = Config.Phase.RESURRECTING
 	_action_deadline = 0
 	_discard_deadline = 0

@@ -164,6 +164,8 @@ func _start_ffa(room):
 	var chars = Config.CHARACTER_IDS.duplicate()
 	chars.shuffle()
 	var picked = chars.slice(0, room.peer_indices.size())
+	# 4 人混战默认独立牌堆（mode_data ffa config），自定义房间规则同样生效
+	room.match._apply_game_config(room.config)
 	room.match.init_match_multi(picked)
 	room.match._start_game()
 	var st = room.match.get_full_state()
@@ -223,6 +225,8 @@ func _after_bp(room):
 		log_msg("BP完成，等待双方卡组 P1=%s P2=%s" % [chars[0], chars[1]])
 		return
 	room.match.rapid_mode = room.rapid_mode  # 快速模式（房间创建时指定）
+	# 自定义房间规则：须在 init_match 前应用（shared_deck=false 会切换独立牌堆）
+	room.match._apply_game_config(room.config)
 	room.match.init_match(chars[0], chars[1], bf)
 	room.match._start_game()
 	room.stage = "game"
@@ -258,6 +262,8 @@ func _try_start_deck(room):
 	var chars = room.bp_chars
 	var bf = room.bp_first
 	room.match.rapid_mode = room.rapid_mode
+	# 自定义房间规则（自定义卡组已是独立牌堆；其他规则如无限出牌在此生效）
+	room.match._apply_game_config(room.config)
 	room.match.init_match(chars[0], chars[1], bf, [room.decks[0], room.decks[1]], true, room.weapon_pools)
 	room.match._start_game()
 	room.stage = "game"

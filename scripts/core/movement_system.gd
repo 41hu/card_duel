@@ -66,8 +66,11 @@ func _opponent_in_dir(player_idx: int, dir: Vector2i) -> int:
 func distance_to_own_edge(player_idx: int) -> int:
 	return geometry.edge_distance(player_idx, match_ref.get_player(player_idx).position)
 
-# 手牌上限：多人（4 人）局固定 5 + 角色加成（六边形地图无"板边"概念）
+# 手牌上限：多人（4 人）局固定 5 + 角色加成（六边形地图无"板边"概念）；
+# 自定义房间「手牌上限」配置覆盖动态值（保留角色加成）
 func get_hand_limit(player_idx: int) -> int:
+	if match_ref.hand_limit_override >= 0:
+		return max(1, match_ref.hand_limit_override + match_ref.char_skills.hand_limit_bonus(player_idx))
 	if match_ref.players.size() > 2:
 		return 5 + match_ref.char_skills.hand_limit_bonus(player_idx)
 	return geometry.hand_limit(player_idx, match_ref.get_player(player_idx).position) + match_ref.char_skills.hand_limit_bonus(player_idx)

@@ -781,9 +781,9 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		_apply_resonance_rebound(attacker_idx, defender_idx)
 		# 反击（圣骑士）：使用响应完全抵挡一次攻击后，下次攻击伤害+1（可叠加，持续2回合）。
 		# 必须使用响应卡（闪避/牵制/格挡归零）——满耐久护甲免疫（无响应）不触发。
-		# 每层独立计时（各 2 回合后清除，不因再次触发刷新）；UI 独立显示各层
+		# 每层独立计时（各 2 回合后清除，不因再次触发刷新）；记录叠加回合号供 UI 按回合分组显示
 		if _resp_effect != "" and players[defender_idx].char_id == "paladin":
-			status.add_buff(defender_idx, "paladin_counter", 1, 2)
+			players[defender_idx].buffs.append({type="paladin_counter", value=1, duration=2, turn=turn_number})
 			add_log(defender_idx, "反击: 完全抵挡一次攻击，下次攻击伤害+1")
 	if phase == Config.Phase.GAME_OVER: return  # 死亡判定已由 _damage_player 统一处理
 	# 多段攻击：还有段则进入下一段响应窗口（每段独立结算；末段才消耗卡）

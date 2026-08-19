@@ -160,12 +160,16 @@ func _refresh_status(p: Dictionary):
 			slots.append(_slot_data(d.type, "", d.type))
 	# Buff 按类型聚合显示：同类型合并为一个槽（层数/值合计），
 	# 可无限叠加的 buff（如寻踪者校准叠几十层）不会撑爆状态行
+	var counter_groups := {}
 	var agg := {}
 	for b in p.get("buffs", []):
 		if b.type == "paladin_counter":
-			# 反击（圣骑士）：每层独立计时（各 2 回合后清除），独立显示每层
-			slots.append(_slot_data("paladin_counter", "+%d·%d回" % [int(b.value), int(b.duration)],
-				"反击：下次攻击伤害+%d，剩余%d回合" % [int(b.value), int(b.duration)]))
+			# 反击（圣骑士）：每层独立计时（各 2 回合后清除，不因再触发刷新）；
+			# 按叠加回合分组：同一回合叠的层合并一个槽（显示层数），不同回合各占一槽
+			var bt := int(b.get("turn", 0))
+			if not counter_groups.has(bt):
+				counter_groups[bt] = {"value": 0, "duration": int(b.duration)}
+			counter_groups[bt].value += int(b.value)
 			continue
 		var k: String = b.type
 		if not agg.has(k):
@@ -184,6 +188,11 @@ func _refresh_status(p: Dictionary):
 		slots.append(_slot_data(k, "%s%d%s%s" % [sgn, a.value, dur, cnt],
 			"%s：%s%d，%s%s" % [_status_name(k), sgn, a.value, _dur_text(a.duration),
 				("（%d层）" % a.count) if a.count > 1 else ""]))
+	# 反击槽：按叠加回合分组，每回合一个槽（组内层数合计，组内各层同时衰减）
+	for bt in counter_groups:
+		var g: Dictionary = counter_groups[bt]
+		slots.append(_slot_data("paladin_counter", "+%d·%d回" % [g.value, g.duration],
+			"反击：下次攻击伤害+%d（第%d回合叠加），剩余%d回合" % [g.value, bt, g.duration]))
 	# 超量合并防撑爆：只留前 N-1 个，剩余归并为 "+N" 槽
 	if slots.size() > _MAX_STATUS_SLOTS:
 		var overflow := slots.slice(_MAX_STATUS_SLOTS - 1)

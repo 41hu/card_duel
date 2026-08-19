@@ -591,6 +591,18 @@ func _begin_attack_segment(player_idx: int) -> Dictionary:
 	_pending_formula = calc.get("formula", "")
 	if skill_bonus != 0:
 		_pending_formula += ("+%d" if skill_bonus > 0 else "%d") % skill_bonus
+	# 反击（圣骑士）：叠加层数加成下一次攻击（所有攻击类型），打出即消耗
+	if player.char_id == "paladin":
+		var counter_bonus = 0
+		for b in player.buffs:
+			if b.type == "paladin_counter": counter_bonus += int(b.value)
+		if counter_bonus > 0:
+			attacker_last_damage += counter_bonus
+			_pending_formula += "+%d" % counter_bonus
+			for i in range(player.buffs.size() - 1, -1, -1):
+				if player.buffs[i].type == "paladin_counter":
+					player.buffs.remove_at(i)
+			add_log(player_idx, "反击: 攻击伤害+%d" % counter_bonus)
 	_armor_hit = calc.get("armor_hit", false)
 	# 穿甲标记：强化攻击（heavy/pierce/chant）命中防具时额外-2耐久
 	_armor_pierce = _armor_hit and type_id in ["heavy", "pierce", "chant"]
@@ -767,6 +779,11 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		# 共鸣：法术攻击被完全抵挡（护甲免疫生效/闪避/牵制归零）→ 额外造成2点伤害。
 		# 0 伤害分支必然是完全抵挡（免疫挡下或响应归零），统一在此触发一次
 		_apply_resonance_rebound(attacker_idx, defender_idx)
+		# 反击（圣骑士）：使用响应完全抵挡一次攻击后，下次攻击伤害+1（可叠加，持续2回合）。
+		# 必须使用响应卡（闪避/牵制/格挡归零）——满耐久护甲免疫（无响应）不触发
+		if _resp_effect != "" and players[defender_idx].char_id == "paladin":
+			status.add_buff(defender_idx, "paladin_counter", 1, 2)
+			add_log(defender_idx, "反击: 完全抵挡一次攻击，下次攻击伤害+1")
 	if phase == Config.Phase.GAME_OVER: return  # 死亡判定已由 _damage_player 统一处理
 	# 多段攻击：还有段则进入下一段响应窗口（每段独立结算；末段才消耗卡）
 	# 注意：_begin_attack_segment 内部会自增段号，这里不能重复自增

@@ -35,6 +35,7 @@ const _STATUS_ICONS := {
 	"mage_empower": {"icon": "法", "accent": Color(0.75, 0.5, 1.0), "name": "魔法强化"},
 	"ap_attack_down": {"icon": "滞", "accent": Color(0.7, 0.6, 1.0), "name": "攻击行动点-1"},
 	"no_move": {"icon": "移", "accent": Color(0.85, 0.85, 0.85), "name": "无法移动"},
+	"paladin_counter": {"icon": "反", "accent": Color(0.9, 0.8, 0.4), "name": "反击"},
 	"神隐": {"icon": "隐", "accent": Color(0.6, 0.5, 0.9), "name": "神隐"},
 }
 # 状态槽一行上限（面板宽度约 11 个），超出合并为 "+N" 槽，详情放 tooltip

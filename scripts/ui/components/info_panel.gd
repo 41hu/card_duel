@@ -162,6 +162,11 @@ func _refresh_status(p: Dictionary):
 	# 可无限叠加的 buff（如寻踪者校准叠几十层）不会撑爆状态行
 	var agg := {}
 	for b in p.get("buffs", []):
+		if b.type == "paladin_counter":
+			# 反击（圣骑士）：每层独立计时（各 2 回合后清除），独立显示每层
+			slots.append(_slot_data("paladin_counter", "+%d·%d回" % [int(b.value), int(b.duration)],
+				"反击：下次攻击伤害+%d，剩余%d回合" % [int(b.value), int(b.duration)]))
+			continue
 		var k: String = b.type
 		if not agg.has(k):
 			agg[k] = {"count": 0, "value": 0, "duration": b.duration}

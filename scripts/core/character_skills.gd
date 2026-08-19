@@ -17,6 +17,10 @@ func on_attack_hit(attacker_idx: int, _defender_idx: int, _damage: int, damage_t
 			if damage_type == Config.DamageType.RANGED or damage_type == Config.DamageType.MAGICAL:
 				_ms.status.add_buff(attacker_idx, "calibration", 1, -2)
 				_ms.add_log(attacker_idx, "校准+1（远程伤害+%d）" % _calibration_stacks(attacker_idx))
+			# 追击：近战攻击命中叠 1 层（持续2回合，可叠加，独立计时；每层抵消一次校准清空）
+			elif damage_type == Config.DamageType.PHYSICAL:
+				_ms.players[attacker_idx].buffs.append({type="tracker_chase", value=1, duration=2, turn=_ms.turn_number})
+				_ms.add_log(attacker_idx, "追击+1: 近战命中，校准保险+1")
 
 # 攻击未造成伤害（护甲免疫/0伤害/闪避/格挡·牵制减到0）时调用：寻踪者清空校准
 # 多段攻击每段独立判定：任何一段失败都会触发（清空幂等）
@@ -25,6 +29,12 @@ func on_attack_failed_no_damage(attacker_idx: int, damage_type: int):
 	if p.char_id != "tracker": return
 	if damage_type != Config.DamageType.RANGED and damage_type != Config.DamageType.MAGICAL: return
 	if _calibration_stacks(attacker_idx) <= 0: return
+	# 追击：每层可抵消一次校准清空（近战命中换来的保险，消耗 1 层后校准保留）
+	for i in range(p.buffs.size() - 1, -1, -1):
+		if p.buffs[i].type == "tracker_chase":
+			p.buffs.remove_at(i)
+			_ms.add_log(attacker_idx, "追击: 抵消校准清空，校准保留")
+			return
 	for i in range(p.buffs.size() - 1, -1, -1):
 		if p.buffs[i].type == "calibration":
 			p.buffs.remove_at(i)

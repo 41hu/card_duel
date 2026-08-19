@@ -726,6 +726,10 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		final_damage = char_skills.on_taking_damage(defender_idx, attacker_idx, final_damage)
 		if final_damage != before_skill:
 			formula += "-%d" % (before_skill - final_damage)
+		# 反击（圣骑士）：被动圣盾减伤把伤害完全抵挡（归0）也触发（无需使用响应卡）
+		if final_damage <= 0 and before_skill > 0 and players[defender_idx].char_id == "paladin":
+			players[defender_idx].buffs.append({type="paladin_counter", value=1, duration=2, turn=turn_number})
+			add_log(defender_idx, "反击: 圣盾完全抵挡，下次攻击伤害+1")
 		# 对战统计：伤害（来源=攻击）
 		stats[attacker_idx]["damage_dealt"] += final_damage
 		# 单次最大伤害（致命一击称号判定）

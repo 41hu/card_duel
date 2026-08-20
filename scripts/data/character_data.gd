@@ -4,7 +4,7 @@ extends RefCounted
 const CHARACTER_DB = {
 	"fighter":   {name="斗士",   hp=28, near=7, range=3, magic=2, skill="fighter",   skill_desc="近战命中后：抽1牌或回2HP（每回合限一）"},
 	"sharpshooter":      {name="神射手", hp=24, near=2, range=6, magic=2, skill="sharpshooter",      skill_desc="每回合首次普通远程不消耗攻击点"},
-	"mage":        {name="法师",   hp=22, near=2, range=2, magic=8, skill="mage",         skill_desc="弃1手牌，魔法强化+2（每回合限一次，可叠加；打出魔法攻击后清除）；幻影：弃魔法/吟唱卡获1/2层幻影，50%概率闪避攻击（每段攻击独立判定，持续1回合，每回合限1次）"},
+	"mage":        {name="法师",   hp=22, near=2, range=2, magic=8, skill="mage",         skill_desc="弃1手牌，魔法强化+2（每回合限一次，可叠加；打出魔法攻击后清除）；幻影：弃魔法/吟唱卡获1/2层幻影，闪避概率=层数/(层数+1)（1层=1/2，2层=2/3…），永久存在可无限叠加，闪避成功消耗1层（每回合限1次）"},
 	"paladin":     {name="圣骑士", hp=26, near=4, range=2, magic=3, skill="paladin",      skill_desc="每回合首次受伤-2（最低0）；反击：使用响应完全抵挡一次攻击后，下次攻击伤害+1（可叠加，持续2回合）"},
 	"assassin":    {name="刺客",   hp=22, near=7, range=4, magic=1, skill="assassin",     skill_desc="每回合免费移动1格（独立于位移点，不能推人）"},
 	"priest":      {name="牧师",   hp=28, near=2, range=4, magic=6, skill="priest",       skill_desc="使用回复卡额外+2；受到DoT伤害后清除该类DoT；真言：弃1张回复卡，对敌人造成等值法术伤害（无视护甲，只能魔法响应，每回合限1次）"},

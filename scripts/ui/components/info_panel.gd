@@ -33,6 +33,7 @@ const _STATUS_ICONS := {
 	"attack_up": {"icon": "强", "accent": Color(1.0, 0.65, 0.25), "name": "攻击强化"},
 	"attack_down": {"icon": "弱", "accent": Color(0.75, 0.75, 1.0), "name": "攻击弱化"},
 	"mage_empower": {"icon": "法", "accent": Color(0.75, 0.5, 1.0), "name": "魔法强化"},
+	"mage_phantom": {"icon": "幻", "accent": Color(0.75, 0.5, 1.0), "name": "幻影"},
 	"ap_attack_down": {"icon": "滞", "accent": Color(0.7, 0.6, 1.0), "name": "攻击行动点-1"},
 	"no_move": {"icon": "移", "accent": Color(0.85, 0.85, 0.85), "name": "无法移动"},
 	"paladin_counter": {"icon": "反", "accent": Color(0.9, 0.8, 0.4), "name": "反击"},
@@ -162,6 +163,7 @@ func _refresh_status(p: Dictionary):
 	# Buff 按类型聚合显示：同类型合并为一个槽（层数/值合计），
 	# 可无限叠加的 buff（如寻踪者校准叠几十层）不会撑爆状态行
 	var counter_groups := {}
+	var phantom_total := 0
 	var agg := {}
 	for b in p.get("buffs", []):
 		if b.type == "paladin_counter" or b.type == "tracker_chase":
@@ -171,6 +173,10 @@ func _refresh_status(p: Dictionary):
 			if not counter_groups.has(bt):
 				counter_groups[bt] = {"value": 0, "duration": int(b.duration), "kind": b.type}
 			counter_groups[bt].value += int(b.value)
+			continue
+		if b.type == "mage_phantom":
+			# 幻影（法师）：层数合计显示，闪避概率随层数提升，永久存在
+			phantom_total += int(b.value)
 			continue
 		var k: String = b.type
 		if not agg.has(k):
@@ -198,6 +204,11 @@ func _refresh_status(p: Dictionary):
 		else:
 			slots.append(_slot_data("paladin_counter", "+%d·%d回" % [g.value, g.duration],
 				"反击：下次攻击伤害+%d（第%d回合叠加），剩余%d回合" % [g.value, bt, g.duration]))
+	# 幻影（法师）：层数合计，闪避概率 = 层数/(层数+1)，永久存在
+	if phantom_total > 0:
+		slots.append(_slot_data("mage_phantom", "+%d·永久" % phantom_total,
+			"幻影：%d 层，%d/%d 概率闪避一次攻击；闪避成功消耗 1 层，永久存在" % [
+				phantom_total, phantom_total, phantom_total + 1]))
 	# 超量合并防撑爆：只留前 N-1 个，剩余归并为 "+N" 槽
 	if slots.size() > _MAX_STATUS_SLOTS:
 		var overflow := slots.slice(_MAX_STATUS_SLOTS - 1)

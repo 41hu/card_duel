@@ -388,11 +388,11 @@ func _mage_phantom(player_idx: int, params: Dictionary) -> Dictionary:
 		if c.uid == uid: card = c; break
 	if card.is_empty() or not card.type_id in ["magic", "chant"]:
 		return {success=false, msg="请选择魔法/吟唱卡"}
-	# 吟唱（强化攻击）价值更高：2 层；魔法卡 1 层
+	# 吟唱（强化攻击）价值更高：2 层；魔法卡 1 层；永久存在（duration=-2），可无限叠加
 	var layers = 2 if card.type_id == "chant" else 1
 	cs.discard_card(uid)
-	_ms.status.add_buff(player_idx, "mage_phantom", layers, 1)
-	_ms.add_log(player_idx, "幻影: 弃%s，获得%d层幻影" % [Config.card_name(card.type_id), layers])
+	_ms.status.add_buff(player_idx, "mage_phantom", layers, -2)
+	_ms.add_log(player_idx, "幻影: 弃%s，获得%d层幻影（闪避概率提升）" % [Config.card_name(card.type_id), layers])
 	_ms.state_changed.emit(_ms.get_full_state())
 	return {success=true, layers=layers}
 

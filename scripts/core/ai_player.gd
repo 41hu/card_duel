@@ -130,15 +130,21 @@ func _opp_best_damage(player_idx: int) -> int:
 # 共享牌堆（默认）：全局某类牌剩余（牌堆+手牌循环中）= 初始 − 双方打出/响应消耗 − 共享弃牌堆
 # 独立牌堆（PVE）：某玩家牌堆中剩余 = 初始 − 该玩家手牌 − 该玩家弃牌 − 该玩家日志打出/响应
 func _global_left(player_idx: int, type_id: String) -> int:
-	var left = Config.CARD_COUNTS.get(type_id, 0)
+	# 独立牌堆（自定义卡组）：直接数「牌堆剩余 + 手牌 + 弃牌」= 该卡实际可获取总数。
+	# 不能用 CARD_COUNTS（默认 78 张基数）推算——40 张构筑里该卡可能只带 1-2 张，
+	# 用默认基数会严重高估剩余（AI 记牌失准）。
 	if match_ref.independent_decks:
-		left -= _count_in_hand(player_idx, type_id)
-		left -= _count_in_discard(player_idx, type_id)
-		left -= _played_from_log(player_idx, type_id)
-	else:
-		left -= _played_from_log(-1, type_id)  # -1 = 统计双方
-		left -= _count_in_discard(0, type_id)  # 共享弃牌堆
+		return _count_in_deck(player_idx, type_id) + _count_in_hand(player_idx, type_id) + _count_in_discard(player_idx, type_id)
+	var left = Config.CARD_COUNTS.get(type_id, 0)
+	left -= _played_from_log(-1, type_id)  # -1 = 统计双方
+	left -= _count_in_discard(0, type_id)  # 共享弃牌堆
 	return max(0, left)
+
+func _count_in_deck(player_idx: int, type_id: String) -> int:
+	var n = 0
+	for c in match_ref.card_systems[player_idx].deck:
+		if c.type_id == type_id: n += 1
+	return n
 
 func _count_in_hand(player_idx: int, type_id: String) -> int:
 	var n = 0
@@ -919,30 +925,11 @@ func decide_action(player_idx: int) -> Dictionary:
 							best_score = s
 							best_action = {"action": "use_skill", "skill": "wardsmith_repair", "card_uid": repair_uid}
 			"hunter_ambush":
-				# 埋伏不消耗攻击行动点（平衡调整 2026-08），不再受 AP 限制
-				var ambush_uid = -1
-				var rng_count = 0
-				for card in hand:
-					if card.type_id in ["range", "pierce"]:
-						rng_count += 1
-						if ambush_uid < 0: ambush_uid = card.uid
-				if ambush_uid >= 0:
-					var geo = match_ref.movement.geometry
-					var hpos: Vector2i = geo.step(opp.position, geo.direction_between(opp.position, p.position))
-					if geo.is_valid(hpos) and hpos != p.position and hpos != opp.position:
-						# 价值判断：埋伏消耗 1 张远程输出牌，火力充足才划算
-						var s = 0
-						var deck_left = _global_left(player_idx, "range") + _global_left(player_idx, "pierce")
-						if rng_count >= 2 or deck_left >= 4:
-							s = 9  # 远程火力充足 → 转一张不心疼
-						elif rng_count == 1 and deck_left >= 2:
-							s = 5  # 勉强：转一张还有牌堆补充
-						# 否则 s=0：只剩一张远程牌且牌堆枯竭 → 保留输出
-						if stance.get("stance", "") == "flee" and s > 0:
-							s = max(s, 12)  # 保命：防守陷阱价值高
-						if s > best_score:
-							best_score = s
-							best_action = {"action": "use_skill", "skill": "hunter_ambush", "card_uid": ambush_uid, "pos": geo.to_dict(hpos)}
+				# 埋伏 playbook：夹子防守布防/贴脸脱身/板边封锁 + 卡组感知 + 资源门槛
+				var hb = _hunter_ambush_playbook(player_idx, opp_idx, p, hand, distance, stance)
+				if hb.get("score", -1) > best_score:
+					best_score = hb.get("score", -1)
+					best_action = hb.get("action", {})
 
 	# 13. 负分动作不执行（无有效动作就结束，不浪费牌/不送低价值攻击）
 	if best_action.is_empty() or best_score <= 0:
@@ -1042,6 +1029,56 @@ func decide_weapon(player_idx: int, weapon: Dictionary) -> bool:
 	var wtype: String = weapon.get("data", {}).get("type", "")
 	if wtype == "": return true
 	return wtype == _current_role(player_idx)
+
+# 猎人埋伏 playbook（针对自定义卡组）：夹子位置策略 + 卡组感知 + 资源门槛
+# 返回 {score, action}；score<=0 表示不值得埋伏（留给通用层其他动作）
+func _hunter_ambush_playbook(player_idx: int, opp_idx: int, p, hand: Array, distance: int, stance: Dictionary) -> Dictionary:
+	# 手牌远程牌（埋伏消耗一张 range/pierce）
+	var rng_hand = 0
+	var ambush_uid = -1
+	for c in hand:
+		if c.type_id in ["range", "pierce"]:
+			rng_hand += 1
+			if ambush_uid < 0: ambush_uid = c.uid
+	if ambush_uid < 0:
+		return {"score": -1, "action": {}}
+	var deck_left = _global_left(player_idx, "range") + _global_left(player_idx, "pierce")
+	# 卡组感知：统计自己的牌堆（自定义卡组时 = 玩家构筑）卡型构成，分流打法风格
+	var tactic_cards = 0
+	var attack_cards = 0
+	for c in match_ref.card_systems[player_idx].deck:
+		if c.type_id in ["trap", "attract", "deter", "move"]: tactic_cards += 1
+		elif c.type_id in Config.ATTACK_CARD_TYPES: attack_cards += 1
+	var tactic_style = tactic_cards >= 6 and tactic_cards >= attack_cards  # 战术流卡组：布夹收益加成
+	var geo = match_ref.movement.geometry
+	var opp = match_ref.get_player(opp_idx)
+	var s = 0
+	var positions: Array = []
+	var opp_role: String = stance.get("opp_role", "near")
+	# 1) 防守布防：近战对手距离≤3 → 自己朝对手一侧放夹子（贴身必经路）
+	if distance <= 3 and opp_role == "near":
+		s += 12
+		positions.append(geo.step(p.position, geo.direction_between(p.position, opp.position)))
+	# 2) 已贴脸 → 身后放夹子（脱身路线，对手贴身追会先踩）
+	if distance <= 1:
+		s += 6
+		positions.append(geo.step(p.position, -geo.direction_between(p.position, opp.position)))
+	# 3) 封锁退路：对手靠板边（距边 ≤1）→ 对手前方放夹子逼其绕路
+	if geo.edge_distance(opp_idx, opp.position) <= 1:
+		s += 8
+		positions.append(geo.step(opp.position, geo.direction_between(opp.position, p.position)))
+	if tactic_style:
+		s += 4  # 战术流：多布夹是卡组设计意图
+	# 资源门槛：手牌远程 <2 且 牌堆远程 <4 → 留输出（埋伏不划算）
+	if rng_hand < 2 and deck_left < 4:
+		s = 0
+	# 保命档：防守夹子价值显著提高
+	if stance.get("stance", "") in ["flee", "danger"] and s > 0:
+		s = max(s, 14)
+	for pos in positions:
+		if geo.is_valid(pos) and pos != p.position and pos != opp.position:
+			return {"score": s, "action": {"action": "use_skill", "skill": "hunter_ambush", "card_uid": ambush_uid, "pos": geo.to_dict(pos)}}
+	return {"score": -1, "action": {}}
 
 # 风神弓：AI 选择控制对方移动的方向（简单策略：近战拉近、远程/法术推远）
 func decide_wind_bow(attacker_idx: int, target_idx: int) -> Vector2i:

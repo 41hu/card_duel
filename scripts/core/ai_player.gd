@@ -279,6 +279,22 @@ func _item_at(pos: Vector2i) -> bool:
 			return true
 	return false
 
+# 目标格对该角色的道具伤害风险（0=安全；>0=踩中会受的伤害，用于移动避障分级）
+# 区分道具类型与角色免疫：捕兽夹对猎人免疫（安全），敌方鸟居神隐视为极高危
+func _item_risk(player_idx: int, pos: Vector2i) -> int:
+	var p = match_ref.get_player(player_idx)
+	var risk = 0
+	for it in match_ref.items:
+		if it.position != pos: continue
+		match it.item_type:
+			"snare":
+				if p.char_id != "hunter": risk += 3  # 夹子：猎人免疫，其他角色-3
+			"trap":
+				risk += 3  # 普通陷阱：所有人-3
+			"torii":
+				if it.owner != player_idx: risk += 999  # 敌方鸟居：踩上神隐跳过回合，视为高危
+	return risk
+
 # 目标格是否有"我方放置的鸟居"（巫女踩上成长：+2HP 全属性+1；敌方踩上神隐）
 func _my_torii_at(player_idx: int, pos: Vector2i) -> bool:
 	for it in match_ref.items:
@@ -656,6 +672,13 @@ func decide_action(player_idx: int) -> Dictionary:
 					best_score = s
 					best_action = {"action": "play_card", "card_uid": card.uid, "extra": {"trap_pos": geo.to_dict(trap_pos)}}
 
+	# 7.5 猎人夹子区 combo：夹子区成型（同格 ≥2）且手牌有吸引/威慑 → 主动把对手送进夹子区
+	if p.char_id == "hunter":
+		var hc = _hunter_combo(player_idx, opp_idx, p, hand, distance, stance)
+		if hc.get("score", 0) > best_score:
+			best_score = hc.get("score", 0)
+			best_action = hc.get("action", {})
+
 	# 8. 位移：按定位控制距离（位移点感知）
 	#   近战型：逼近贴脸；远程型：保持中距离(2~4)；保命：远离
 	for card in hand:
@@ -728,17 +751,20 @@ func decide_action(player_idx: int) -> Dictionary:
 				# 自己的鸟居：踩上成长（+2HP 全属性+1 永久）——巫女核心收益
 				if _my_torii_at(player_idx, target_pos):
 					s += 12
-				elif _item_at(target_pos) and stance_s != "flee":
-					var new_dist = geo.distance(target_pos, opp.position)
-					var gains_attack = false
-					if new_dist == 0:
-						for c in hand:
-							if c.type_id in ["near", "heavy"]:
-								gains_attack = true
-								break
-					# 后撤摆脱贴脸威胁（远程型危险贴脸）也算收益，踩陷阱换安全可接受
-					var gains_safety = (my_role == "range" and mdir == -dir and distance <= 2)
-					s -= 4 if (gains_attack or gains_safety) else 14
+				elif stance_s != "flee":
+					# 道具风险分级：夹子对猎人免疫（安全），敌方陷阱/鸟居按风险减分
+					var risk = _item_risk(player_idx, target_pos)
+					if risk > 0:
+						var new_dist = geo.distance(target_pos, opp.position)
+						var gains_attack = false
+						if new_dist == 0:
+							for c in hand:
+								if c.type_id in ["near", "heavy"]:
+									gains_attack = true
+									break
+						# 后撤摆脱贴脸威胁（远程型危险贴脸）也算收益，踩陷阱换安全可接受
+						var gains_safety = (my_role == "range" and mdir == -dir and distance <= 2)
+						s -= 4 if (gains_attack or gains_safety) else min(14, risk * 4)
 				if s > best_score:
 					best_score = s
 					best_action = {"action": "play_card", "card_uid": card.uid, "extra": {"direction": geo.to_dict(mdir), "steps": 1}}
@@ -880,10 +906,11 @@ func decide_action(player_idx: int) -> Dictionary:
 							s = 6
 						else:
 							s = 1
-					# 目标格有陷阱 → 暗影步会踩中受伤，高风险低用（保命档更不该踩）
+					# 目标格有道具风险（夹子对猎人免疫，陷阱/鸟居按风险）→ 暗影步踩中受伤，高风险低用
 					var step_pos = geo.step(p.position, dir)
-					if _item_at(step_pos):
-						s -= 8
+					var step_risk = _item_risk(player_idx, step_pos)
+					if step_risk > 0:
+						s -= min(12, step_risk * 3)
 						if stance.get("stance", "") == "flee": s -= 6
 					if s > best_score:
 						best_score = s
@@ -1030,16 +1057,26 @@ func decide_weapon(player_idx: int, weapon: Dictionary) -> bool:
 	if wtype == "": return true
 	return wtype == _current_role(player_idx)
 
-# 猎人埋伏 playbook（针对自定义卡组）：夹子位置策略 + 卡组感知 + 资源门槛
+# 同格捕兽夹数量（猎人夹子叠放阈值判断用）
+func _snare_count_at(pos: Vector2i) -> int:
+	var n = 0
+	for it in match_ref.items:
+		if it.position == pos and it.item_type == "snare": n += 1
+	return n
+
+# 猎人埋伏 playbook（完整版）：位置策略（防守/封锁/脱身）+ 叠放阈值分散 + 穿心双位 + 卡组感知
 # 返回 {score, action}；score<=0 表示不值得埋伏（留给通用层其他动作）
 func _hunter_ambush_playbook(player_idx: int, opp_idx: int, p, hand: Array, distance: int, stance: Dictionary) -> Dictionary:
 	# 手牌远程牌（埋伏消耗一张 range/pierce）
 	var rng_hand = 0
 	var ambush_uid = -1
+	var is_pierce = false
 	for c in hand:
 		if c.type_id in ["range", "pierce"]:
 			rng_hand += 1
-			if ambush_uid < 0: ambush_uid = c.uid
+			if ambush_uid < 0:
+				ambush_uid = c.uid
+				is_pierce = (c.type_id == "pierce")
 	if ambush_uid < 0:
 		return {"score": -1, "action": {}}
 	var deck_left = _global_left(player_idx, "range") + _global_left(player_idx, "pierce")
@@ -1052,21 +1089,15 @@ func _hunter_ambush_playbook(player_idx: int, opp_idx: int, p, hand: Array, dist
 	var tactic_style = tactic_cards >= 6 and tactic_cards >= attack_cards  # 战术流卡组：布夹收益加成
 	var geo = match_ref.movement.geometry
 	var opp = match_ref.get_player(opp_idx)
-	var s = 0
-	var positions: Array = []
 	var opp_role: String = stance.get("opp_role", "near")
-	# 1) 防守布防：近战对手距离≤3 → 自己朝对手一侧放夹子（贴身必经路）
+	var s = 0
+	# 条件分（决定埋伏意愿）
 	if distance <= 3 and opp_role == "near":
-		s += 12
-		positions.append(geo.step(p.position, geo.direction_between(p.position, opp.position)))
-	# 2) 已贴脸 → 身后放夹子（脱身路线，对手贴身追会先踩）
+		s += 12  # 近战对手临近 → 防守布防
 	if distance <= 1:
-		s += 6
-		positions.append(geo.step(p.position, -geo.direction_between(p.position, opp.position)))
-	# 3) 封锁退路：对手靠板边（距边 ≤1）→ 对手前方放夹子逼其绕路
+		s += 6  # 已贴脸 → 脱身夹子
 	if geo.edge_distance(opp_idx, opp.position) <= 1:
-		s += 8
-		positions.append(geo.step(opp.position, geo.direction_between(opp.position, p.position)))
+		s += 8  # 对手靠板边 → 封锁退路
 	if tactic_style:
 		s += 4  # 战术流：多布夹是卡组设计意图
 	# 资源门槛：手牌远程 <2 且 牌堆远程 <4 → 留输出（埋伏不划算）
@@ -1075,10 +1106,69 @@ func _hunter_ambush_playbook(player_idx: int, opp_idx: int, p, hand: Array, dist
 	# 保命档：防守夹子价值显著提高
 	if stance.get("stance", "") in ["flee", "danger"] and s > 0:
 		s = max(s, 14)
-	for pos in positions:
-		if geo.is_valid(pos) and pos != p.position and pos != opp.position:
-			return {"score": s, "action": {"action": "use_skill", "skill": "hunter_ambush", "card_uid": ambush_uid, "pos": geo.to_dict(pos)}}
-	return {"score": -1, "action": {}}
+	if s <= 0:
+		return {"score": -1, "action": {}}
+	# 选位：候选位（防守/封锁/脱身）按优先级，同格夹子 ≥3（叠放阈值）降权转分散
+	var cands: Array = []
+	var dir_to_opp = geo.direction_between(p.position, opp.position)
+	cands.append({"pos": geo.step(p.position, dir_to_opp), "prio": 12})
+	cands.append({"pos": geo.step(opp.position, geo.direction_between(opp.position, p.position)), "prio": 8})
+	cands.append({"pos": geo.step(p.position, -dir_to_opp), "prio": 6})
+	var valid: Array = []
+	for cnd in cands:
+		var pos: Vector2i = cnd.pos
+		if not geo.is_valid(pos) or pos == p.position or pos == opp.position:
+			continue
+		if _snare_count_at(pos) >= 3:
+			cnd.prio -= 20  # 叠满阈值：不再叠（除非无其他合法位，仍有候选兜底）
+		valid.append(cnd)
+	valid.sort_custom(func(a, b): return a.prio > b.prio)
+	var picked: Array = []
+	for cnd in valid:
+		if picked.is_empty() or (is_pierce and picked.size() < 2 and cnd.pos != picked[0]):
+			picked.append(cnd.pos)
+		if picked.size() >= (2 if is_pierce else 1):
+			break
+	if picked.is_empty():
+		return {"score": -1, "action": {}}
+	var action := {"action": "use_skill", "skill": "hunter_ambush", "card_uid": ambush_uid, "pos": geo.to_dict(picked[0])}
+	if is_pierce and picked.size() > 1:
+		action["pos2"] = geo.to_dict(picked[1])  # 穿心第二夹：次选位（不再落到 (0,0)）
+	return {"score": s, "action": action}
+
+# 猎人夹子区 combo：夹子 ≥2 的格成型后，用吸引/威慑把对手主动送进夹子区（B2 进攻性）
+func _hunter_combo(player_idx: int, opp_idx: int, p, hand: Array, distance: int, stance: Dictionary) -> Dictionary:
+	var geo = match_ref.movement.geometry
+	var opp = match_ref.get_player(opp_idx)
+	var attract_uid = -1
+	var deter_uid = -1
+	for c in hand:
+		if c.type_id == "attract" and attract_uid < 0: attract_uid = c.uid
+		elif c.type_id == "deter" and deter_uid < 0: deter_uid = c.uid
+	if attract_uid < 0 and deter_uid < 0:
+		return {"score": 0, "action": {}}
+	# 找夹子区：同格夹子 ≥2（优先离自己近的）
+	var zone: Vector2i = Vector2i(-999, -999)
+	var best_d = 999999
+	for it in match_ref.items:
+		if it.item_type != "snare": continue
+		var n = _snare_count_at(it.position)
+		if n >= 2:
+			var d = geo.distance(p.position, it.position)
+			if d < best_d:
+				best_d = d
+				zone = it.position
+	if zone.x == -999:
+		return {"score": 0, "action": {}}
+	# 吸引 combo：夹子区 = 对手朝自己方向 1 格（吸引后对手落在夹子区），且对手距离 ≥2
+	var attract_zone = geo.step(opp.position, geo.direction_between(opp.position, p.position))
+	if attract_uid >= 0 and distance >= 2 and zone == attract_zone:
+		return {"score": 16, "action": {"action": "play_card", "card_uid": attract_uid, "target": opp_idx}}
+	# 威慑 combo：夹子区 = 对手身后（远离自己方向 1 格），威慑推入
+	var deter_zone = geo.step(opp.position, -geo.direction_between(opp.position, p.position))
+	if deter_uid >= 0 and zone == deter_zone:
+		return {"score": 16, "action": {"action": "play_card", "card_uid": deter_uid, "target": opp_idx}}
+	return {"score": 0, "action": {}}
 
 # 风神弓：AI 选择控制对方移动的方向（简单策略：近战拉近、远程/法术推远）
 func decide_wind_bow(attacker_idx: int, target_idx: int) -> Vector2i:

@@ -160,7 +160,8 @@ func _ai_bp_act():
 		bp_state_updated.emit(bs)
 
 # 人机对战：不走 BP，直接开战（AI 随机先手，角色由入口传入）
-func start_ai_game(p1_char: String, p2_char: String, difficulty: int):
+# custom_decks = [P0卡组, P1卡组]（P1 为空 → AI 用默认 40 张）；independent=true 时双方独立牌堆（自定义卡组模式）
+func start_ai_game(p1_char: String, p2_char: String, difficulty: int, custom_decks: Array = [], independent_decks: bool = false, weapon_pools: Array = []):
 	ai_mode = true
 	ai_difficulty = difficulty
 	ai_idx = 1  # 人类永远 P0，AI 是 P1
@@ -175,7 +176,7 @@ func start_ai_game(p1_char: String, p2_char: String, difficulty: int):
 	game.response_needed.connect(_on_response)
 	game.game_ended.connect(_on_ended)
 	game._apply_game_config(game_config)  # 自定义房间规则（本地人机同样生效）
-	game.init_match(p1_char, p2_char, randi() % 2)
+	game.init_match(p1_char, p2_char, randi() % 2, custom_decks, independent_decks, weapon_pools)
 	_ai = AIPlayerClass.new(game, difficulty)
 	game._start_game()
 	# AI 先手：不立即行动——等场景加载完成后由帧驱动逐步行动，

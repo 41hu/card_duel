@@ -373,15 +373,25 @@ func _show_pick():
 		if Network.deck_config_data.get("chars", []).size() < 2:
 			_quit_to_menu()
 			return
+	elif LocalGame.ai_mode:
+		_step = 0  # 人机：只玩家(P1)配卡，AI 用默认卡组
 	else:
 		if LocalGame.bp_chars.size() < 2:
 			_quit_to_menu()
 			return
 	var pname = "P1" if _step == 0 else "P2"
-	title.text = "为 %s（%s）配置卡组" % [pname, Config.char_name(_current_char_id())]
-	# 本地流程按钮文案：P1 确认进入下一人；P2（最后一人）确认直接进入对局
+	if _is_online():
+		title.text = "为 %s（%s）配置卡组" % [pname, Config.char_name(_current_char_id())]
+	elif LocalGame.ai_mode:
+		title.text = "为你（%s）配置卡组（AI 将使用默认卡组）" % Config.char_name(_current_char_id())
+	else:
+		title.text = "为 %s（%s）配置卡组" % [pname, Config.char_name(_current_char_id())]
+	# 本地流程按钮文案：P1 确认进入下一人；P2（最后一人）确认直接进入对局；人机直接开战
 	if not _is_online():
-		confirm_btn.text = "确认（进入对局）" if _step >= 1 else "确认（进入下一人）"
+		if LocalGame.ai_mode:
+			confirm_btn.text = "确认（开始对战）"
+		else:
+			confirm_btn.text = "确认（进入对局）" if _step >= 1 else "确认（进入下一人）"
 	# 常驻展示双方角色：玩家看清对手再决定卡组
 	vs_label.text = "你：%s　vs　对手：%s" % [
 		Config.char_name(_current_char_id()), Config.char_name(_opponent_char_id())]
@@ -498,6 +508,10 @@ func _next_step():
 		_page = "wait"
 		_show_pick_page_text(false)
 		return
+	if LocalGame.ai_mode:
+		# 人机：玩家(P1)配完直接开战（AI 用默认卡组，无需配卡环节）
+		_start_battle()
+		return
 	if _step == 0:
 		_step = 1
 		_show_pick()
@@ -519,9 +533,11 @@ func _show_edit():
 		me_cd.get("name", "?"), me_cd.get("near", 0), me_cd.get("range", 0), me_cd.get("magic", 0), me_cd.get("hp", 0),
 		opp_cd.get("name", "?"), opp_cd.get("near", 0), opp_cd.get("range", 0), opp_cd.get("magic", 0), opp_cd.get("hp", 0)]
 	# 联机只配自己的卡组：确认按钮文案改为"准备完成"，不再提示"下一人"；
-	# 本地流程：P2（最后一人）确认直接进入对局
+	# 本地流程：P2（最后一人）确认直接进入对局；人机直接开战
 	if _is_online():
 		_edit_ok_btn.text = "准备完成（等待对手）"
+	elif LocalGame.ai_mode:
+		_edit_ok_btn.text = "确认（开始对战）"
 	else:
 		_edit_ok_btn.text = "确认（进入对局）" if _step >= 1 else "确认（进入下一人）"
 	# 重建卡池（remove_child 立即移出树，避免 queue_free 延迟删除导致
@@ -733,5 +749,11 @@ func _start_battle():
 	LocalGame.deck_mode = false
 	LocalGame.bp_chars = []
 	LocalGame.bp_first = -1
-	LocalGame.start_local_game(str(chars[0]), str(chars[1]), bf, decks, true, pools)
+	if LocalGame.ai_mode:
+		# 人机：玩家用所选卡组（独立牌堆），AI 用默认 40 张 + 默认武器池
+		LocalGame.start_ai_game(str(chars[0]), str(chars[1]), LocalGame.ai_difficulty,
+			[decks[0], DeckData.default_deck()], true,
+			[pools[0], DeckData.default_weapon_pool()])
+	else:
+		LocalGame.start_local_game(str(chars[0]), str(chars[1]), bf, decks, true, pools)
 	get_tree().change_scene_to_file("res://scenes/battle_scene.tscn")

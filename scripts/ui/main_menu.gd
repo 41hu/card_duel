@@ -333,6 +333,7 @@ func _start_tutorial():
 # 人机对战：进入 BP 界面选角色（AI 自动禁选，新角色自动适配）
 func _start_ai_bp(diff: int):
 	LocalGame.start_ai_bp(diff)
+	LocalGame.deck_mode = true  # 人机 BP 后进「配置卡组」环节（玩家配卡，AI 用默认 40 张）
 	get_tree().change_scene_to_file("res://scenes/bp_scene.tscn")
 
 # 弹窗辅助：半透明遮罩 + 居中滚动容器，返回 Control（第 2 个子节点是内容 VBox）

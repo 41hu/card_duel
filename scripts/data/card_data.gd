@@ -33,7 +33,8 @@ const CARD_DB = {
 
 	# 免费牌
 	"blessing": {name="天赐",   ap=0, cost=0, desc="抽2张牌"},
-	"trap":     {name="陷阱",   ap=0, cost=0, desc="在空格放置陷阱，触发造成3伤害"},
+	# 道具卡（type_id 曾为 "trap"，2026-08 改名消歧义：地格道具类型才有 trap/snare/torii）
+	"item":     {name="道具",   ap=0, cost=0, desc="在空格放置地格道具（角色专属：默认陷阱/猎人捕兽夹/巫女鸟居），踩上触发伤害或效果"},
 
 	# 武器牌 (各2张)
 	"near_weapon":  {name="近战武器", ap=0, cost=0, desc="幻化随机近战武器"},
@@ -53,7 +54,7 @@ const CARD_COUNTS = {
 	"attract": 2, "deter": 2, "freeze": 2, "destroy": 3, "seize": 2,
 	"heal_3": 3, "heal_5": 2,
 	"near_buf": 2, "range_buf": 2, "magic_buf": 2,
-	"blessing": 4, "trap": 3,
+	"blessing": 4, "item": 3,
 	"near_weapon": 2, "range_weapon": 2, "magic_weapon": 2,
 	"near_armor": 1, "range_armor": 1, "magic_armor": 1,
 }

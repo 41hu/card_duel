@@ -25,7 +25,7 @@ func _init(m):
 		"destroy": _atk_destroy, "seize": _atk_seize,
 		"heal_3": _heal_3, "heal_5": _heal_5,
 		"near_buf": _buff_near, "range_buf": _buff_range, "magic_buf": _buff_magic,
-		"blessing": _blessing, "trap": _trap,
+		"blessing": _blessing, "item": _item,
 		"near_weapon": _near_weapon, "range_weapon": _range_weapon, "magic_weapon": _magic_weapon,
 		"near_armor": _near_armor, "range_armor": _range_armor, "magic_armor": _magic_armor,
 	}
@@ -100,7 +100,7 @@ func _blessing(player_idx: int, card: Dictionary):
 	_m.add_log(player_idx, "天赐")
 	return {success=true}
 
-func _trap(player_idx: int, card: Dictionary):
+func _item(player_idx: int, card: Dictionary):
 	var p = _m.players[player_idx]
 	var geo = _m.movement.geometry
 	# 默认放自己朝最近存活对手方向一格（客户端未指定 trap_pos 时的兜底）

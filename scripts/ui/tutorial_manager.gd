@@ -317,13 +317,13 @@ func _build_hunter_steps():
 	_hunter_steps = [
 		# ---- 进阶1 捕兽夹堆叠（切猎人，回合1）----
 		{
-			"guide": "进阶 1/3 —— 道具与堆叠（猎人）\n现在你是猎人，道具卡放的是「捕兽夹」（踩上 -3HP，可无限堆叠）。\n先点技能「埋伏」选「穿心」：连点 4、5 两格放 2 个夹子；\n再点手牌「陷阱」卡，叠放到 4 或 5 格（同格叠放：一张摧毁卡会拆掉整格全部夹子）。",
+			"guide": "进阶 1/3 —— 道具与堆叠（猎人）\n现在你是猎人，道具卡放的是「捕兽夹」（踩上 -3HP，可无限堆叠）。\n先点技能「埋伏」选「穿心」：连点 4、5 两格放 2 个夹子；\n再点手牌「道具」卡，叠放到 4 或 5 格（同格叠放：一张摧毁卡会拆掉整格全部夹子）。",
 			"enter": func():
 				_switch_to_hunter_segment()
 				_allowed_trap_pos = [Vector2i(4, 0), Vector2i(5, 0)],
 			"check": func():
 				return _count_snares() >= 3,
-			"allow_cards": ["trap"],
+			"allow_cards": ["item"],
 			"allow_skills": ["hunter_ambush"],
 			"wait_turn_end": true,
 			"opp_actions": func(): return [],
@@ -362,17 +362,17 @@ func _build_hunter_steps():
 		},
 		# ---- 进阶3 推人 combo（回合3）----
 		{
-			"guide": "进阶 3/3 —— 推人 combo（最终演示）\n先点「陷阱」把捕兽夹放在对手身后那一格（第 7 格，威慑会把他推去那里），\n再点「威慑」把他推进夹子：-3HP。这就是道具 + 推人的 combo。",
+			"guide": "进阶 3/3 —— 推人 combo（最终演示）\n先点「道具」把捕兽夹放在对手身后那一格（第 7 格，威慑会把他推去那里），\n再点「威慑」把他推进夹子：-3HP。这就是道具 + 推人的 combo。",
 			"enter": func():
 				_allowed_trap_pos = [Vector2i(7, 0)]
-				deal_hand(0, ["trap", "deter"])
+				deal_hand(0, ["item", "deter"])
 				deal_hand(1, [])
 				g.players[0].ap_function = 3  # 威慑卡耗 3 功能点（基础只有 1）
 				g.players[1].position = Vector2i(6, 0)
 				battle_state_refresh(),
 			"check": func():
 				return g.players[1].hp < 26,
-			"allow_cards": ["trap", "deter"],
+			"allow_cards": ["item", "deter"],
 			"allow_skills": [],
 			"allow_end_turn": true,
 			"wait_turn_end": false,
@@ -385,7 +385,7 @@ func _switch_to_hunter_segment():
 	g._start_game()
 	g.players[0].position = Vector2i(3, 0)
 	g.players[1].position = Vector2i(8, 0)
-	deal_hand(0, ["pierce", "trap", "trap"])
+	deal_hand(0, ["pierce", "item", "item"])
 	deal_hand(1, [])
 	battle_state_refresh()
 

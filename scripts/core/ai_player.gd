@@ -70,7 +70,7 @@ func _card_value(player_idx: int, type_id: String) -> int:
 		"heal_5": return 6
 		"near_buf", "range_buf", "magic_buf": return 6
 		"blessing": return 7  # 天赐免费抽2，资源价值高，不易被弃/不被当弃牌强化材料
-		"trap": return 5
+		"item": return 5
 		"attract", "deter": return 4
 		"freeze": return 6
 		"destroy": return 5
@@ -630,7 +630,7 @@ func decide_action(player_idx: int) -> Dictionary:
 	var near_threat = _near_threat_imminent(player_idx)
 	for card in hand:
 		if p.ap_function < 1: break
-		if card.type_id == "trap":
+		if card.type_id == "item":
 			var s = 6
 			if match_ref.turn_number <= 2:
 				s += 5  # 开局布防习惯（拟人化）：人类前两回合就布置陷阱占位
@@ -1047,7 +1047,7 @@ func _hunter_ambush_playbook(player_idx: int, opp_idx: int, p, hand: Array, dist
 	var tactic_cards = 0
 	var attack_cards = 0
 	for c in match_ref.card_systems[player_idx].deck:
-		if c.type_id in ["trap", "attract", "deter", "move"]: tactic_cards += 1
+		if c.type_id in ["item", "attract", "deter", "move"]: tactic_cards += 1
 		elif c.type_id in Config.ATTACK_CARD_TYPES: attack_cards += 1
 	var tactic_style = tactic_cards >= 6 and tactic_cards >= attack_cards  # 战术流卡组：布夹收益加成
 	var geo = match_ref.movement.geometry

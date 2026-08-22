@@ -539,7 +539,7 @@ func _refresh_all(state: Dictionary):
 			var cw = CardWidget.new()
 			# 通用道具卡：卡面按角色道具显示（猎人手里显示"捕兽夹"而非"陷阱"）
 			var cname = cd.get("name", tid)
-			if tid == "trap":
+			if tid == "item":
 				cname = me.get("item_type_name", cname)
 			# 注意：网络 JSON 传输后 uid 是 float，而 CardWidget.setup(uid: int) 强转 int，
 			# 必须统一 int 比较（`in` 是严格类型匹配，37.0 in [37] 为 false → 弃牌红框不显示）
@@ -621,7 +621,7 @@ func _on_card_clicked(card_uid: int, type_id: String):
 		confirm_btn.visible = true
 		cancel_btn.visible = true
 		# 通用道具卡：点击说明按角色道具显示（道具名 + 效果描述）
-		if type_id == "trap":
+		if type_id == "item":
 			var me2 = _find_self()
 			card_info.text = "%s：%s" % [me2.get("item_type_name", "道具"), me2.get("item_type_desc", "")]
 		else:
@@ -637,8 +637,8 @@ func _on_confirm_card():
 			"destroy": _popup_destroy(_selected_uid)
 		_selected_uid = -1
 		confirm_btn.visible = false
-	elif _selected_type == "trap":
-		_popup_trap(_selected_uid)
+	elif _selected_type == "item":
+		_popup_item(_selected_uid)
 		confirm_btn.visible = false
 	else:
 		if _has_matching_armor(_selected_type):
@@ -873,7 +873,7 @@ func _hide_item_popup():
 
 func _on_board_cell_clicked(cell_pos: Vector2i):
 	# 教程限制：当前步骤只允许特定格子放夹子（穿心/陷阱），保证教学流程可控
-	if tutorial != null and _selected_type in ["hunter_ambush", "trap"]:
+	if tutorial != null and _selected_type in ["hunter_ambush", "item"]:
 		var allowed = tutorial.allowed_trap_positions()
 		if not allowed.is_empty() and not cell_pos in allowed:
 			status_label.text = "夹子只能放在教学指定的格子"
@@ -920,7 +920,7 @@ func _on_board_cell_clicked(cell_pos: Vector2i):
 		card_info.text = ""
 		status_label.text = ""
 		return
-	if _selected_type != "trap" or not _is_my_turn:
+	if _selected_type != "item" or not _is_my_turn:
 		return
 	_n().send_play_card(_selected_uid, {"trap_pos": pos_dict})
 	_selected_uid = -1
@@ -1067,10 +1067,10 @@ func _enter_destroy_trap(card_uid: int):
 	card_info.text = "点击棋盘上有道具的格子进行摧毁"
 	status_label.text = "点击棋盘上有道具的格子进行摧毁"
 
-func _popup_trap(card_uid: int):
-	status_label.text = "已选陷阱,点击棋盘格子放置"
+func _popup_item(card_uid: int):
+	status_label.text = "已选道具,点击棋盘格子放置"
 	_selected_uid = card_uid
-	_selected_type = "trap"
+	_selected_type = "item"
 
 func _on_response_needed(data: Dictionary):
 	# 教程接管响应：对手自动不响应 / 复活步骤自动跳过

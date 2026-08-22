@@ -26,8 +26,8 @@ const CARD_LIMITS = {
 	"freeze": 2,
 	# 移动：战术池内上限 4（位移是节奏核心，稍放宽）
 	"move": 4,
-	# 道具卡：上限 5（照顾道具流角色——猎人夹子堆叠/巫女鸟居，全靠 trap 卡）
-	"trap": 5,
+	# 道具卡：上限 5（照顾道具流角色——猎人夹子堆叠/巫女鸟居，全靠 item 卡）
+	"item": 5,
 	# 防具：上限 1（原 78 池各 1 张）
 	"near_armor": 1, "range_armor": 1, "magic_armor": 1,
 }
@@ -37,7 +37,7 @@ const DEFAULT_CARD_LIMIT = 3
 # ---------- 大池总上限（玩家核心取舍机制） ----------
 const CATEGORY_LIMITS = {
 	"attack": {"cards": ["near", "range", "magic", "heavy", "pierce", "chant"], "max": 17},
-	"tactics": {"cards": ["move", "attract", "deter", "freeze", "destroy", "seize", "blessing", "trap"], "max": 14},
+	"tactics": {"cards": ["move", "attract", "deter", "freeze", "destroy", "seize", "blessing", "item"], "max": 14},
 	"sustain": {"cards": ["heal_3", "heal_5", "near_buf", "range_buf", "magic_buf"], "max": 6},
 	"equipment": {"cards": ["near_weapon", "range_weapon", "magic_weapon", "near_armor", "range_armor", "magic_armor"], "max": 5},
 }
@@ -107,9 +107,9 @@ static func is_valid_card(type_id: String) -> bool:
 static func card_name(type_id: String) -> String:
 	return CardData.CARD_DB.get(type_id, {}).get("name", type_id)
 
-# 编辑界面显示名：道具卡（trap）统一显示"道具"（不同角色的道具种类不同：默认陷阱/猎人捕兽夹/巫女鸟居）
+# 编辑界面显示名：道具卡（item）统一显示"道具"（不同角色的道具种类不同：默认陷阱/猎人捕兽夹/巫女鸟居）
 static func display_name(type_id: String) -> String:
-	if type_id == "trap":
+	if type_id == "item":
 		return "道具"
 	return card_name(type_id)
 
@@ -163,7 +163,7 @@ static func default_deck() -> Array:
 	var plan := {
 		"near": 4, "range": 4, "magic": 3, "heavy": 2, "pierce": 2, "chant": 1,  # 攻击 16（强化5）
 		"move": 4,
-		"attract": 2, "deter": 2, "freeze": 1, "destroy": 1, "seize": 1, "blessing": 1, "trap": 1,  # 战术 13
+		"attract": 2, "deter": 2, "freeze": 1, "destroy": 1, "seize": 1, "blessing": 1, "item": 1,  # 战术 13
 		"heal_5": 1, "heal_3": 2,  # 套餐 B 回复 3
 		"near_buf": 1, "range_buf": 1, "magic_buf": 1,  # 数值 3
 		"near_weapon": 1, "range_weapon": 1, "magic_weapon": 1,  # 武器 3
@@ -255,6 +255,17 @@ static func load_all() -> Dictionary:
 	var data = JSON.parse_string(f.get_as_text())
 	f.close()
 	if data is Dictionary:
+		# 存档迁移：卡牌 type_id "trap"（道具卡）已改名 "item"（2026-08 消歧义，与地格道具类型区分）
+		for cid in data:
+			var entry: Dictionary = data[cid]
+			if entry is Dictionary:
+				for s in entry:
+					var slot = entry[s]
+					if slot is Dictionary and slot.get("cards") is Array:
+						var cards: Array = slot["cards"]
+						for i in range(cards.size()):
+							if str(cards[i]) == "trap":
+								cards[i] = "item"
 		return data
 	return {}
 

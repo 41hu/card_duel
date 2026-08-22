@@ -300,21 +300,62 @@ func _show_ai_difficulty():
 	var vb = c.get_child(1)
 	var fast = _popup_check("快速模式（无限出牌 · 冻结连续 · 天赐不限）")
 	vb.add_child(fast)
+	# AI 角色选择：点击弹二级列表（指定 AI 用谁，便于测试各角色 AI）
+	var ai_char_btn = _popup_btn("AI 角色：随机")
+	ai_char_btn.pressed.connect(func(): _show_ai_char_pick(ai_char_btn))
+	vb.add_child(ai_char_btn)
+	# 难度列表包滚动（内容多了放不下）
+	var scroll = ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0, Style.fs(360))
+	vb.add_child(scroll)
+	var inner = VBoxContainer.new()
+	inner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(inner)
 	var easy = _popup_btn("简单")
 	easy.pressed.connect(func(): c.queue_free(); LocalGame.rapid_mode = fast.button_pressed; _start_ai_bp(0))
-	vb.add_child(easy)
+	inner.add_child(easy)
 	var normal = _popup_btn("普通")
 	normal.pressed.connect(func(): c.queue_free(); LocalGame.rapid_mode = fast.button_pressed; _start_ai_bp(1))
-	vb.add_child(normal)
+	inner.add_child(normal)
 	var hard = _popup_btn("困难")
 	hard.pressed.connect(func(): c.queue_free(); LocalGame.rapid_mode = fast.button_pressed; _start_ai_bp(2))
-	vb.add_child(hard)
+	inner.add_child(hard)
 	var hell = _popup_btn("地狱（内测）")
 	hell.pressed.connect(func(): c.queue_free(); LocalGame.rapid_mode = fast.button_pressed; _start_ai_bp(3))
-	vb.add_child(hell)
+	inner.add_child(hell)
 	var back = _popup_btn("返回")
 	back.pressed.connect(func(): c.queue_free())
-	vb.add_child(back)
+	inner.add_child(back)
+	add_child(c)
+
+# AI 角色二级选择：随机 / 15 名角色（测试各角色 AI 时指定，被禁用则回退随机）
+func _show_ai_char_pick(label_btn: Button):
+	var c = _make_popup("选择 AI 角色")
+	var vb = c.get_child(1)
+	var scroll = ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0, Style.fs(380))
+	vb.add_child(scroll)
+	var box = VBoxContainer.new()
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(box)
+	var rand_btn = _popup_btn("随机（BP 自由选角）")
+	rand_btn.pressed.connect(func():
+		LocalGame.ai_char_override = ""
+		label_btn.text = "AI 角色：随机"
+		c.queue_free()
+	)
+	box.add_child(rand_btn)
+	for cid in Config.CHARACTER_IDS:
+		var b = _popup_btn(Config.char_name(cid))
+		b.pressed.connect(func(id=cid):
+			LocalGame.ai_char_override = id
+			label_btn.text = "AI 角色：%s" % Config.char_name(id)
+			c.queue_free()
+		)
+		box.add_child(b)
+	var close = _popup_btn("取消")
+	close.pressed.connect(func(): c.queue_free())
+	box.add_child(close)
 	add_child(c)
 
 # 弹窗开关（快速模式等）：勾选样式与弹窗按钮统一

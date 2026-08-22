@@ -31,6 +31,7 @@ var last_record_path: String = ""
 var ai_mode: bool = false
 var ai_difficulty: int = 1
 var ai_idx: int = 1
+var ai_char_override: String = ""  # 指定 AI 使用的角色（空 = BP 随机选；被禁用时回退随机）
 var _ai = null
 var _ai_busy: bool = false
 # ---- 新手教程模式 ----
@@ -140,7 +141,7 @@ func start_ai_bp(difficulty: int):
 	# 第一步 AI 操作延迟到场景加载后（BP 界面就绪再行动）
 	_ai_next_act_time = Time.get_ticks_msec() + AI_STEP_DELAY_MS + 300
 
-# AI BP 自动操作：轮到 AI（非人类）时随机禁选一个可用角色
+# AI BP 自动操作：轮到 AI（非人类）时禁选/选角——选角时优先指定角色（ai_char_override）
 func _ai_bp_act():
 	var phase = game.bp.bp_phase
 	if "done" in phase: return
@@ -150,8 +151,13 @@ func _ai_bp_act():
 	if acting != ai_idx: return
 	var avail = game.bp.available_chars
 	if avail.is_empty(): return
-	var char_id = avail[randi() % avail.size()]
-	game.bp.execute_action(acting, "ban" if "ban" in phase else "pick", char_id)
+	var is_ban = ("ban" in phase)
+	var char_id: String = ""
+	if not is_ban and ai_char_override != "" and ai_char_override in avail:
+		char_id = ai_char_override  # 指定角色：优先选（若未被禁/未被选）
+	else:
+		char_id = avail[randi() % avail.size()]
+	game.bp.execute_action(acting, "ban" if is_ban else "pick", char_id)
 	if game.bp.is_done():
 		_on_bp_state_changed(game.bp.get_bp_state())
 	else:

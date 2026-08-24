@@ -24,8 +24,8 @@ var _item_types: Dictionary = {
 	},
 	"snare": {
 		"name": "捕兽夹",
-		"desc": "踩上-3HP，可重叠放置（猎人埋伏）；一张摧毁清掉同格全部",
-		"damage": 3,
+		"desc": "踩上-4HP，可重叠放置（猎人埋伏）；一张摧毁清掉同格全部",
+		"damage": 4,
 		"stack": "unlimited",
 		"destroy_rule": "all",
 	},

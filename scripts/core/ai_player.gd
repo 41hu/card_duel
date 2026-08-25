@@ -311,7 +311,7 @@ func _item_risk(player_idx: int, pos: Vector2i) -> int:
 		if it.position != pos: continue
 		match it.item_type:
 			"snare":
-				if p.char_id != "hunter": risk += 3  # 夹子：猎人免疫，其他角色-3
+				if p.char_id != "hunter": risk += 4  # 夹子：猎人免疫，其他角色-4（2026-08-25 平衡：夹子3→4伤）
 			"trap":
 				risk += 3  # 普通陷阱：所有人-3
 			"torii":

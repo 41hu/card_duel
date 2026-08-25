@@ -5,6 +5,7 @@
 extends Control
 
 const Style = preload("res://scripts/theme/style_const.gd")
+const RecordFormatter = preload("res://scripts/core/record_formatter.gd")
 
 # 称号 → 获得条件（与 match_state._calc_titles 的判定一致）
 const _TITLE_CONDITIONS := {
@@ -364,53 +365,20 @@ func _build_stat_cards(result: Dictionary, names: Array, winner: int):
 			v.add_child(toggle)
 		stats_row.add_child(card)
 
-# 导出对局记录：生成文本文件（battle_records/ 目录），返回文件路径
-# result 统一结构（本地 game.game_result / 联机服务器下发的 game_over 消息）：
-#   winner/loser/reason/stats/names/title/battle_record/action_log
+# 导出对局记录：生成 v2 文本（battle_records/ 目录）+ 同路径 JSON 回放，返回文本路径
+# v2 = 按回合行动流水 + 行动时上下文 + AI 决策轨迹 + 卡组构成（见 record_formatter.gd）
 func _export_record(result: Dictionary) -> String:
-	var record: Array = result.get("battle_record", [])
-	var action_log: Array = result.get("action_log", [])
 	var names: Array = result.get("names", ["P1", "P2"])
-	var mode := "联机对战"
+	var meta := {}
 	if LocalGame.game != null:
-		mode = "人机对战" if LocalGame.ai_mode else "自我对战"
-	var turn := 0
-	if not record.is_empty():
-		turn = record[record.size() - 1].get("turn", 0)
-	elif LocalGame.game != null:
-		turn = LocalGame.game.turn_number
-	var lines := ["=== 卡牌对决 对局记录 ==="]
-	lines.append("角色: %s vs %s" % [names[0], names[1]])
-	lines.append("模式: %s | 总回合: %d" % [mode, turn])
-	lines.append("")
-	lines.append("--- 每回合快照（手牌/血量/位置/AP/牌堆）---")
-	for rec in record:
-		var tag = "出牌" if rec.get("phase", 2) == 2 else "弃牌"
-		var p0: Dictionary = rec.get("p0", {})
-		var p1: Dictionary = rec.get("p1", {})
-		var a0: Array = p0.get("ap", [0, 0, 0])
-		var a1: Array = p1.get("ap", [0, 0, 0])
-		lines.append("T%d P%d%s: P0 HP%d/%d 位%s 手[%s] AP(%d/%d/%d) | P1 HP%d/%d 位%s 手[%s] AP(%d/%d/%d) | 牌堆%d 弃牌%d" % [
-			rec.get("turn", 0), rec.get("player", 0), tag,
-			p0.get("hp", 0), p0.get("max_hp", 1), _pos_text(p0.get("pos", {})), "、".join(p0.get("hand", [])),
-			a0[0], a0[1], a0[2],
-			p1.get("hp", 0), p1.get("max_hp", 1), _pos_text(p1.get("pos", {})), "、".join(p1.get("hand", [])),
-			a1[0], a1[1], a1[2],
-			rec.get("deck", 0), rec.get("discard", 0)])
-	lines.append("")
-	lines.append("--- 战斗日志 ---")
-	for e in action_log:
-		lines.append("T%d %s: %s" % [e.get("turn", 0), e.get("player_name", "?"), e.get("msg", "")])
-	lines.append("")
-	lines.append("--- 结算 ---")
-	var w = result.get("winner", -1)
-	var titles: Array = result.get("titles", [])
-	if titles.is_empty() and result.get("title", "") != "":
-		titles = [result.get("title", "")]
-	var tloser: Array = result.get("titles_loser", [])
-	var loser_str = "、".join(tloser) if not tloser.is_empty() else "无"
-	lines.append("胜者: %s（%s）| 称号: %s | 败者称号: %s" % [
-		names[w] if w >= 0 and w < names.size() else "?", result.get("reason", ""), "、".join(titles), loser_str])
+		meta["mode"] = "人机对战" if LocalGame.ai_mode else "自我对战"
+		meta["difficulty"] = LocalGame.ai_difficulty if LocalGame.ai_mode else -1
+		meta["first"] = LocalGame.game.first_player
+		meta["decks"] = LocalGame.game.deck_compositions
+	else:
+		meta["mode"] = "联机对战"
+	var txt: String = RecordFormatter.format(result, meta)
+	var lines: Array = txt.split("\n")
 	# 导出路径：编辑器写项目目录（方便直接取文件）；导出平台（APK/PC 打包）res:// 只读，
 	# 写 user:// 应用数据目录；移动端另复制到剪贴板（文件路径用户不可见，粘贴即可分享）
 	var is_editor = OS.has_feature("editor")
@@ -422,6 +390,11 @@ func _export_record(result: Dictionary) -> String:
 	if f:
 		f.store_string("\n".join(lines))
 		f.close()
+		# 同路径 JSON 回放（程序化分析用，最精确）
+		var jf = FileAccess.open(path.replace(".txt", ".json"), FileAccess.WRITE)
+		if jf:
+			jf.store_string(RecordFormatter.format_json(result, meta))
+			jf.close()
 		if not is_editor:
 			DisplayServer.clipboard_set("\n".join(lines))
 		if LocalGame.game != null:

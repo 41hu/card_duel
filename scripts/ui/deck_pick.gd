@@ -7,6 +7,7 @@ extends Control
 
 const Style = preload("res://scripts/theme/style_const.gd")
 const DeckData = preload("res://scripts/data/deck_data.gd")
+const AIDeckBuilder = preload("res://scripts/data/ai_deck_builder.gd")
 
 const GROUP_ORDER = ["attack", "tactics", "sustain", "equipment"]
 
@@ -750,10 +751,13 @@ func _start_battle():
 	LocalGame.bp_chars = []
 	LocalGame.bp_first = -1
 	if LocalGame.ai_mode:
-		# 人机：玩家用所选卡组（独立牌堆），AI 用默认 40 张 + 默认武器池
+		# 人机：玩家用所选卡组（独立牌堆）；AI 按「AI角色 + 人类对手角色」动态组建临时卡组
+		# （角色定位模板 + 针对对手调整防具/装备；校验失败自动回退默认卡组）
+		var ai_deck: Array = AIDeckBuilder.build_deck(str(chars[1]), str(chars[0]), LocalGame.ai_difficulty)
+		var ai_pool: Dictionary = AIDeckBuilder.build_weapon_pool(str(chars[1]), str(chars[0]))
 		LocalGame.start_ai_game(str(chars[0]), str(chars[1]), LocalGame.ai_difficulty,
-			[decks[0], DeckData.default_deck()], true,
-			[pools[0], DeckData.default_weapon_pool()])
+			[decks[0], ai_deck], true,
+			[pools[0], ai_pool])
 	else:
 		LocalGame.start_local_game(str(chars[0]), str(chars[1]), bf, decks, true, pools)
 	get_tree().change_scene_to_file("res://scenes/battle_scene.tscn")

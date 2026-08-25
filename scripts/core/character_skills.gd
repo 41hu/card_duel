@@ -63,7 +63,7 @@ func on_heal(player_idx: int, amount: int) -> int:
 		if allowed <= 0: return 0
 		amount = min(amount, allowed)
 		p.healed_this_turn = healed + amount
-	if p.char_id == "priest": amount += 2
+	if p.char_id == "priest": amount += 1  # 牧师回复+1（2026-08-23 平衡：原+2 导致无代价回复滚雪球）
 	if p.char_id == "warlock": amount = max(0, amount - 1)  # 邪术师被动「枯萎」：自身回血效果-1（+1→0）
 	# 凋零（虚空魔典）：回复量-1，最低0
 	amount = max(0, amount + _ms.status.get_heal_reduction(player_idx))

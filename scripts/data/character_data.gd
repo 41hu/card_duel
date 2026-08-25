@@ -7,7 +7,7 @@ const CHARACTER_DB = {
 	"mage":        {name="法师",   hp=22, near=2, range=2, magic=8, skill="mage",         skill_desc="弃1手牌，魔法强化+2（每回合限一次，可叠加；打出魔法攻击后清除）；幻影：弃魔法/吟唱卡获1/2层幻影，闪避概率=层数/(层数+1)（1层=1/2，2层=2/3…），永久存在可无限叠加，闪避成功消耗1层（每回合限1次）"},
 	"paladin":     {name="圣骑士", hp=26, near=4, range=2, magic=3, skill="paladin",      skill_desc="每回合首次受伤-2（最低0）；反击：使用响应完全抵挡一次攻击后，下次攻击伤害+1（可叠加，持续2回合）"},
 	"assassin":    {name="刺客",   hp=22, near=7, range=4, magic=1, skill="assassin",     skill_desc="每回合免费移动1格（独立于位移点，不能推人）"},
-	"priest":      {name="牧师",   hp=28, near=2, range=4, magic=6, skill="priest",       skill_desc="使用回复卡额外+2；受到DoT伤害后清除该类DoT；真言：弃1张回复卡，对敌人造成等值法术伤害（无视护甲，只能魔法响应，每回合限1次）"},
+	"priest":      {name="牧师",   hp=24, near=2, range=3, magic=4, skill="priest",       skill_desc="使用回复卡额外+1；受到DoT伤害后清除该类DoT；真言：弃1张回复卡，对敌人造成等值法术伤害（无视护甲，只能魔法响应，每回合限1次）"},
 	"berserker":   {name="狂战士", hp=28, near=8, range=2, magic=2, skill="berserker",    skill_desc="受直接攻击后获得狂化（近战+1，持续3回合，可叠加）"},
 	"warlock":     {name="邪术师", hp=24, near=2, range=3, magic=3, skill="warlock",      skill_desc="功能点+1；未用功能牌则回合结束抽1张；自身回血效果-1"},
 	"gunslinger":  {name="快枪手", hp=26, near=2, range=6, magic=2, skill="gunslinger",   skill_desc="远程双发：固定消耗2攻击点，造成两段伤害，两段各需一次响应"},

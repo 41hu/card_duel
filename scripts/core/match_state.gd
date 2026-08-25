@@ -178,6 +178,13 @@ func _setup_match(char_ids: Array, bp_first: int, custom_decks: Array, independe
 	current_player = first_player
 	phase = Config.Phase.BP_PHASE
 	bp.reset()
+	# 初始卡组构成（对局记录导出用：复盘双方组了什么卡）
+	deck_compositions = []
+	for i in range(n):
+		var ids: Array = []
+		for c in card_systems[i].deck:
+			ids.append(str(c.get("type_id", "?")))
+		deck_compositions.append(ids)
 	for i in range(n):
 		card_systems[i].draw_cards(4)
 
@@ -235,6 +242,9 @@ func _create_player(idx: int, char_id: String, char_data: Dictionary) -> Diction
 
 # 牌堆模式：false = 共享牌堆（默认，人机/联机）；true = 独立牌堆（PVE 构筑）
 var independent_decks: bool = false
+
+# 每玩家初始卡组 type_id 列表（对局记录导出用；_setup_match 时快照）
+var deck_compositions: Array = []
 
 # 教程模式：抑制回合自然抽牌（手牌由教程管理器完全控制）
 var draw_suppressed: bool = false
@@ -1239,7 +1249,26 @@ func _auto_discard():
 	_finish_discard()
 
 func add_log(player_idx: int, msg: String):
-	action_log.append({turn=turn_number, player=player_idx, player_name=Config.char_name(players[player_idx].char_id), msg=msg})
+	# 行动时上下文快照（对局记录复盘用，让 AI 精准还原"这条行动发生时"的局势）：
+	# 距离/双方 HP/位置/AP/手牌数。注意：扣血类日志的 ctx 反映"结算后"状态。
+	var ctx := {}
+	if players.size() >= 2:
+		var p0 = players[0]
+		var p1 = players[1]
+		ctx = {
+			"dist": movement.get_distance(),
+			"hp0": p0.hp, "hp1": p1.hp,
+			"pos0": movement.geometry.to_dict(p0.position),
+			"pos1": movement.geometry.to_dict(p1.position),
+			"ap0": [p0.get("ap_attack", 0), p0.get("ap_move", 0), p0.get("ap_function", 0)],
+			"ap1": [p1.get("ap_attack", 0), p1.get("ap_move", 0), p1.get("ap_function", 0)],
+			"hand0": card_systems[0].hand.size(),
+			"hand1": card_systems[1].hand.size(),
+			# 双方手牌内容（复盘精准还原"手里有什么"，如猎人手里有穿心却没打）
+			"hand0_types": card_systems[0].get_hand_type_ids(),
+			"hand1_types": card_systems[1].get_hand_type_ids(),
+		}
+	action_log.append({turn=turn_number, player=player_idx, player_name=Config.char_name(players[player_idx].char_id), msg=msg, ctx=ctx})
 
 func steal_card(player_idx: int, target_uid: int) -> int:
 	var opp = 1 - player_idx

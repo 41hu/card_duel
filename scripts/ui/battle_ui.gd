@@ -493,10 +493,9 @@ func _refresh_all(state: Dictionary):
 	# 数据驱动玩家面板：自己面板 + 所有对手面板（数量随玩家数动态，2/4/N 人统一）
 	var me = _find_self(pls)
 	_self_panel.refresh(me, "自己", Color(0.5, 0.8, 1))
-	# 面板高度随内容自适应（装备行出现/buff 行换行时向上增长，避免被 clip 裁切）；
-	# 底缘按安全区上移（_safe_bottom），防止手势条/圆角裁切 buff 展示
-	var want_h = _self_panel.get_combined_minimum_size().y
-	_self_panel.offset_top = -max(160.0, min(420.0, want_h + 8)) - _safe_bottom
+	# 面板高度固定 210（内容约 177-214 可容纳）：不用 get_combined_minimum_size——
+	# 属性行 autowrap 在布局前会返回异常大的最小尺寸，把面板顶到 420 高、挡住底部技能按钮区
+	_self_panel.offset_top = -218.0 - _safe_bottom
 	_self_panel.offset_bottom = -20.0 - _safe_bottom
 	_refresh_opp_panels(pls)
 	for p in pls:

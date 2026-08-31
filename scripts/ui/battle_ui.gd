@@ -496,9 +496,10 @@ func _refresh_all(state: Dictionary):
 	_self_panel.refresh(me, "自己", Color(0.5, 0.8, 1))
 	# 面板高度跟随内容（buff 状态槽多时变高，完整显示不被裁切），封顶 300 保证不挡技能按钮
 	# （技能按钮 SkillRow 顶部 y≈760，面板底部 -20 → 高度 ≤300 不重叠）。
-	# 用 content_height()（基础行+状态行按槽数算）且 +20 抵消 offset_bottom=-20，
+	# 用 content_height(面板宽)（基础行 + 状态行按槽数×每行槽数估行数）且 +20 抵消 offset_bottom=-20，
 	# 保证设定高 ≥ 内容高 → PanelContainer 不强制扩展（扩展会把面板底推出屏幕裁切）
-	_self_panel.offset_top = -(clampf(_self_panel.content_height(), 160.0, 300.0) + 20.0) - _safe_bottom
+	var self_w := 594.0 - _self_panel.offset_left
+	_self_panel.offset_top = -(clampf(_self_panel.content_height(self_w), 160.0, 300.0) + 20.0) - _safe_bottom
 	_self_panel.offset_bottom = -20.0 - _safe_bottom
 	_refresh_opp_panels(pls)
 	for p in pls:
@@ -674,9 +675,10 @@ func _refresh_opp_panels(pls: Array):
 		_opp_indices.pop_back()
 	# 面板宽：2 人局 460（属性行数字 AP 单行放下，不挤棋盘 1020 宽）；4 人局 500（右侧空间充足）
 	var pw := 460.0 if need == 1 else 500.0
-	# 面板高度跟随内容（buff 状态槽多时变高完整显示），2 人局上限 240；
+	# 面板高：2 人局上限 300（基础行+装备行+2 行状态槽 ≈264 能完整放下）；
 	# 4 人局 3 面板按屏幕高度压缩（保底 0.6），保证不超出屏幕底部。
-	# 属性行已改单行数字 AP（无 autowrap），get_combined_minimum_size 不会虚高
+	# 属性行已改单行数字 AP（无 autowrap），get_combined_minimum_size 不会虚高；
+	# 状态行是 FlowContainer，content_height 按槽数×每行槽数估算换行行数（传入面板宽 pw）
 	var vph = get_viewport_rect().size.y
 	var y := 110.0
 	var heights: Array = []
@@ -684,7 +686,7 @@ func _refresh_opp_panels(pls: Array):
 		_opp_indices[i] = int(opps[i].index)
 		_update_opp_panel(_opp_panels[i], opps[i])
 		# +20 保证面板高 ≥ 内容高（PanelContainer 不会强制扩展）
-		heights.append(clampf(_opp_panels[i].content_height(), 160.0, 240.0) + 20.0)
+		heights.append(clampf(_opp_panels[i].content_height(pw), 160.0, 300.0) + 20.0)
 	var total := 0.0
 	for h in heights: total += h
 	total += (need - 1) * 8.0

@@ -43,15 +43,50 @@ const _STATUS_ICONS := {
 # 状态槽一行上限（面板宽度约 10 个），超出合并为 "+N" 槽，详情放 tooltip
 const _MAX_STATUS_SLOTS := 11
 
-# 内容估算高度（battle_ui 用它设面板高度，替代 get_combined_minimum_size——
-# 后者在状态槽运行时 add_child 的时序下会漏算状态行高度，导致面板被 PanelContainer
-# 强制扩展、底部超出屏幕裁切）
-func content_height() -> float:
-	var base := 160.0  # 名字+属性+牌堆+装备+间距+内边距
-	var rows := 1
-	if _status_row.get_child_count() > 10:
-		rows = 2  # 状态槽每行约 10 个，超出换第二行
-	return base + rows * 46.0
+# 内容高度（battle_ui 用它设面板高度）：
+# 基础行（名字/属性/牌堆/装备）是单行 Label/Button，get_combined_minimum_size 准确；
+# 状态行是 FlowContainer，它的 get_combined_minimum_size 只算单行（46px）——槽位换行时
+# 严重低估 50~100px → 面板被内容强制撑开、底部 buff 行冲出屏幕裁切，必须按行数估算。
+# 间距按实际可见行数算（VBox separation 4），最后加 StyleBox 内边距 16（8×2）。
+# pw = 面板宽度（battle_ui 传入，决定状态槽每行几个）；不传时按最窄面板 460 兜底。
+func content_height(pw: float = 0.0) -> float:
+	var h := 0.0
+	var rows := 0
+	if _name_label != null:
+		h += _name_label.get_combined_minimum_size().y
+		rows += 1
+	if _attr_label != null:
+		h += _attr_label.get_combined_minimum_size().y
+		rows += 1
+	if _deck_label != null:
+		h += _deck_label.get_combined_minimum_size().y
+		rows += 1
+	if _equip_label != null and _equip_label.visible:
+		h += _equip_label.get_combined_minimum_size().y
+		rows += 1
+	if _status_row != null:
+		h += _status_rows_height(pw)
+		rows += 1
+	if rows > 1:
+		h += 4.0 * (rows - 1)  # VBox separation
+	h += 16.0  # StyleBox 内边距 8×2
+	return h
+
+# 状态行实际高度：FlowContainer 换行后 get_combined_minimum_size 只给单行（46px），
+# 槽位一多就低估。按「槽数 ÷ 每行槽数」估行数：槽最小 46 宽 + 间距 4 = 50，值文本
+# （"-3·2回" 等）会把槽加宽到 ~60，取 58 保守估计（行数偏多 → 面板偏高 20px 也不裁切）。
+# 最窄面板内宽 444 也放得下 ≥7 槽/行，11 槽封顶 → 实际最多 2 行，估算不会失控。
+func _status_rows_height(pw: float) -> float:
+	var n := _status_row.get_child_count()
+	if n <= 0:
+		return 0.0
+	var w := pw
+	if w <= 0.0:
+		w = 460.0
+	var inner := w - 16.0
+	var per_row := maxi(1, int(inner / 58.0))
+	var rows := ceili(float(n) / float(per_row))
+	return rows * 46.0 + (rows - 1) * 4.0
 
 func _ready():
 	var sb := StyleBoxFlat.new()

@@ -641,7 +641,16 @@ func _on_confirm_card():
 	if _selected_type in ["move", "destroy"]:
 		match _selected_type:
 			"move": _popup_move(_selected_uid)
-			"destroy": _popup_destroy(_selected_uid)
+		"destroy": _popup_destroy(_selected_uid)
+		_selected_uid = -1
+		confirm_btn.visible = false
+	elif _selected_type == "seize" and _game_state.players.size() <= 2:
+		# 夺取（2人局）：目标暴露时弹手牌选择
+		var opp2 = _find_opponent()
+		if _has_buff(opp2, "exposed") and not opp2.get("hand", []).is_empty():
+			_show_exposed_hand_pick(_selected_uid, "seize", opp2.get("index", 1 - _player_index), {})
+		else:
+			_n().send_play_card(_selected_uid)
 		_selected_uid = -1
 		confirm_btn.visible = false
 	elif _selected_type == "item":
@@ -761,6 +770,11 @@ func _show_target_pick(card_uid: int, type_id: String, extra: Dictionary = {}):
 			c.queue_free()
 			var send_extra = {"target": pid}
 			for k in extra: send_extra[k] = extra[k]
+			# 夺取/摧毁-盲丢：目标暴露时先弹手牌选择
+			var want_pick = (type_id == "seize") or (type_id == "destroy" and send_extra.get("destroy_target", "") == "hand")
+			if want_pick and _has_buff(p, "exposed") and not p.get("hand", []).is_empty():
+				_show_exposed_hand_pick(card_uid, type_id, pid, send_extra)
+				return
 			_n().send_play_card(card_uid, send_extra)
 		)
 		vb.add_child(b)
@@ -1055,6 +1069,8 @@ func _popup_destroy(card_uid: int):
 		c.queue_free()
 		if multi:
 			_show_target_pick(card_uid, "destroy", {"destroy_target": "hand"})
+		elif _has_buff(opp, "exposed") and not opp.get("hand", []).is_empty():
+			_show_exposed_hand_pick(card_uid, "destroy", opp.get("index", 1 - _player_index), {"destroy_target": "hand"})
 		else:
 			_n().send_play_card(card_uid, {"destroy_target": "hand"})
 	)
@@ -1212,6 +1228,44 @@ func _exec_skill(sk_id: String):
 	elif sk_id == "mage_phantom": _show_mage_phantom_pick()
 	elif sk_id == "vine_sow": _show_vine_sow_pick()
 	else: _n().send_use_skill(sk_id)
+
+# ---- 鹰眼暴露：夺取/摧毁指定选择手牌 ----
+func _has_buff(p: Dictionary, buff_type: String) -> bool:
+	for b in p.get("buffs", []):
+		if b.get("type", "") == buff_type: return true
+	return false
+
+# 目标暴露：弹对方手牌选择（选择后发送 chosen_uid）
+func _show_exposed_hand_pick(card_uid: int, type_id: String, target_idx: int, extra: Dictionary):
+	var target = null
+	for p in _game_state.players:
+		if p.index == target_idx: target = p; break
+	var c = Control.new()
+	c.name = "ExposedHandPick"
+	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
+	var vb = _popup_box(c, 640, 460)
+	var act = "夺取" if type_id == "seize" else "丢弃"
+	vb.add_child(_lbl("%s目标「%s」已暴露：选择要%s的手牌" % [Config.card_name(type_id),
+		target.get("char_name", "?"), act]))
+	var has_any = false
+	for cd in target.get("hand", []):
+		has_any = true
+		var b = _mkbtn(Config.card_name(str(cd.type_id)))
+		b.pressed.connect(func(uid = int(cd.uid)):
+			c.queue_free()
+			var send_extra = {"chosen_uid": uid}
+			for k in extra: send_extra[k] = extra[k]
+			_n().send_play_card(card_uid, send_extra)
+		)
+		vb.add_child(b)
+	if not has_any:
+		vb.add_child(_lbl("对方没有手牌"))
+	var cl = _mkbtn("取消")
+	cl.pressed.connect(func(): c.queue_free())
+	vb.add_child(cl)
+	add_child(c)
 
 # ---- 蔓生树妖：除根与播种交互 ----
 var _skip_root_choice: bool = false

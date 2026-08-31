@@ -255,6 +255,9 @@ func apply_on_hit_effects(attacker_idx: int, defender_idx: int, damage: int, dam
 		match_ref._reveal_to = attacker_idx
 		match_ref._reveal_from = defender_idx
 		match_ref.add_log(attacker_idx, "鹰眼: 查看%s手牌" % match_ref._target_name(defender_idx))
+		# 暴露：持续 1 回合（到攻击者下回合开始前）；期间任何角色对目标使用夺取/摧毁可指定选择手牌
+		match_ref.status.add_buff(defender_idx, "exposed", 1, 1)
+		match_ref.add_log(defender_idx, "暴露: 夺取/摧毁可指定选择手牌(1回合)")
 
 	# 毒牙：远程命中后给予2层中毒（每回合-1HP，层数每回合-1，可叠加）
 	if weapon_id == "toxic_fang":

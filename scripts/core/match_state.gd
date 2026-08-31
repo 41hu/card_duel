@@ -918,6 +918,16 @@ func _handle_destroy(player_idx: int, card: Dictionary) -> Dictionary:
 	if opp < 0: return {success=false, msg="请选择目标"}
 	var target = card.get("destroy_target", "hand")
 	if target == "hand":
+		# 暴露（鹰眼）：可指定选择对方一张手牌丢弃；未暴露则随机
+		var chosen = int(card.get("chosen_uid", -1))
+		if chosen >= 0:
+			if not _is_exposed(opp): return {success=false, msg="目标未暴露，不能选择手牌"}
+			var found = false
+			for c in card_systems[opp].hand:
+				if c.uid == chosen: found = true; break
+			if not found: return {success=false, msg="手牌中无此卡"}
+			card_systems[opp].play_card(chosen)
+			_use_card(player_idx, card); add_log(player_idx, "摧毁手牌: %s（指定）" % _target_name(opp)); return {success=true}
 		card_systems[opp].random_discard(1); _use_card(player_idx, card); add_log(player_idx, "摧毁手牌: %s" % _target_name(opp)); return {success=true}
 	if target == "trap":
 		# 摧毁必须指定格子（客户端走棋盘选格；无位置参数视为操作错误）
@@ -942,11 +952,30 @@ func _handle_destroy(player_idx: int, card: Dictionary) -> Dictionary:
 func _handle_seize(player_idx: int, card: Dictionary) -> Dictionary:
 	var opp = get_opponent(player_idx, int(card.get("target", -1)))
 	if opp < 0: return {success=false, msg="请选择目标"}
-	var taken = card_systems[opp].random_take(); _use_card(player_idx, card)
+	var taken = {}
+	var chosen = int(card.get("chosen_uid", -1))
+	if chosen >= 0:
+		# 暴露（鹰眼）：可指定选择对方一张手牌夺取；未暴露则随机
+		if not _is_exposed(opp): return {success=false, msg="目标未暴露，不能选择手牌"}
+		for i in range(card_systems[opp].hand.size()):
+			if card_systems[opp].hand[i].uid == chosen:
+				taken = card_systems[opp].hand[i]
+				card_systems[opp].hand.remove_at(i)
+				break
+		if taken.is_empty(): return {success=false, msg="手牌中无此卡"}
+	else:
+		taken = card_systems[opp].random_take()
+	_use_card(player_idx, card)
 	if taken.is_empty(): add_log(player_idx, "夺取空"); return {success=true}
 	card_systems[player_idx].add_to_hand(taken)
 	add_log(player_idx, "夺取%s的：%s" % [_target_name(opp), Config.card_name(taken.type_id)])
 	return {success=true}
+
+# 目标是否处于暴露状态（鹰眼赋予，1回合；期间夺取/摧毁可指定选择其手牌）
+func _is_exposed(player_idx: int) -> bool:
+	for b in players[player_idx].buffs:
+		if b.type == "exposed": return true
+	return false
 
 func _handle_heal(player_idx: int, card: Dictionary, amount: int) -> Dictionary:
 	var player = players[player_idx]

@@ -80,6 +80,10 @@ func _ready():
 	_attr_label = Label.new()
 	_attr_label.add_theme_font_size_override("font_size", Style.fs(22))
 	_attr_label.add_theme_color_override("font_color", Color(0.88, 0.9, 0.95))
+	# 内容完整显示：超宽时自动换行（邪术师两点功能点/长文本），面板高度由 _update 跟随内容；
+	# 不用省略号截断（用户要求完整展示）
+	_attr_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_attr_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vb.add_child(_attr_label)
 	# 牌堆/弃牌行：独立一行（独立牌堆模式下每人各自显示，共享模式下双方一致）
 	_deck_label = Label.new()
@@ -115,12 +119,11 @@ func refresh(p: Dictionary, tag: String, accent: Color):
 	# fill 不设圆角：ProgressBar 满值时 fill 圆角会在右端留出空隙（看似没填满）
 	fg.set_corner_radius_all(0)
 	_hp_bar.add_theme_stylebox_override("fill", fg)
-	var pos = p.get("position", {})
-	var pos_x = pos.get("x", 0) if pos is Dictionary else pos
-	_attr_label.text = "近%d 远%d 魔%d | %s | 手:%d/%d 格%d" % [p.near_power, p.range_power, p.magic_power,
+	# 属性行：面板 + AP + 手牌。去掉"格X"坐标（棋盘上可见，省宽度让 AP 完整显示）
+	_attr_label.text = "近%d 远%d 魔%d | %s | 手:%d/%d" % [p.near_power, p.range_power, p.magic_power,
 		_ap_circles(p.get("ap_attack", 0), p.get("ap_move", 0), p.get("ap_function", 0),
 			2 if p.get("char_id", "") == "warlock" else 1),
-		p.get("hand_size", 0), p.get("hand_limit", 5), pos_x]
+		p.get("hand_size", 0), p.get("hand_limit", 5)]
 	_deck_label.text = "牌堆 %d · 弃牌 %d" % [p.get("deck_size", 0), p.get("discard_size", 0)]
 	_refresh_equip(p)
 	_refresh_status(p)
@@ -235,12 +238,10 @@ func _dur_text(duration: int) -> String:
 	if duration == -2: return "永久持续"
 	return "剩余%d回" % duration
 
-func _ap_circles(atk: int, mov: int, fun: int, fun_max: int = 1) -> String:
-	var a := ""; for _i in range(2): a += "●" if _i < atk else "○"
-	var m := ""; for _i in range(1): m += "●" if _i < mov else "○"
-	# 功能点显示上限圆（术士 2、其他 1），用掉的变空心圆，与攻击/位移点一致
-	var f := ""; for _i in range(fun_max): f += "●" if _i < fun else "○"
-	return "攻%s 移%s 功%s" % [a, m, f]
+func _ap_circles(atk: int, mov: int, fun: int, _fun_max: int = 1) -> String:
+	# 数字格式（攻2移1功2）：信息等价、宽度约为圆点版一半，配合 460 面板宽完整显示不换行；
+	# 上限隐含（攻击2/位移1/功能1，邪术师功能2），比圆点更省空间且不会挤棋盘
+	return "攻%d移%d功%d" % [atk, mov, fun]
 
 # HP 变化闪烁：改色 0.9 秒后恢复（低血红色由下次 refresh 覆盖）
 func flash_hp(is_heal: bool):

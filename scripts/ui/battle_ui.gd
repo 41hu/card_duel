@@ -484,7 +484,8 @@ func _refresh_all(state: Dictionary):
 		board.offset_left = -510; board.offset_right = 390
 		board.offset_top = -380; board.offset_bottom = 260
 	else:
-		board.offset_left = -610; board.offset_right = 490
+		# 2 人局棋盘 1020 宽（原 1100 缩 80）：给右侧对手面板（460+safe）腾空间，防棋盘右缘与面板重叠
+		board.offset_left = -560; board.offset_right = 460
 		board.offset_top = -140; board.offset_bottom = 20
 	# HP 闪烁记录数组按玩家数扩展（4 人局原 2 元素会越界）
 	while _last_hp.size() < pls.size():
@@ -664,14 +665,30 @@ func _refresh_opp_panels(pls: Array):
 			opps.append(p)
 	var need = opps.size()
 	while _opp_panels.size() < need:
-		_opp_panels.append(_make_opp_panel(_opp_panels.size()))
+		_opp_panels.append(_make_opp_panel())
 		_opp_indices.append(-1)
 	while _opp_panels.size() > need:
 		_opp_panels.pop_back().queue_free()
 		_opp_indices.pop_back()
+	# 面板宽：2 人局 460（属性行数字 AP 单行放下，不挤棋盘 1100 宽）；4 人局 500（右侧空间充足）
+	var pw := 460.0 if need == 1 else 500.0
+	# 面板高：固定估算（名字+属性行≤2行+牌堆+装备+状态 ≈ 210）；4 人局按屏幕高度压缩，
+	# 保证 3 面板不超出屏幕底部（不用 get_combined_minimum_size——autowrap Label 布局前会抽风）
+	var vph = get_viewport_rect().size.y
+	var panel_h := 210.0
+	var gap := 8.0
+	var y := 110.0
+	if vph > 0 and y + need * (panel_h + gap) > vph - 12.0:
+		panel_h = max(160.0, (vph - y - 12.0 - (need - 1) * gap) / need)
 	for i in range(need):
 		_opp_indices[i] = int(opps[i].index)
 		_update_opp_panel(_opp_panels[i], opps[i])
+		var pc = _opp_panels[i]
+		pc.offset_left = -(pw + _safe_right)
+		pc.offset_right = -_safe_right
+		pc.offset_top = int(y)
+		pc.offset_bottom = int(y + panel_h)
+		y += panel_h + gap
 
 # 指定玩家索引 → 其面板（自己 → 左下；对手 → 右侧竖排对应项）；找不到返回 null
 func _panel_for(index: int) -> PanelContainer:
@@ -682,14 +699,10 @@ func _panel_for(index: int) -> PanelContainer:
 		return _opp_panels[pos]
 	return null
 
-func _make_opp_panel(slot: int) -> PanelContainer:
+func _make_opp_panel() -> PanelContainer:
 	var pc: PanelContainer = InfoPanel.new()
 	pc.anchor_left = 1.0; pc.anchor_right = 1.0
-	# 创建即带安全区内缩：面板整体内移保持宽度，防止刘海/圆角裁切
-	pc.offset_left = -(460 + _safe_right)
-	pc.offset_right = -_safe_right
-	pc.offset_top = 150 + slot * 206
-	pc.offset_bottom = 350 + slot * 206
+	# 安全区内缩与宽度/高度由 _refresh_opp_panels 统一设置（按人数/屏幕高）
 	pc.status_clicked.connect(_on_status_clicked)
 	add_child(pc)
 	return pc

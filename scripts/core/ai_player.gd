@@ -583,6 +583,10 @@ func decide_action(player_idx: int) -> Dictionary:
 		if _opp_is_magic_type(player_idx):
 			if tid in ["near", "heavy"]: s += 6
 			elif tid in ["range", "pierce"]: s -= 4
+		# 快枪手双发（2026-08-31）：远程/穿心两段独立响应——对方 1 张响应只能挡一段，
+		# 另一段必中 → _attack_score 里的"手牌响应风险惩罚"减半（加回一半）
+		if p.char_id == "gunslinger" and tid in ["range", "pierce"]:
+			s += int(ceil(match_ref.card_systems[opp_idx].hand.size() / 2.0))
 		_atk_trace.append({"tid": tid, "dmg": dmg, "score": s, "skip": ""})
 		# 地狱全知：对手手牌精确响应风险惩罚（闪避/格挡/牵制可防则攻击预期下降）
 		if is_hell:
@@ -807,7 +811,19 @@ func decide_action(player_idx: int) -> Dictionary:
 					else:
 						s = 2  # 近距离无牌 → 等牌（人类不会白走）
 				elif my_role == "range":
-					if _opp_is_magic_type(player_idx) and _hand_has_melee(player_idx):
+					if p.char_id == "gunslinger":
+						# 快枪手双发（2026-08-31 playbook）：近距离 0-2 格伤害最高
+						# （距离0 远程6/穿心8，距离1-2 远程4/穿心6-8，距离3 每段只剩1，4+ 打不出）
+						# → 主动贴近到 1-2 格；贴脸双发也值，但近战威胁时后撤到 2-3 保留输出
+						if distance > 2:
+							s = 12 + (6 if distance <= 4 else 0)  # 逼近（4 格内优先，再远双发废）
+						elif distance == 0:
+							s = 3 if _range_melee_safe(player_idx) else 10  # 贴脸：安全保持 / 危险后撤
+						else:
+							s = 2  # 1-2 格保持（双发 4-6 伤输出区）
+						if _near_threat_imminent(player_idx) and distance <= 2:
+							s = max(s, 10)  # 近战憋爆发 → 后撤到 2-3 格（双发仍 2-4 伤）
+					elif _opp_is_magic_type(player_idx) and _hand_has_melee(player_idx):
 						# 法术型对策：魔法无视距离、风筝无意义 → 主动贴脸用近战/重击压制（面板占优）
 						if distance > 1:
 							s = 12 + (8 if distance <= 3 else 0)  # 逼近（3 格内优先）
@@ -1006,13 +1022,18 @@ func decide_action(player_idx: int) -> Dictionary:
 							min_val = v
 							discard_uid = card.uid
 				if has_magic_atk and discard_uid >= 0:
-					# 放技能后伤害 = 当前真实伤害（含已有叠加层）+ 新层2
-					var buffed = 0
+					# 当前（含已有叠加层）最高魔法伤害 = 直接输出基准；+2 = 叠一层后
+					var cur_dmg = 0
 					for card in hand:
 						if card.type_id in ["magic", "chant"]:
-							buffed = max(buffed, _real_damage(player_idx, card.type_id))
-					buffed += 2
+							cur_dmg = max(cur_dmg, _real_damage(player_idx, card.type_id))
+					var buffed = cur_dmg + 2
 					var s = _attack_score(player_idx, buffed, opp_idx, stance) + 2
+					# 节奏控制（用户实测 2026-08-31）：当前层伤害已 ≥12 → 不再叠层，直接输出。
+					# 无限叠层的后果：爆发后层清+弃牌素材耗尽 → 后续断档被动（厚血打不穿）；
+					# 脆皮被憋到 5-6 层的一发 19 伤秒杀。2 层后每回合 12-15 伤持续施压才对
+					if cur_dmg >= 12:
+						s -= 25
 					# 牵制预期：对方远程面板高（牵制值大）→ 强化后的魔法爆发会被牵制减伤
 					var opp_p2 = match_ref.get_player(opp_idx)
 					if opp_p2.range_power >= 5:

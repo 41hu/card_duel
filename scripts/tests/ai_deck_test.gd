@@ -117,6 +117,37 @@ func _ready():
 		_out("%s | 胜 %d/10 | 强化 %.1f次 | 幻影 %.1f次 | 主动攻击 %.1f" % [
 			m.label, ms.wins, ms.empowers, ms.phantoms, ms.attacks])
 
+	# ---- 4.8) 法师强度验证（30 局大样本，确认是否断层）----
+	_out("=== 4.8 法师强度（新卡组 vs 默认卡组，30 局）===")
+	for m in [{"opp": "fighter", "label": "法师 vs 斗士"},
+			  {"opp": "hunter", "label": "法师 vs 猎人"},
+			  {"opp": "priest", "label": "法师 vs 牧师"},
+			  {"opp": "warlock", "label": "法师 vs 邪术师"},
+			  {"opp": "paladin", "label": "法师 vs 圣骑士"},
+			  {"opp": "gunslinger", "label": "法师 vs 快枪手"}]:
+		var r := _run_series(str(m.opp), "mage", DeckData.default_deck(), AIDeckBuilder.build_deck("mage", str(m.opp), 2), 30)
+		_out("%s | 法师胜 %d/30" % [m.label, r.p1w])
+
+	# ---- 4.9) 快枪手行为统计（双发节奏 / 距离管理，各 10 局）----
+	_out("=== 4.9 快枪手行为统计（各 10 局，AI 难度 hard）===")
+	for m in [{"opp": "fighter", "label": "快枪手 vs 斗士"},
+			  {"opp": "hunter", "label": "快枪手 vs 猎人"},
+			  {"opp": "mage", "label": "快枪手 vs 法师"},
+			  {"opp": "paladin", "label": "快枪手 vs 圣骑士"},
+			  {"opp": "berserker", "label": "快枪手 vs 狂战士"}]:
+		var gs := _run_gunslinger_series(str(m.opp), 10)
+		_out("%s | 胜 %d/10 | 远程 %.1f次 | 穿心 %.1f次 | 总攻击 %.1f | 贴脸(≤1)回合 %.1f" % [
+			m.label, gs.wins, gs.range_played, gs.pierce_played, gs.attacks, gs.close_turns])
+
+	# ---- 4.10) 快枪手强度验证（30 局）----
+	_out("=== 4.10 快枪手强度（新卡组 vs 默认卡组，30 局）===")
+	for m in [{"opp": "fighter", "label": "快枪手 vs 斗士"},
+			  {"opp": "mage", "label": "快枪手 vs 法师"},
+			  {"opp": "hunter", "label": "快枪手 vs 猎人"},
+			  {"opp": "paladin", "label": "快枪手 vs 圣骑士"}]:
+		var r2 := _run_series(str(m.opp), "gunslinger", DeckData.default_deck(), AIDeckBuilder.build_deck("gunslinger", str(m.opp), 2), 30)
+		_out("%s | 快枪手胜 %d/30" % [m.label, r2.p1w])
+
 	# ---- 4.5) 牧师强度验证（默认卡组互打 30 局，P1=牧师；加大样本看趋势）----
 	_out("=== 4.5 牧师强度（24/3/4 回复+1，默认卡组互打 30 局）===")
 	for m in [{"opp": "fighter", "label": "牧师 vs 斗士"},
@@ -321,6 +352,68 @@ func _run_mage_series(opp_char: String, n: int) -> Dictionary:
 				attacks += int(cp[tid])
 	return {"wins": wins, "empowers": empowers * 1.0 / n, "phantoms": phantoms * 1.0 / n,
 			"attacks": attacks * 1.0 / n}
+
+# 跑 N 局快枪手（P1）行为统计：胜场 / 远程/穿心打出次数 / 总攻击 / 近距离(≤1)回合占比
+func _run_gunslinger_series(opp_char: String, n: int) -> Dictionary:
+	var wins := 0
+	var range_played := 0
+	var pierce_played := 0
+	var attacks := 0
+	var close_turns := 0
+	var total_turns := 0
+	for i in range(n):
+		var g = MatchStateClass.new()
+		g.disable_timeout = true
+		var ais: Array = [AIPlayerClass.new(g, 2), AIPlayerClass.new(g, 2)]
+		_winner = -1
+		g.weapon_prompt.connect(func(pi: int, w: Dictionary):
+			g.confirm_weapon(pi, ais[pi].decide_weapon(pi, w))
+		)
+		g.response_needed.connect(func(di: int, info: Dictionary):
+			var dec = ais[di].decide_response(di, info.get("card", ""))
+			if dec.respond:
+				g.process_response(di, true, dec.card_uid)
+			else:
+				g.skip_response(di)
+		)
+		g.game_ended.connect(func(r: Dictionary): _winner = int(r.get("winner", -1)))
+		var gs_deck: Array = AIDeckBuilder.build_deck("gunslinger", opp_char, 2)
+		g.init_match(opp_char, "gunslinger", 1, [DeckData.default_deck(), gs_deck], true)
+		g._start_game()
+		var guard := 0
+		while g.phase != Config.Phase.GAME_OVER and guard < 600:
+			guard += 1
+			if g.turn_number > 60:
+				break
+			var cur = g.current_player
+			if g.waiting_for_discard:
+				var cs = g.card_systems[cur]
+				var need = max(0, cs.hand.size() - g.movement.get_hand_limit(cur))
+				if need == 0: need = 1
+				g.confirm_discard(cur, ais[cur].decide_discard(cur, need))
+				continue
+			var act = ais[cur].decide_action(cur)
+			var r = g.process_action(cur, act)
+			if not r.get("success", false):
+				g.process_action(cur, {"action": "end_turn"})
+		if _winner == 1: wins += 1
+		var cp = g.stats[1].get("cards_played", {})
+		for tid in cp:
+			if tid in ["near", "heavy", "range", "pierce", "magic", "chant"]:
+				attacks += int(cp[tid])
+			if tid == "range": range_played += int(cp[tid])
+			elif tid == "pierce": pierce_played += int(cp[tid])
+		for rec in g.battle_record:
+			var p1 = rec.get("p1", {})
+			var pos = p1.get("pos", 0)
+			var p0 = rec.get("p0", {})
+			var pos0 = p0.get("pos", 0)
+			total_turns += 1
+			if pos is Dictionary and pos0 is Dictionary:
+				if abs(int(pos.get("x", 0)) - int(pos0.get("x", 0))) - 1 <= 1:
+					close_turns += 1
+	return {"wins": wins, "range_played": range_played * 1.0 / n, "pierce_played": pierce_played * 1.0 / n,
+			"attacks": attacks * 1.0 / n, "close_turns": close_turns * 1.0 / max(total_turns, 1)}
 
 # 同步跑一局（AI 决策循环，无帧依赖），返回胜者索引（-1=超时平局）
 func _run_game(p0_char: String, p1_char: String, p0_deck: Array, p1_deck: Array) -> int:

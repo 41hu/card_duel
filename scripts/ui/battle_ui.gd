@@ -493,9 +493,11 @@ func _refresh_all(state: Dictionary):
 	# 数据驱动玩家面板：自己面板 + 所有对手面板（数量随玩家数动态，2/4/N 人统一）
 	var me = _find_self(pls)
 	_self_panel.refresh(me, "自己", Color(0.5, 0.8, 1))
-	# 面板高度固定 210（内容约 177-214 可容纳）：不用 get_combined_minimum_size——
-	# 属性行 autowrap 在布局前会返回异常大的最小尺寸，把面板顶到 420 高、挡住底部技能按钮区
-	_self_panel.offset_top = -218.0 - _safe_bottom
+	# 面板高度跟随内容（buff 状态槽多时变高，完整显示不被裁切），封顶 300 保证不挡技能按钮
+	# （技能按钮 SkillRow 顶部 y≈760，面板底部 -20 → 高度 ≤300 不重叠）。
+	# 属性行已改单行数字 AP（无 autowrap），get_combined_minimum_size 不会虚高
+	var want_h = _self_panel.get_combined_minimum_size().y
+	_self_panel.offset_top = -clampf(want_h + 8, 160.0, 300.0) - _safe_bottom
 	_self_panel.offset_bottom = -20.0 - _safe_bottom
 	_refresh_opp_panels(pls)
 	for p in pls:
@@ -669,25 +671,33 @@ func _refresh_opp_panels(pls: Array):
 	while _opp_panels.size() > need:
 		_opp_panels.pop_back().queue_free()
 		_opp_indices.pop_back()
-	# 面板宽：2 人局 460（属性行数字 AP 单行放下，不挤棋盘 1100 宽）；4 人局 500（右侧空间充足）
+	# 面板宽：2 人局 460（属性行数字 AP 单行放下，不挤棋盘 1020 宽）；4 人局 500（右侧空间充足）
 	var pw := 460.0 if need == 1 else 500.0
-	# 面板高：固定估算（名字+属性行≤2行+牌堆+装备+状态 ≈ 210）；4 人局按屏幕高度压缩，
-	# 保证 3 面板不超出屏幕底部（不用 get_combined_minimum_size——autowrap Label 布局前会抽风）
+	# 面板高度跟随内容（buff 状态槽多时变高完整显示），2 人局上限 240；
+	# 4 人局 3 面板按屏幕高度压缩（保底 0.6），保证不超出屏幕底部。
+	# 属性行已改单行数字 AP（无 autowrap），get_combined_minimum_size 不会虚高
 	var vph = get_viewport_rect().size.y
-	var panel_h := 210.0
-	var gap := 8.0
 	var y := 110.0
-	if vph > 0 and y + need * (panel_h + gap) > vph - 12.0:
-		panel_h = max(160.0, (vph - y - 12.0 - (need - 1) * gap) / need)
+	var heights: Array = []
 	for i in range(need):
 		_opp_indices[i] = int(opps[i].index)
 		_update_opp_panel(_opp_panels[i], opps[i])
+		var want_h: float = _opp_panels[i].get_combined_minimum_size().y
+		heights.append(clampf(want_h + 10, 150.0, 240.0))
+	var total := 0.0
+	for h in heights: total += h
+	total += (need - 1) * 8.0
+	var scale := 1.0
+	if vph > 0 and y + total > vph - 12.0:
+		scale = max(0.6, (vph - y - 12.0) / total)
+	for i in range(need):
+		var ph: float = heights[i] * scale
 		var pc = _opp_panels[i]
 		pc.offset_left = -(pw + _safe_right)
 		pc.offset_right = -_safe_right
 		pc.offset_top = int(y)
-		pc.offset_bottom = int(y + panel_h)
-		y += panel_h + gap
+		pc.offset_bottom = int(y + ph)
+		y += ph + 8.0
 
 # 指定玩家索引 → 其面板（自己 → 左下；对手 → 右侧竖排对应项）；找不到返回 null
 func _panel_for(index: int) -> PanelContainer:

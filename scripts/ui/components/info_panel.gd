@@ -80,10 +80,10 @@ func _ready():
 	_attr_label = Label.new()
 	_attr_label.add_theme_font_size_override("font_size", Style.fs(22))
 	_attr_label.add_theme_color_override("font_color", Color(0.88, 0.9, 0.95))
-	# 内容完整显示：超宽时自动换行（邪术师两点功能点/长文本），面板高度由 _update 跟随内容；
-	# 不用省略号截断（用户要求完整展示）
+	# 单行显示（数字 AP 后宽度足够，邪术师两点功能点也完整）：不加 autowrap——
+	# autowrap 会让 get_combined_minimum_size 在布局前算出虚高最小尺寸（每字符一行），
+	# 导致面板高度失控顶高挡技能按钮。不加 ellipsis：正常宽度内完整显示
 	_attr_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_attr_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vb.add_child(_attr_label)
 	# 牌堆/弃牌行：独立一行（独立牌堆模式下每人各自显示，共享模式下双方一致）
 	_deck_label = Label.new()

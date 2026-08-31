@@ -219,11 +219,12 @@ func _apply_safe_area():
 		_self_panel.offset_top -= _safe_bottom
 		_self_panel.offset_bottom -= _safe_bottom
 	if left > 0:
-		skill_row.offset_left += left
-		skill_row.offset_right += left
 		action_log.offset_left += left
 		action_log.offset_right += left
 	if right > 0:
+		# 技能按钮已挪到右下（结束按钮上方）：右安全区内缩，保持不贴边
+		skill_row.offset_left -= right
+		skill_row.offset_right -= right
 		for p in _opp_panels:
 			# 左缘同步内移保持宽度：只改 offset_right 会让面板变窄、文字被裁切
 			p.offset_left = -(460 + _safe_right)
@@ -495,9 +496,9 @@ func _refresh_all(state: Dictionary):
 	_self_panel.refresh(me, "自己", Color(0.5, 0.8, 1))
 	# 面板高度跟随内容（buff 状态槽多时变高，完整显示不被裁切），封顶 300 保证不挡技能按钮
 	# （技能按钮 SkillRow 顶部 y≈760，面板底部 -20 → 高度 ≤300 不重叠）。
-	# 属性行已改单行数字 AP（无 autowrap），get_combined_minimum_size 不会虚高
-	var want_h = _self_panel.get_combined_minimum_size().y
-	_self_panel.offset_top = -clampf(want_h + 8, 160.0, 300.0) - _safe_bottom
+	# 用 content_height()（基础行+状态行按槽数算）且 +20 抵消 offset_bottom=-20，
+	# 保证设定高 ≥ 内容高 → PanelContainer 不强制扩展（扩展会把面板底推出屏幕裁切）
+	_self_panel.offset_top = -(clampf(_self_panel.content_height(), 160.0, 300.0) + 20.0) - _safe_bottom
 	_self_panel.offset_bottom = -20.0 - _safe_bottom
 	_refresh_opp_panels(pls)
 	for p in pls:
@@ -682,8 +683,8 @@ func _refresh_opp_panels(pls: Array):
 	for i in range(need):
 		_opp_indices[i] = int(opps[i].index)
 		_update_opp_panel(_opp_panels[i], opps[i])
-		var want_h: float = _opp_panels[i].get_combined_minimum_size().y
-		heights.append(clampf(want_h + 10, 150.0, 240.0))
+		# +20 保证面板高 ≥ 内容高（PanelContainer 不会强制扩展）
+		heights.append(clampf(_opp_panels[i].content_height(), 160.0, 240.0) + 20.0)
 	var total := 0.0
 	for h in heights: total += h
 	total += (need - 1) * 8.0

@@ -40,8 +40,18 @@ const _STATUS_ICONS := {
 	"tracker_chase": {"icon": "追", "accent": Color(0.6, 0.85, 0.5), "name": "追击"},
 	"神隐": {"icon": "隐", "accent": Color(0.6, 0.5, 0.9), "name": "神隐"},
 }
-# 状态槽一行上限（面板宽度约 11 个），超出合并为 "+N" 槽，详情放 tooltip
+# 状态槽一行上限（面板宽度约 10 个），超出合并为 "+N" 槽，详情放 tooltip
 const _MAX_STATUS_SLOTS := 11
+
+# 内容估算高度（battle_ui 用它设面板高度，替代 get_combined_minimum_size——
+# 后者在状态槽运行时 add_child 的时序下会漏算状态行高度，导致面板被 PanelContainer
+# 强制扩展、底部超出屏幕裁切）
+func content_height() -> float:
+	var base := 160.0  # 名字+属性+牌堆+装备+间距+内边距
+	var rows := 1
+	if _status_row.get_child_count() > 10:
+		rows = 2  # 状态槽每行约 10 个，超出换第二行
+	return base + rows * 46.0
 
 func _ready():
 	var sb := StyleBoxFlat.new()

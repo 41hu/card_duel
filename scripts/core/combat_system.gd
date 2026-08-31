@@ -80,6 +80,14 @@ func calculate_attack(attacker_idx: int, defender_idx: int, card_type_id: String
 		base_damage += buff_mod
 		formula += ("+%d" if buff_mod > 0 else "%d") % buff_mod
 
+	# 摧残（蔓生树妖）：对带致残的目标攻击伤害 +1
+	if attacker.char_id == "vine_ent":
+		for b in defender.buffs:
+			if b.type == "vine_cripple" and b.value > 0:
+				base_damage += 1
+				formula += "+1"
+				break
+
 	# 计算防具减伤（耐久消耗延迟到实际造成伤害时，闪避/免疫不消耗）
 	var armor_result = _calc_armor(defender, damage_type, base_damage)
 	if armor_result.blocked:

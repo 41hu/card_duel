@@ -391,8 +391,42 @@ func process_action(player_idx: int, action_data: Dictionary) -> Dictionary:
 			if action_data.get("skill", "") == "_cheat": return _cheat_card(player_idx, action_data.get("type_id", ""))
 			if action_data.get("skill", "") == "_debug_end": return _debug_end(player_idx, action_data.get("win", true))
 			return _handle_skill(player_idx, action_data.get("skill", ""), action_data)
-		"fighter_choice": return _handle_fighter_choice(player_idx, action_data)
+	"fighter_choice": return _handle_fighter_choice(player_idx, action_data)
+	"vine_remove": return _handle_vine_remove(player_idx, action_data)
 	return {success=false, msg="未知行动"}
+
+# 除根（反制蔓生种子）：消耗 1 张近战/重击卡 + 1 攻击行动点，
+# 破坏所在格或相邻格的 1 层蔓生种子（不攻击角色、不触发响应）
+func _handle_vine_remove(player_idx: int, data: Dictionary) -> Dictionary:
+	var uid = int(data.get("card_uid", -1))
+	var cs = card_systems[player_idx]
+	if not cs.has_card(uid): return {success=false, msg="手牌中没有此卡"}
+	var card = {}
+	for c in cs.hand:
+		if c.uid == uid: card = c; break
+	if not card.type_id in ["near", "heavy"]:
+		return {success=false, msg="只能用近战/重击除根"}
+	var pos = movement.geometry.from_dict(data.get("pos", {}))
+	var geo = movement.geometry
+	if not geo.is_valid(pos): return {success=false, msg="无效位置"}
+	if geo.distance(players[player_idx].position, pos) > 1:
+		return {success=false, msg="只能除根所在格或相邻格的种子"}
+	var found = -1
+	for i in range(items.size() - 1, -1, -1):
+		if items[i].item_type == "vine_seed" and items[i].position == pos:
+			found = i
+			break
+	if found < 0: return {success=false, msg="该格没有蔓生种子"}
+	# 消耗攻击行动点（与打出该攻击卡一致的成本；默认 1）
+	var cost = char_skills.get_attack_cost(player_idx, card.type_id)
+	if cost < 0: cost = int(Config.CARD_DB[card.type_id].get("ap", 1))
+	if players[player_idx].ap_attack < cost: return {success=false, msg="攻击行动点不足"}
+	players[player_idx].ap_attack -= cost
+	items.remove_at(found)
+	_use_card(player_idx, {uid=uid, type_id=card.type_id})
+	add_log(player_idx, "除根: 清除(%d,%d)的蔓生种子" % [pos.x, pos.y])
+	state_changed.emit(get_full_state())
+	return {success=true}
 
 func _do_play_card(player_idx: int, data: Dictionary) -> Dictionary:
 	var card_uid = int(data.get("card_uid", -1))
@@ -890,6 +924,11 @@ func _handle_destroy(player_idx: int, card: Dictionary) -> Dictionary:
 		var pos: Vector2i = movement.geometry.from_dict(card.get("trap_pos", {}))
 		if not movement.geometry.is_valid(pos):
 			return {success=false, msg="请选择要摧毁的格子"}
+		# 蔓生种子仅限所在格/相邻格拆除（除根限制）
+		for it in items:
+			if it.item_type == "vine_seed" and it.position == pos \
+					and movement.geometry.distance(players[player_idx].position, pos) > 1:
+				return {success=false, msg="蔓生种子只能在所在格或相邻格拆除"}
 		if item_system.destroy_item_at(pos):
 			_use_card(player_idx, card); add_log(player_idx, "摧毁%s格道具" % movement.geometry.to_text(pos)); return {success=true}
 		return {success=false, msg="该格没有道具"}
@@ -980,8 +1019,33 @@ func _advance_to_next_player():
 		guard += 1
 	current_player = next
 	if current_player == first_player: turn_number += 1
+	_ensure_vine_seed(current_player)  # 蔓生树妖：回合开始补漏生根
 	_judgment_phase()
 	state_changed.emit(get_full_state())
+
+# 蔓生树妖：所在地格无蔓生种子则立即生成 1 层（位移后/回合开始触发）
+func _ensure_vine_seed(player_idx: int):
+	if player_idx < 0 or player_idx >= players.size(): return
+	if players[player_idx].char_id != "vine_ent": return
+	for it in items:
+		if it.item_type == "vine_seed" and it.position == players[player_idx].position:
+			return
+	items.append({item_type="vine_seed", position=players[player_idx].position, owner=player_idx})
+
+# 所有位移的统一收口（movement._add_move_stat 调用）：
+# 1) 树妖位移后生根；2) 致残单位位移受 2 点真伤（无视护甲，DoT 统计）并掉 1 层
+func _on_unit_moved(player_idx: int):
+	_ensure_vine_seed(player_idx)
+	var p = players[player_idx]
+	for i in range(p.buffs.size() - 1, -1, -1):
+		if p.buffs[i].type == "vine_cripple":
+			_damage_player(player_idx, 2)
+			stats[player_idx]["damage_taken"] += 2
+			stats[player_idx]["damage_from_dot"] += 2
+			add_log(player_idx, "致残: 位移受2点真伤")
+			p.buffs[i].value -= 1
+			if p.buffs[i].value <= 0:
+				p.buffs.remove_at(i)
 
 # 位移/陷阱类效果后检查死亡（吸引/威慑可能让任一方踩陷阱）
 func _check_any_death():

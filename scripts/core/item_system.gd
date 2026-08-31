@@ -36,7 +36,28 @@ var _item_types: Dictionary = {
 		"destroy_rule": "one",
 		"on_step": _torii_step,
 	},
+	"vine_seed": {
+		"name": "蔓",
+		"desc": "蔓生树妖专属：单位到达获得1层致残（永久可叠加）；致残单位每次位移受2点真伤（无视护甲，DoT统计）并掉1层；仅能被近战/重击除根或摧毁卡拆除（限所在格/相邻格），持续存在不因触发消失",
+		"stack": "single",
+		"destroy_rule": "one",
+		"on_step": _vine_seed_step,
+	},
 }
+
+# 蔓生种子：单位到达获得 1 层致残（永久可叠加）；树妖自身无视（不获得）
+func _vine_seed_step(player_idx: int):
+	var player = match_ref.get_player(player_idx)
+	if player.char_id == "vine_ent": return  # 树妖免疫自己的种子
+	var found = false
+	for b in player.buffs:
+		if b.type == "vine_cripple":
+			b.value += 1
+			found = true
+			break
+	if not found:
+		player.buffs.append({type="vine_cripple", value=1, duration=-2})
+	match_ref.add_log(player_idx, "蔓: 获得1层致残（位移时受2点真伤）")
 
 # 鸟居触发：自己踩（放置者=巫女）回血2+全属性+1 永久；敌人踩进入神隐（跳过下回合）
 func _torii_step(player_idx: int, item: Dictionary) -> int:

@@ -91,6 +91,7 @@ func _handle_message(peer_idx: int, raw: String):
 		"reveal_hand": _on_reveal_hand(peer_idx)
 		"fighter_choice": _on_fighter_choice(peer_idx, data)
 		"wind_bow_move": _on_wind_bow_move(peer_idx, data)
+		"vine_remove": _on_vine_remove(peer_idx, data)
 		"deck_ready": _on_deck_ready(peer_idx, data)
 
 func _create_room(peer_idx: int, data: Dictionary):
@@ -291,6 +292,14 @@ func _on_end_turn(peer_idx: int):
 
 # 风神弓：攻击者选择控制方向（process_action 内校验待决状态与归属）
 func _on_wind_bow_move(peer_idx: int, data: Dictionary):
+	var peer = _peers[peer_idx]; var room = _find_room(peer.room_id)
+	if room == null or room.match == null: return
+	var result = room.match.process_action(peer.player_index, data)
+	if not result.get("success", false):
+		_send_to(peer_idx, {"t":"error","msg":result.get("msg","失败")})
+
+# 除根：消耗近战/重击卡清除蔓生种子
+func _on_vine_remove(peer_idx: int, data: Dictionary):
 	var peer = _peers[peer_idx]; var room = _find_room(peer.room_id)
 	if room == null or room.match == null: return
 	var result = room.match.process_action(peer.player_index, data)

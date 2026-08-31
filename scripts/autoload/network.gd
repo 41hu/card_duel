@@ -156,6 +156,10 @@ func send_fighter_choice(choice: String):
 func send_wind_bow_move(direction: Dictionary = {}, cancel: bool = false):
 	send({"t": "wind_bow_move", "direction": direction, "cancel": cancel})
 
+# 除根：消耗近战/重击卡清除所在格或相邻格的蔓生种子（pos = {x,y}）
+func send_vine_remove(card_uid: int, pos: Dictionary):
+	send({"t": "vine_remove", "card_uid": card_uid, "pos": pos})
+
 func send_reveal_hand():
 	send({"t": "reveal_hand"})
 

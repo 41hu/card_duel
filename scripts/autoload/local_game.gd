@@ -335,6 +335,11 @@ func send_wind_bow_move(direction: Dictionary = {}, cancel: bool = false):
 	if not game: return
 	game.process_action(game._response_attacker, {"action": "wind_bow_move", "direction": direction, "cancel": cancel})
 
+# 除根：消耗近战/重击卡清除所在格或相邻格的蔓生种子
+func send_vine_remove(card_uid: int, pos: Dictionary):
+	if not game: return
+	game.process_action(game.current_player, {"action": "vine_remove", "card_uid": card_uid, "pos": pos})
+
 func send_weapon_choice(accept: bool):
 	if not game: return
 	game.confirm_weapon(game.current_player, accept)

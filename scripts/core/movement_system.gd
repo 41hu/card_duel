@@ -76,8 +76,10 @@ func get_hand_limit(player_idx: int) -> int:
 	return geometry.hand_limit(player_idx, match_ref.get_player(player_idx).position) + match_ref.char_skills.hand_limit_bonus(player_idx)
 
 # 位移统计（马拉松冠军称号判定）：任何角色位置移动一格 +1（主动移动/推人/被推/吸引/威慑）
+# 所有位移的统一收口：这里挂蔓生树妖的生根检查与致残位移伤害检查
 func _add_move_stat(player_idx: int):
 	match_ref.stats[player_idx]["moves"] += 1
+	match_ref._on_unit_moved(player_idx)
 
 # 推人逻辑
 func _can_push(player_idx: int, push_idx: int) -> bool:

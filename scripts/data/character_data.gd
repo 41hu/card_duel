@@ -17,6 +17,7 @@ const CHARACTER_DB = {
 	"spellblade":  {name="魔剑士", hp=23, near=6, range=2, magic=4, skill="spellblade",   skill_desc="魔力引导：装备近战武器时，弃「魔法」卡耗1攻击点视作打出「近战」，弃「吟唱」卡耗2攻击点视作打出「重击」，均无视距离（可被格挡）", skill_turn_limit=-1},
 	"miko":        {name="巫女",   hp=24, near=2, range=3, magic=3, skill="miko",         skill_desc="结界：道具卡放置鸟居，自己踩上+2HP并全属性+1（永久）；敌人踩上进入神隐（跳过下回合）；鸟居可被摧毁卡拆除"},
 	"armor_feeder": {name="饲甲人", hp=27, near=4, range=3, magic=3, skill="armor_feeder", skill_desc="活铠：自带全类型魔甲（耐久2，无完全免疫）攻击减半；耐久<2回合开始扣1HP回1耐久；护甲卡改修复活铠；摧毁免疫"},
+	"vine_ent":    {name="蔓生树妖", hp=25, near=3, range=3, magic=4, skill="vine_ent",     skill_desc="生根：所在地格无蔓生种子则立即获得1层（位移后/回合开始触发，该格种子不可破坏，自身无视种子效果）；播种：每回合限1次在邻近地格放置蔓生种子（上限1/格）；神经毒素：单位到达种子格获得1层致残（永久可叠加），致残单位每次位移受2点真伤（无视护甲，DoT统计）并掉1层；摧残：对带致残单位攻击伤害+1"},
 }
 
-const CHARACTER_IDS = ["fighter", "sharpshooter", "mage", "paladin", "assassin", "priest", "berserker", "warlock", "gunslinger", "hunter", "tracker", "wardsmith", "spellblade", "miko", "armor_feeder"]
+const CHARACTER_IDS = ["fighter", "sharpshooter", "mage", "paladin", "assassin", "priest", "berserker", "warlock", "gunslinger", "hunter", "tracker", "wardsmith", "spellblade", "miko", "armor_feeder", "vine_ent"]

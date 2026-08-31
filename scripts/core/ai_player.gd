@@ -1089,6 +1089,31 @@ func decide_action(player_idx: int) -> Dictionary:
 						if s > best_score:
 							best_score = s
 							best_action = {"action": "use_skill", "skill": "mage_phantom", "card_uid": phantom_uid}
+			"vine_sow":
+				# 播种（蔓生树妖 AI）：邻近有可播种空格就种（越靠近对手价值越高）
+				var geo2 = match_ref.movement.geometry
+				var best_pos: Vector2i = Vector2i.ZERO
+				var best_dist = 999
+				for dir2 in (geo2.HEX_DIRS if geo2._mode == MapGeometry.MODE_HEX else [geo2.DIR_LEFT, geo2.DIR_RIGHT]):
+					var pos2 = geo2.step(p.position, dir2)
+					if not geo2.is_valid(pos2): continue
+					var blocked = false
+					for pp in match_ref.players:
+						if pp.get("eliminated", false): continue
+						if pp.position == pos2: blocked = true; break
+					if blocked: continue
+					for it in match_ref.items:
+						if it.item_type == "vine_seed" and it.position == pos2: blocked = true; break
+					if blocked: continue
+					var d = geo2.distance(pos2, opp.position)
+					if d < best_dist:
+						best_dist = d
+						best_pos = pos2
+				if best_dist < 999:
+					var s2 = 7 if best_dist <= 1 else 4
+					if s2 > best_score:
+						best_score = s2
+						best_action = {"action": "use_skill", "skill": "vine_sow", "pos": geo2.to_dict(best_pos)}
 			"assassin_move":
 				if distance > 0:
 					var has_near = false
@@ -1159,6 +1184,22 @@ func decide_action(player_idx: int) -> Dictionary:
 				if hb.get("score", -1) > best_score:
 					best_score = hb.get("score", -1)
 					best_action = hb.get("action", {})
+
+	# 12.5 除根：手牌有近战/重击且附近有蔓生种子时清除（防种子控场，代价=1攻击点+卡）
+	var root_uid = -1
+	for card in hand:
+		if card.type_id in ["near", "heavy"]:
+			root_uid = card.uid
+			break
+	if root_uid >= 0:
+		var g3 = match_ref.movement.geometry
+		for it in match_ref.items:
+			if it.item_type == "vine_seed" and g3.distance(p.position, it.position) <= 1:
+				var s3 = 6
+				if s3 > best_score:
+					best_score = s3
+					best_action = {"action": "vine_remove", "card_uid": root_uid, "pos": g3.to_dict(it.position)}
+				break
 
 	# 13. 负分动作不执行（无有效动作就结束，不浪费牌/不送低价值攻击）
 	if best_action.is_empty() or best_score <= 0:

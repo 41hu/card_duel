@@ -197,6 +197,7 @@ func has_active_skills(player_idx: int) -> Array:
 		"priest":
 			# 真言：手牌有回复卡（heal_3/heal_5）时才可用（每回合限1次由 skill_turn_limit 控制）
 			if _has_heal_card(player_idx): skills.append("priest_chant")
+		"vine_ent": skills.append("vine_sow")
 		"hunter":
 			# 埋伏：手牌有远程攻击牌（range/pierce）时才显示
 			if _has_range_attack(player_idx): skills.append("hunter_ambush")
@@ -267,6 +268,7 @@ func skill_button_name(skill: String) -> String:
 		"spellblade_channel": return "魔力引导"
 		"priest_chant": return "真言"
 		"mage_phantom": return "幻影"
+		"vine_sow": return "播种"
 	return skill
 
 func use_skill(player_idx: int, skill: String, params: Dictionary) -> Dictionary:
@@ -302,6 +304,7 @@ func use_skill(player_idx: int, skill: String, params: Dictionary) -> Dictionary
 		"spellblade_channel": skill_result = _spellblade_channel(player_idx, params)
 		"priest_chant": skill_result = _priest_chant(player_idx, params)
 		"mage_phantom": skill_result = _mage_phantom(player_idx, params)
+		"vine_sow": skill_result = _vine_sow(player_idx, params)
 		_: skill_result = {success=false, msg="未知技能"}
 	if not skill_result.get("success", false):
 		p.skills_used.pop_back()
@@ -408,6 +411,25 @@ func _priest_chant(player_idx: int, params: Dictionary) -> Dictionary:
 	# 弃置回复卡（进弃牌堆）
 	cs.discard_card(uid)
 	return _ms._begin_priest_chant(player_idx, card, int(params.get("target", -1)))
+
+# 播种（蔓生树妖）：每回合限1次，在邻近地格放置1层蔓生种子（上限1/格，只能放无单位空格）
+func _vine_sow(player_idx: int, params: Dictionary) -> Dictionary:
+	var geo = _ms.movement.geometry
+	var pos = geo.from_dict(params.get("pos", {}))
+	if not geo.is_valid(pos):
+		return {success=false, msg="无效位置"}
+	if geo.distance(_ms.players[player_idx].position, pos) != 1:
+		return {success=false, msg="只能播种在邻近地格"}
+	for p in _ms.players:
+		if p.get("eliminated", false): continue
+		if p.position == pos:
+			return {success=false, msg="不能播种在有单位的格子"}
+	for it in _ms.items:
+		if it.item_type == "vine_seed" and it.position == pos:
+			return {success=false, msg="该格已有蔓生种子"}
+	_ms.items.append({item_type="vine_seed", position=pos, owner=player_idx})
+	_ms.add_log(player_idx, "播种: 在(%d,%d)放置蔓生种子" % [pos.x, pos.y])
+	return {success=true}
 
 # 被动：装备护甲耐久上限 +1（铸甲师 max_durability=4；由 equip_armor 调用）
 func armor_durability_bonus(player_idx: int) -> int:

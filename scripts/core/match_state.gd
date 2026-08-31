@@ -391,8 +391,8 @@ func process_action(player_idx: int, action_data: Dictionary) -> Dictionary:
 			if action_data.get("skill", "") == "_cheat": return _cheat_card(player_idx, action_data.get("type_id", ""))
 			if action_data.get("skill", "") == "_debug_end": return _debug_end(player_idx, action_data.get("win", true))
 			return _handle_skill(player_idx, action_data.get("skill", ""), action_data)
-	"fighter_choice": return _handle_fighter_choice(player_idx, action_data)
-	"vine_remove": return _handle_vine_remove(player_idx, action_data)
+		"fighter_choice": return _handle_fighter_choice(player_idx, action_data)
+		"vine_remove": return _handle_vine_remove(player_idx, action_data)
 	return {success=false, msg="未知行动"}
 
 # 除根（反制蔓生种子）：消耗 1 张近战/重击卡 + 1 攻击行动点，

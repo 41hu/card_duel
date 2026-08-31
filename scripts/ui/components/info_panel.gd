@@ -39,7 +39,7 @@ const _STATUS_ICONS := {
 	"no_move": {"icon": "移", "accent": Color(0.85, 0.85, 0.85), "name": "无法移动"},
 	"paladin_counter": {"icon": "反", "accent": Color(0.9, 0.8, 0.4), "name": "反击"},
 	"tracker_chase": {"icon": "追", "accent": Color(0.6, 0.85, 0.5), "name": "追击"},
-	"vine_cripple": {"icon": "致", "accent": Color(0.75, 0.45, 0.3), "name": "致残"},
+	"vine_cripple": {"icon": "残", "accent": Color(0.75, 0.45, 0.3), "name": "致残"},
 	"神隐": {"icon": "隐", "accent": Color(0.6, 0.5, 0.9), "name": "神隐"},
 }
 # 状态槽一行上限（面板宽度约 10 个），超出合并为 "+N" 槽，详情放 tooltip

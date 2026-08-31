@@ -207,7 +207,7 @@ card_duel/
 ### 8.4 联网架构
 ```
 ECS 云服务器 (Godot headless, 权威服务端, 17890)
-    ↕ WebSocket (JSON)
+	↕ WebSocket (JSON)
 电脑客户端 ── 手机客户端 (Android 导出)
 ```
 - 服务端跑完整 `match_state.gd`；客户端纯 UI，操作转发至服务端

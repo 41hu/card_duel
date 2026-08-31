@@ -106,6 +106,17 @@ func _ready():
 		_out("%s | 胜 %d/10 | 夹子 %.1f | 埋伏 %.1f次 | 主动攻击 %.1f | 穿心打出 %.1f | 半场(≥8)回合 %.1f" % [
 			m.label, stats.wins, stats.snares, stats.ambushes, stats.attacks, stats.pierces, stats.back_turns])
 
+	# ---- 4.7) 法师行为统计（强化爆发节奏 / 幻影保命，各 10 局）----
+	_out("=== 4.7 法师行为统计（各 10 局，AI 难度 hard）===")
+	for m in [{"opp": "fighter", "label": "法师 vs 斗士"},
+			  {"opp": "hunter", "label": "法师 vs 猎人"},
+			  {"opp": "priest", "label": "法师 vs 牧师"},
+			  {"opp": "warlock", "label": "法师 vs 邪术师"},
+			  {"opp": "paladin", "label": "法师 vs 圣骑士"}]:
+		var ms := _run_mage_series(str(m.opp), 10)
+		_out("%s | 胜 %d/10 | 强化 %.1f次 | 幻影 %.1f次 | 主动攻击 %.1f" % [
+			m.label, ms.wins, ms.empowers, ms.phantoms, ms.attacks])
+
 	# ---- 4.5) 牧师强度验证（默认卡组互打 30 局，P1=牧师；加大样本看趋势）----
 	_out("=== 4.5 牧师强度（24/3/4 回复+1，默认卡组互打 30 局）===")
 	for m in [{"opp": "fighter", "label": "牧师 vs 斗士"},
@@ -256,6 +267,60 @@ func _run_hunter_series(opp_char: String, n: int) -> Dictionary:
 				back_turns += 1
 	return {"wins": wins, "snares": snares * 1.0 / n, "ambushes": ambushes * 1.0 / n,
 			"attacks": attacks * 1.0 / n, "pierces": pierces * 1.0 / n, "back_turns": back_turns * 1.0 / n}
+
+# 跑 N 局法师（P1）行为统计：胜场 / 弃牌强化次数 / 幻影次数 / 主动攻击
+func _run_mage_series(opp_char: String, n: int) -> Dictionary:
+	var wins := 0
+	var empowers := 0
+	var phantoms := 0
+	var attacks := 0
+	for i in range(n):
+		var g = MatchStateClass.new()
+		g.disable_timeout = true
+		var ais: Array = [AIPlayerClass.new(g, 2), AIPlayerClass.new(g, 2)]
+		_winner = -1
+		g.weapon_prompt.connect(func(pi: int, w: Dictionary):
+			g.confirm_weapon(pi, ais[pi].decide_weapon(pi, w))
+		)
+		g.response_needed.connect(func(di: int, info: Dictionary):
+			var dec = ais[di].decide_response(di, info.get("card", ""))
+			if dec.respond:
+				g.process_response(di, true, dec.card_uid)
+			else:
+				g.skip_response(di)
+		)
+		g.game_ended.connect(func(r: Dictionary): _winner = int(r.get("winner", -1)))
+		var mage_deck: Array = AIDeckBuilder.build_deck("mage", opp_char, 2)
+		g.init_match(opp_char, "mage", 1, [DeckData.default_deck(), mage_deck], true)
+		g._start_game()
+		var guard := 0
+		while g.phase != Config.Phase.GAME_OVER and guard < 600:
+			guard += 1
+			if g.turn_number > 60:
+				break
+			var cur = g.current_player
+			if g.waiting_for_discard:
+				var cs = g.card_systems[cur]
+				var need = max(0, cs.hand.size() - g.movement.get_hand_limit(cur))
+				if need == 0: need = 1
+				g.confirm_discard(cur, ais[cur].decide_discard(cur, need))
+				continue
+			var act = ais[cur].decide_action(cur)
+			var r = g.process_action(cur, act)
+			if not r.get("success", false):
+				g.process_action(cur, {"action": "end_turn"})
+		if _winner == 1: wins += 1
+		for e in g.action_log:
+			if e.get("player", -1) == 1:
+				var msg: String = str(e.get("msg", ""))
+				if msg.contains("弃牌强化"): empowers += 1
+				elif msg.contains("幻影"): phantoms += 1
+		var cp = g.stats[1].get("cards_played", {})
+		for tid in cp:
+			if tid in ["near", "heavy", "range", "pierce", "magic", "chant"]:
+				attacks += int(cp[tid])
+	return {"wins": wins, "empowers": empowers * 1.0 / n, "phantoms": phantoms * 1.0 / n,
+			"attacks": attacks * 1.0 / n}
 
 # 同步跑一局（AI 决策循环，无帧依赖），返回胜者索引（-1=超时平局）
 func _run_game(p0_char: String, p1_char: String, p0_deck: Array, p1_deck: Array) -> int:

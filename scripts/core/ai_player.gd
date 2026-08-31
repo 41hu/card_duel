@@ -132,6 +132,8 @@ func _opp_best_damage(player_idx: int) -> int:
 # ---------- 记牌系统 ----------
 # 共享牌堆（默认）：全局某类牌剩余（牌堆+手牌循环中）= 初始 − 双方打出/响应消耗 − 共享弃牌堆
 # 独立牌堆（PVE）：某玩家牌堆中剩余 = 初始 − 该玩家手牌 − 该玩家弃牌 − 该玩家日志打出/响应
+# 注意（拟人化 2026-08-25）：本函数只应传**自己**的索引——AI 知道自己卡组构成（自己组的/默认），
+# 直接数自己数组合理；**不得传对方索引**（会直接暴露对方牌堆构成，见 _opp_main_attack_type 已改推测式）
 func _global_left(player_idx: int, type_id: String) -> int:
 	# 独立牌堆（自定义卡组）：直接数「牌堆剩余 + 手牌 + 弃牌」= 该卡实际可获取总数。
 	# 不能用 CARD_COUNTS（默认 78 张基数）推算——40 张构筑里该卡可能只带 1-2 张，
@@ -353,8 +355,8 @@ func _near_threat_imminent(player_idx: int) -> bool:
 	var dist = match_ref.movement.get_distance()
 	return dist <= 3 and match_ref.card_systems[opp].hand.size() >= 2
 
-# 对方主要进攻类型：定位优先；hard 记牌修正——对手牌堆某类攻击牌剩余明显多于定位类时
-# （对方抽到该类攻击牌的概率高），防御转向该类
+# 对方主要进攻类型：定位优先；hard 记牌修正——对方已打出的攻击牌明显偏向某类时，
+# 防御转向该类（拟人化：通过出牌记录推测，不直接读对方牌堆/手牌）
 func _opp_main_attack_type(player_idx: int) -> String:
 	var opp = match_ref.get_player(1 - player_idx)
 	var role = _current_role(1 - player_idx)
@@ -363,11 +365,14 @@ func _opp_main_attack_type(player_idx: int) -> String:
 	if opp.magic_power >= opp.near_power - 1 and opp.magic_power >= opp.range_power - 1:
 		return "magic"
 	if difficulty < DIFF_HARD: return role
+	# hard 记牌（拟人化 2026-08-25）：不再读对方牌堆数组（独立牌堆下会暴露对方卡组构成），
+	# 改为统计对方已打出的攻击牌（日志：打出/响应）——对方持续用某类攻击 → 主攻该类。
+	# 人类数牌同样只能看到"对方打过什么"，看不到剩余构成（除非牌堆轮完一轮）
 	var counts := {}
 	for t in ["near", "range", "magic"]:
 		counts[t] = 0
 		for atk in _role_types(t):
-			counts[t] += _global_left(1 - player_idx, atk)
+			counts[t] += _played_from_log(1 - player_idx, atk)
 	var role_count: int = counts.get(role, 0)
 	for t in ["near", "range", "magic"]:
 		if counts[t] > role_count + 3:
@@ -564,6 +569,15 @@ func decide_action(player_idx: int) -> Dictionary:
 				if my_magic <= 1:
 					continue
 		var s = _attack_score(player_idx, dmg, opp_idx, stance)
+		# 牵制预期减伤（拟人化 2026-08-31）：对方远程面板高（牵制值大）且攻击可被牵制
+		# （range/pierce/magic/chant）→ 预期被牵制扣减（不读手牌，按对方远程面板估牵制值）。
+		# 例：快枪手(远6)在距离3 时牵制值 3 → 法师吟唱 13 预期降到 10
+		if tid in ["range", "pierce", "magic", "chant"]:
+			var opp_p = match_ref.get_player(opp_idx)
+			if opp_p.range_power >= 5:
+				var restrain = max(0, opp_p.range_power - distance)
+				if restrain > 0:
+					s -= min(restrain * 2, max(1, dmg))  # 预期减伤（保守半量惩罚）
 		# 法术型对策：近战/重击面板占优（法术型近 2 格挡弱）且逼迫消耗其闪避 → 加分；
 		# 远程/穿心对法术型易被闪避（她们手牌魔法卡多 = 闪避多）→ 降分
 		if _opp_is_magic_type(player_idx):
@@ -999,6 +1013,18 @@ func decide_action(player_idx: int) -> Dictionary:
 							buffed = max(buffed, _real_damage(player_idx, card.type_id))
 					buffed += 2
 					var s = _attack_score(player_idx, buffed, opp_idx, stance) + 2
+					# 牵制预期：对方远程面板高（牵制值大）→ 强化后的魔法爆发会被牵制减伤
+					var opp_p2 = match_ref.get_player(opp_idx)
+					if opp_p2.range_power >= 5:
+						var restrain2 = max(0, opp_p2.range_power - distance)
+						if restrain2 > 0:
+							s -= min(restrain2 * 2, max(1, buffed))
+					# 法师 playbook（拟人化记牌 2026-08-25）：爆发前评估对方闪避威胁——
+					# 对方已用过闪避（日志解析 _opp_dodge_threat）或魔法流手牌多（存量高）→
+					# 本次强化后的爆发大概率被闪避（强化层打出即清除 = 白叠）→ 降分，
+					# 宁可先打低价值攻击骗出闪避、下回合再叠层爆发（不直接读对方手牌）
+					if _opp_dodge_threat(player_idx) or _opp_is_magic_type(player_idx):
+						s -= 10
 					if s > best_score:
 						best_score = s
 						best_action = {"action": "use_skill", "skill": "mage_discard", "card_uid": discard_uid}
@@ -1013,14 +1039,35 @@ func decide_action(player_idx: int) -> Dictionary:
 								best_score = s
 								best_action = {"action": "use_skill", "skill": "priest_chant", "card_uid": card.uid, "target": opp_idx}
 			"mage_phantom":
-				# 幻影：危险/濒死档且无其他更好行动时，弃魔法卡换闪避保命
-				if stance.get("stance", "") in ["danger", "flee"]:
+				# 幻影：概率闪避（层数/(层数+1)），成本 = 弃魔法/吟唱卡（确定闪避素材）。
+				# 平时不滥用（弃确定闪避换概率闪避 = 亏），只在正收益场景用：
+				#   a) 魔法溢出（手牌魔法≥2）且危险/威胁 → 弃1留1：确定闪避+概率闪避双层防御
+				#   b) 对方魔法流手牌多（即将爆发）→ 预置幻影挡爆发
+				var magic_count = 0
+				for c in hand:
+					if c.type_id == "magic": magic_count += 1
+				var in_danger = stance.get("stance", "") in ["danger", "flee"]
+				var opp_burst = _opp_is_magic_type(player_idx) and match_ref.card_systems[opp_idx].hand.size() >= 4
+				if (in_danger and magic_count >= 2) or opp_burst:
+					# 优先弃魔法卡（吟唱留作爆发核心），没有才考虑吟唱（换 2 层）
+					var phantom_uid = -1
 					for card in hand:
-						if card.type_id in ["magic", "chant"]:
-							var s = 8 if card.type_id == "chant" else 6
-							if s > best_score:
-								best_score = s
-								best_action = {"action": "use_skill", "skill": "mage_phantom", "card_uid": card.uid}
+						if card.type_id == "magic":
+							phantom_uid = card.uid
+							break
+					if phantom_uid < 0:
+						for card in hand:
+							if card.type_id == "chant":
+								phantom_uid = card.uid
+								break
+					if phantom_uid >= 0:
+						var s := 8
+						if magic_count >= 2: s += 6  # 魔法溢出：弃1留1，双层防御
+						if opp_burst: s += 4  # 预置挡爆发
+						if in_danger: s += 2
+						if s > best_score:
+							best_score = s
+							best_action = {"action": "use_skill", "skill": "mage_phantom", "card_uid": phantom_uid}
 			"assassin_move":
 				if distance > 0:
 					var has_near = false

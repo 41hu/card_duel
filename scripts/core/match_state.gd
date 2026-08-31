@@ -774,6 +774,11 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		if final_damage <= 0 and before_skill > 0 and players[defender_idx].char_id == "paladin":
 			players[defender_idx].buffs.append({type="paladin_counter", value=1, duration=2, turn=turn_number})
 			add_log(defender_idx, "反击: 圣盾完全抵挡，下次攻击伤害+1")
+		# 尖刺链枷：近战命中赋予1层致残、重击命中赋予2层（致残：位移时受2点真伤，永久可叠加）
+		if not players[attacker_idx].weapon.is_empty() \
+				and players[attacker_idx].weapon.id == "spiked_flail" \
+				and pending_attack_card in ["near", "heavy"]:
+			_apply_cripple(defender_idx, 2 if pending_attack_card == "heavy" else 1)
 		# 对战统计：伤害（来源=攻击）
 		stats[attacker_idx]["damage_dealt"] += final_damage
 		# 单次最大伤害（致命一击称号判定）
@@ -1060,6 +1065,17 @@ func _ensure_vine_seed(player_idx: int):
 		if it.item_type == "vine_seed" and it.position == players[player_idx].position:
 			return
 	items.append({item_type="vine_seed", position=players[player_idx].position, owner=player_idx})
+
+# 致残：叠加层数（永久持续），位移时受2点真伤并掉1层（蔓生种子/尖刺链枷共用）
+func _apply_cripple(player_idx: int, layers: int):
+	var p = players[player_idx]
+	for b in p.buffs:
+		if b.type == "vine_cripple":
+			b.value += layers
+			add_log(player_idx, "致残+%d（当前%d层，位移时受2点真伤）" % [layers, b.value])
+			return
+	p.buffs.append({type="vine_cripple", value=layers, duration=-2})
+	add_log(player_idx, "致残+%d（位移时受2点真伤）" % layers)
 
 # 所有位移的统一收口（movement._add_move_stat 调用）：
 # 1) 树妖位移后生根；2) 致残单位位移受 2 点真伤（无视护甲，DoT 统计）并掉 1 层

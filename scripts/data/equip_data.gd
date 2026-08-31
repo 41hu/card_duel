@@ -8,6 +8,7 @@ const WEAPON_DB = {
 	"bloodthirst":    {name="嗜血",     type="near",  effect="vampire",    value=2, desc="近战≥3伤害时回复2HP"},
 	"lunge":          {name="突刺",     type="near",  effect="lunge",      value=3, desc="近战+1，移动贴脸后额外+3"},
 	"hammer":         {name="重锤",     type="near",  effect="hammer_pierce", value=1, desc="命中后对方护甲额外-1耐久；伤害归0时（闪避/格挡）不触发"},
+	"spiked_flail":   {name="尖刺链枷", type="near",  effect="cripple_apply", value=1, desc="近战命中赋予1层致残；重击命中赋予2层致残（致残：位移时受2点真伤，永久可叠加）"},
 
 	# 远程武器
 	"longbow":        {name="长弓",     type="range", effect="range_buff", value=1, desc="远程+1，距离衰减-1"},

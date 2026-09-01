@@ -641,7 +641,7 @@ func _on_confirm_card():
 	if _selected_type in ["move", "destroy"]:
 		match _selected_type:
 			"move": _popup_move(_selected_uid)
-		"destroy": _popup_destroy(_selected_uid)
+			"destroy": _popup_destroy(_selected_uid)
 		_selected_uid = -1
 		confirm_btn.visible = false
 	elif _selected_type == "seize" and _game_state.players.size() <= 2:
@@ -661,7 +661,6 @@ func _on_confirm_card():
 		# 附近有蔓生种子：二选一（正常攻击 / 除根）
 		_show_attack_or_root(_selected_uid, _selected_type)
 		_selected_uid = -1
-		confirm_btn.visible = false
 		confirm_btn.visible = false
 	else:
 		if _has_matching_armor(_selected_type):
@@ -1064,6 +1063,8 @@ func _popup_destroy(card_uid: int):
 	var vb = _popup_box(c, 700, 440)
 	vb.add_child(_lbl("摧毁: 选择目标"))
 	var multi = _game_state.players.size() > 2  # 多人局：选完摧毁类型再选目标
+	var pls = _game_state.players
+	var opp = _find_opponent(pls)
 	var hb = _mkbtn("盲丢对方1手牌")
 	hb.pressed.connect(func():
 		c.queue_free()
@@ -1075,9 +1076,7 @@ func _popup_destroy(card_uid: int):
 			_n().send_play_card(card_uid, {"destroy_target": "hand"})
 	)
 	vb.add_child(hb)
-	var pls = _game_state.players
 	# 多人局：武器/防具按钮始终显示（点选目标后由核心校验目标是否有对应装备）
-	var opp = _find_opponent(pls)
 	if multi or not opp.weapon.is_empty():
 		var wb = _mkbtn("摧毁对方武器" + ((": " + opp.weapon.data.name) if not opp.weapon.is_empty() else ""))
 		wb.pressed.connect(func():

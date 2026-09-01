@@ -9,6 +9,8 @@
 # hell（内测）= 全部 + 全知（直接读对手手牌：响应预测/威胁评估精确化）+ 高复活率。
 extends RefCounted
 
+const MapGeometry = preload("res://scripts/core/map_geometry.gd")
+
 const DIFF_EASY = 0
 const DIFF_NORMAL = 1
 const DIFF_HARD = 2

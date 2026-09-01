@@ -1280,23 +1280,16 @@ func _show_exposed_hand_pick(card_uid: int, type_id: String, target_idx: int, ex
 # ---- 蔓生树妖：除根与播种交互 ----
 var _skip_root_choice: bool = false
 
-# 附近（所在格+相邻格）是否有可除根的蔓生种子（树妖扎根格的种子不可破坏，不计入）
+# 附近（所在格+相邻格）是否有可除根的蔓生种子
 func _has_removable_seed() -> bool:
 	var me = _find_self()
 	if me.is_empty(): return false
 	var geo = MapGeometry.new()
 	geo.set_mode(MapGeometry.MODE_HEX if _board_hex else MapGeometry.MODE_LINEAR)
 	var my_pos = geo.from_dict(me.get("position", {}))
-	var rooted := {}
-	for p in _game_state.get("players", []):
-		if p.get("char_id", "") == "vine_ent":
-			var rp = geo.from_dict(p.get("position", {}))
-			rooted[rp.x * 100 + rp.y] = true
 	for it in _game_state.get("items", []):
 		if it.get("item_type", "") != "vine_seed": continue
-		var sp = geo.from_dict(it.get("position", {}))
-		if rooted.has(sp.x * 100 + sp.y): continue
-		if geo.distance(my_pos, sp) <= 1:
+		if geo.distance(my_pos, geo.from_dict(it.get("position", {}))) <= 1:
 			return true
 	return false
 

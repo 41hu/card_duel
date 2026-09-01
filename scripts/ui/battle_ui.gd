@@ -654,8 +654,7 @@ func _on_confirm_card():
 		_selected_uid = -1
 		confirm_btn.visible = false
 	elif _selected_type == "item":
-		_popup_item(_selected_uid)
-		_selected_uid = -1
+		_popup_item(_selected_uid)  # 进入棋盘选格模式（保留 _selected_uid 供点击后发送）
 		confirm_btn.visible = false
 	elif _selected_type in ["near", "heavy"] and not skip_root and _has_removable_seed():
 		# 附近有蔓生种子：二选一（正常攻击 / 除根）

@@ -37,7 +37,7 @@ var _item_types: Dictionary = {
 		"on_step": _torii_step,
 	},
 	"vine_seed": {
-		"name": "蔓",
+		"name": "蔓生种子",
 		"desc": "蔓生树妖专属：踩到的单位获得1层「致残」（永久可叠加）；带致残的单位每次位移受2点真实伤害并消去1层；持续存在不因踩踏消失；只能被近战/重击除根或摧毁卡拆除（限所在格/相邻格）",
 		"stack": "single",
 		"destroy_rule": "one",

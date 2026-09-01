@@ -164,7 +164,7 @@ func trigger_on_step(player_idx: int) -> int:
 			continue
 		var t = get_item_type(it.item_type)
 		if t.has("on_step") and t.get("on_step") != null:
-			int(t["on_step"].call(player_idx, it))
+			t["on_step"].call(player_idx, it)
 			# 蔓生种子持续存在（多次触发致残），其余 on_step 道具（鸟居等）触发即消耗
 			if it.item_type != "vine_seed":
 				match_ref.items.remove_at(i)

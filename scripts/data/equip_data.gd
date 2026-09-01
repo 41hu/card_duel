@@ -13,7 +13,7 @@ const WEAPON_DB = {
 	# 远程武器
 	"longbow":        {name="长弓",     type="range", effect="range_buff", value=1, desc="远程+1，距离衰减-1"},
 	"repeater":       {name="连弩",     type="range", effect="restrain_penalty", value=2, desc="牵制额外-2"},
-	"hawkeye":        {name="鹰眼",     type="range", effect="reveal_hand", value=0, desc="命中后查看对方手牌"},
+	"hawkeye":        {name="鹰眼",     type="range", effect="reveal_hand", value=0, desc="命中后查看对方手牌并赋予暴露1回合（暴露期间对其夺取/摧毁可指定选择手牌）"},
 	"toxic_fang":     {name="毒牙",     type="range", effect="poison",     value=2, desc="中毒2层（每回合-1HP，可叠加）"},
 	"wind_god_bow":   {name="风神弓",   type="range", effect="pierce_move", value=1, desc="穿心命中并造成伤害后，可控制对方移动1格（方向自由）"},
 

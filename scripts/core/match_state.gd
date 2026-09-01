@@ -417,6 +417,10 @@ func _handle_vine_remove(player_idx: int, data: Dictionary) -> Dictionary:
 			found = i
 			break
 	if found < 0: return {success=false, msg="该格没有蔓生种子"}
+	# 树妖所在格的种子扎根不可破坏
+	for p in players:
+		if p.char_id == "vine_ent" and p.position == pos:
+			return {success=false, msg="该格种子扎根不可破坏"}
 	# 消耗攻击行动点（与打出该攻击卡一致的成本；默认 1）
 	var cost = char_skills.get_attack_cost(player_idx, card.type_id)
 	if cost < 0: cost = int(Config.CARD_DB[card.type_id].get("ap", 1))

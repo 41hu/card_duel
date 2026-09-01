@@ -968,6 +968,16 @@ func _on_board_cell_clicked(cell_pos: Vector2i):
 		card_info.text = ""
 		status_label.text = ""
 		return
+	if _selected_type == "vine_remove" and _is_my_turn:
+		# 除根：点击地格选择要除根的蔓生种子（与摧毁-拆除道具同交互）
+		_n().send_vine_remove(_selected_uid, pos_dict)
+		_selected_uid = -1
+		_selected_type = ""
+		confirm_btn.visible = false
+		cancel_btn.visible = false
+		card_info.text = ""
+		status_label.text = ""
+		return
 	if _selected_type != "item" or not _is_my_turn:
 		return
 	_n().send_play_card(_selected_uid, {"trap_pos": pos_dict})
@@ -1269,17 +1279,24 @@ func _show_exposed_hand_pick(card_uid: int, type_id: String, target_idx: int, ex
 # ---- 蔓生树妖：除根与播种交互 ----
 var _skip_root_choice: bool = false
 
-# 附近（所在格+相邻格）是否有可除根的蔓生种子
+# 附近（所在格+相邻格）是否有可除根的蔓生种子（树妖扎根格的种子不可破坏，不计入）
 func _has_removable_seed() -> bool:
 	var me = _find_self()
 	if me.is_empty(): return false
 	var geo = MapGeometry.new()
 	geo.set_mode(MapGeometry.MODE_HEX if _board_hex else MapGeometry.MODE_LINEAR)
 	var my_pos = geo.from_dict(me.get("position", {}))
+	var rooted := {}
+	for p in _game_state.get("players", []):
+		if p.get("char_id", "") == "vine_ent":
+			var rp = geo.from_dict(p.get("position", {}))
+			rooted[rp.x * 100 + rp.y] = true
 	for it in _game_state.get("items", []):
-		if it.get("item_type", "") == "vine_seed":
-			if geo.distance(my_pos, geo.from_dict(it.get("position", {}))) <= 1:
-				return true
+		if it.get("item_type", "") != "vine_seed": continue
+		var sp = geo.from_dict(it.get("position", {}))
+		if rooted.has(sp.x * 100 + sp.y): continue
+		if geo.distance(my_pos, sp) <= 1:
+			return true
 	return false
 
 # 近战/重击打出时二选一：正常攻击 / 除根
@@ -1305,7 +1322,7 @@ func _show_attack_or_root(card_uid: int, type_id: String):
 	var root = _mkbtn("除根（清除种子，耗1攻击点）")
 	root.pressed.connect(func():
 		c.queue_free()
-		_show_root_pick(card_uid)
+		_enter_root_pick(card_uid)
 	)
 	vb.add_child(root)
 	var cl = _mkbtn("取消")
@@ -1313,37 +1330,13 @@ func _show_attack_or_root(card_uid: int, type_id: String):
 	vb.add_child(cl)
 	add_child(c)
 
-# 除根选格：列出所在格+相邻格中带种子的格
-func _show_root_pick(card_uid: int):
-	var me = _find_self()
-	var c = Control.new()
-	c.name = "RootPick"
-	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
-	var vb = _popup_box(c, 620, 420)
-	vb.add_child(_lbl("除根：选择要清除的蔓生种子"))
-	var geo = MapGeometry.new()
-	geo.set_mode(MapGeometry.MODE_HEX if _board_hex else MapGeometry.MODE_LINEAR)
-	var my_pos = geo.from_dict(me.get("position", {}))
-	var has_any = false
-	for it in _game_state.get("items", []):
-		if it.get("item_type", "") != "vine_seed": continue
-		var pos = geo.from_dict(it.get("position", {}))
-		if geo.distance(my_pos, pos) > 1: continue
-		has_any = true
-		var b = _mkbtn("(%d,%d) 的种子" % [pos.x, pos.y])
-		b.pressed.connect(func(p=pos):
-			c.queue_free()
-			_n().send_vine_remove(card_uid, {"x": p.x, "y": p.y})
-		)
-		vb.add_child(b)
-	if not has_any:
-		vb.add_child(_lbl("附近没有可除根的种子"))
-	var cl = _mkbtn("取消")
-	cl.pressed.connect(func(): c.queue_free())
-	vb.add_child(cl)
-	add_child(c)
+# 除根：进入棋盘选格模式（点击地格道具进行摧毁，与"摧毁-拆除道具"同交互）
+func _enter_root_pick(card_uid: int):
+	_selected_uid = card_uid
+	_selected_type = "vine_remove"
+	confirm_btn.visible = false
+	cancel_btn.visible = true
+	status_label.text = "点击要除根的蔓生种子所在格"
 
 # 播种（蔓生树妖）：选择邻近空格放置蔓生种子
 func _show_vine_sow_pick():

@@ -46,7 +46,8 @@ var _item_types: Dictionary = {
 }
 
 # 蔓生种子：单位到达获得 1 层致残（永久可叠加）；树妖自身无视（不获得）
-func _vine_seed_step(player_idx: int):
+# 签名与 on_step 统一（player_idx, it）——trigger_on_step 固定传 2 参
+func _vine_seed_step(player_idx: int, _it: Dictionary = {}):
 	var player = match_ref.get_player(player_idx)
 	if player.char_id == "vine_ent": return  # 树妖免疫自己的种子
 	var found = false

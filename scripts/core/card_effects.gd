@@ -111,6 +111,15 @@ func _item(player_idx: int, card: Dictionary):
 		pos = default_pos
 	# 一张通用道具卡：放什么道具由角色决定（默认陷阱，猎人=捕兽夹等）
 	var item_type = _m.char_skills.get_item_type(player_idx)
+	# 蔓生种子（树妖）：只能蔓延到已有蔓生种子地格的邻近格（生根种子亦可作蔓延源）
+	if item_type == "vine_seed":
+		var can_spread = false
+		for it in _m.items:
+			if it.item_type == "vine_seed" and geo.distance(it.position, pos) == 1:
+				can_spread = true
+				break
+		if not can_spread:
+			return {success=false, msg="蔓生种子只能蔓延到已有种子地格的邻近格"}
 	if _m.item_system.place_item(player_idx, item_type, pos):
 		_m.card_systems[player_idx].play_card(card.uid)
 		var it_name = _m.item_system.get_item_type(item_type).get("name", item_type)

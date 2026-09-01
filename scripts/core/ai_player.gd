@@ -1091,31 +1091,6 @@ func decide_action(player_idx: int) -> Dictionary:
 						if s > best_score:
 							best_score = s
 							best_action = {"action": "use_skill", "skill": "mage_phantom", "card_uid": phantom_uid}
-			"vine_sow":
-				# 播种（蔓生树妖 AI）：邻近有可播种空格就种（越靠近对手价值越高）
-				var geo2 = match_ref.movement.geometry
-				var best_pos: Vector2i = Vector2i.ZERO
-				var best_dist = 999
-				for dir2 in (geo2.HEX_DIRS if geo2._mode == MapGeometry.MODE_HEX else [geo2.DIR_LEFT, geo2.DIR_RIGHT]):
-					var pos2 = geo2.step(p.position, dir2)
-					if not geo2.is_valid(pos2): continue
-					var blocked = false
-					for pp in match_ref.players:
-						if pp.get("eliminated", false): continue
-						if pp.position == pos2: blocked = true; break
-					if blocked: continue
-					for it in match_ref.items:
-						if it.item_type == "vine_seed" and it.position == pos2: blocked = true; break
-					if blocked: continue
-					var d = geo2.distance(pos2, opp.position)
-					if d < best_dist:
-						best_dist = d
-						best_pos = pos2
-				if best_dist < 999:
-					var s2 = 7 if best_dist <= 1 else 4
-					if s2 > best_score:
-						best_score = s2
-						best_action = {"action": "use_skill", "skill": "vine_sow", "pos": geo2.to_dict(best_pos)}
 			"assassin_move":
 				if distance > 0:
 					var has_near = false

@@ -1235,7 +1235,6 @@ func _exec_skill(sk_id: String):
 	elif sk_id == "spellblade_channel": _show_spellblade_pick()
 	elif sk_id == "priest_chant": _show_priest_chant_pick()
 	elif sk_id == "mage_phantom": _show_mage_phantom_pick()
-	elif sk_id == "vine_sow": _show_vine_sow_pick()
 	else: _n().send_use_skill(sk_id)
 
 # ---- 鹰眼暴露：夺取/摧毁指定选择手牌 ----
@@ -1337,46 +1336,6 @@ func _enter_root_pick(card_uid: int):
 	confirm_btn.visible = false
 	cancel_btn.visible = true
 	status_label.text = "点击要除根的蔓生种子所在格"
-
-# 播种（蔓生树妖）：选择邻近空格放置蔓生种子
-func _show_vine_sow_pick():
-	var me = _find_self()
-	var c = Control.new()
-	c.name = "VineSowPick"
-	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
-	var vb = _popup_box(c, 620, 420)
-	vb.add_child(_lbl("播种：选择邻近地格放置蔓生种子"))
-	var geo = MapGeometry.new()
-	geo.set_mode(MapGeometry.MODE_HEX if _board_hex else MapGeometry.MODE_LINEAR)
-	var my_pos = geo.from_dict(me.get("position", {}))
-	var occupied := {}
-	for p in _game_state.get("players", []):
-		occupied[geo.from_dict(p.get("position", {})).x * 100 + geo.from_dict(p.get("position", {})).y] = true
-	var seeded := {}
-	for it in _game_state.get("items", []):
-		if it.get("item_type", "") == "vine_seed":
-			var sp = geo.from_dict(it.get("position", {}))
-			seeded[sp.x * 100 + sp.y] = true
-	var has_any = false
-	for dir in (geo.HEX_DIRS if geo._mode == MapGeometry.MODE_HEX else [geo.DIR_LEFT, geo.DIR_RIGHT]):
-		var pos = geo.step(my_pos, dir)
-		if not geo.is_valid(pos): continue
-		if occupied.has(pos.x * 100 + pos.y) or seeded.has(pos.x * 100 + pos.y): continue
-		has_any = true
-		var b = _mkbtn("(%d,%d)" % [pos.x, pos.y])
-		b.pressed.connect(func(p=pos):
-			c.queue_free()
-			_n().send_use_skill("vine_sow", {"pos": {"x": p.x, "y": p.y}})
-		)
-		vb.add_child(b)
-	if not has_any:
-		vb.add_child(_lbl("邻近没有可播种的空格"))
-	var cl = _mkbtn("取消")
-	cl.pressed.connect(func(): c.queue_free())
-	vb.add_child(cl)
-	add_child(c)
 
 # 铸甲师注魔：护甲满耐久时消耗一张攻击卡，把护甲换成该卡对应类型（每回合限一次）
 func _show_wardsmith_infuse():

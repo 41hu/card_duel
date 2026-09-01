@@ -944,11 +944,6 @@ func _handle_destroy(player_idx: int, card: Dictionary) -> Dictionary:
 		var pos: Vector2i = movement.geometry.from_dict(card.get("trap_pos", {}))
 		if not movement.geometry.is_valid(pos):
 			return {success=false, msg="请选择要摧毁的格子"}
-		# 蔓生种子仅限所在格/相邻格拆除（除根限制）
-		for it in items:
-			if it.item_type == "vine_seed" and it.position == pos \
-					and movement.geometry.distance(players[player_idx].position, pos) > 1:
-				return {success=false, msg="蔓生种子只能在所在格或相邻格拆除"}
 		if item_system.destroy_item_at(pos):
 			_use_card(player_idx, card); add_log(player_idx, "摧毁%s格道具" % movement.geometry.to_text(pos)); return {success=true}
 		return {success=false, msg="该格没有道具"}

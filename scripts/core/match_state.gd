@@ -305,6 +305,7 @@ func _start_game():
 	turn_phase = Config.TurnPhase.JUDGMENT
 	turn_number = 1
 	current_player = first_player
+	_ensure_vine_seed(current_player)  # 蔓生树妖：开局即生根（_advance 只在后续回合触发）
 	_judgment_phase()
 
 func _judgment_phase():

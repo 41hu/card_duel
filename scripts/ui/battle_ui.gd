@@ -882,7 +882,10 @@ func _show_item_popup(cell_pos: Vector2i):
 	var parts: Array = []
 	for tid in isys.get_type_order():
 		if counts.has(str(tid)):
-			parts.append("%s:%d" % [str(isys.get_item_type(str(tid)).get("name", tid)), counts[str(tid)]])
+			var dname = str(isys.get_item_type(str(tid)).get("name", tid))
+			# 蔓生种子悬浮框显示缩写"蔓"（卡面仍显示全名"蔓生种子"）
+			if str(tid) == "vine_seed": dname = "蔓"
+			parts.append("%s:%d" % [dname, counts[str(tid)]])
 	if parts.is_empty():
 		return
 	if _item_popup == null:

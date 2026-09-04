@@ -1055,6 +1055,9 @@ func _advance_to_next_player():
 		guard += 1
 	current_player = next
 	if current_player == first_player: turn_number += 1
+	# 回合切换：未完成的风神弓方向选择视为放弃（防断线/超时残留吞掉后续触发）
+	_wind_bow_pending = false
+	_wind_bow_target = -1
 	_ensure_vine_seed(current_player)  # 蔓生树妖：回合开始补漏生根
 	_judgment_phase()
 	state_changed.emit(get_full_state())

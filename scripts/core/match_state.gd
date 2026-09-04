@@ -457,12 +457,14 @@ func _do_play_card(player_idx: int, data: Dictionary) -> Dictionary:
 	# 角色专属消耗覆盖（如快枪手远程 2AP）；-1 = 用卡牌默认消耗
 	var cost = char_skills.get_attack_cost(player_idx, type_id)
 	if cost < 0: cost = cd.cost
+	# 妙手（盗贼）：夺取卡不消耗功能行动点
+	var rogue_free_seize = type_id == "seize" and player.char_id == "rogue"
 	var ap_ok = rapid_mode or infinite_play  # 快速模式/自定义「无限出牌」：不检查/不消耗行动点
 	if not ap_ok:
 		match cd.ap:
 			Config.APType.ATTACK: ap_ok = (player.ap_attack >= cost)
 			Config.APType.MOVE: ap_ok = (player.ap_move >= cost)
-			Config.APType.FUNCTION: ap_ok = (player.ap_function >= cost)
+			Config.APType.FUNCTION: ap_ok = true if rogue_free_seize else (player.ap_function >= cost)
 			Config.APType.NONE: ap_ok = true
 	if not ap_ok: return {success=false, msg="行动点不足"}
 	var free_sharpshooter = char_skills.can_attack_free(player_idx, type_id)
@@ -473,7 +475,9 @@ func _do_play_card(player_idx: int, data: Dictionary) -> Dictionary:
 		match cd.ap:
 			Config.APType.ATTACK: player.ap_attack -= cost
 			Config.APType.MOVE: player.ap_move -= cost
-			Config.APType.FUNCTION: player.ap_function -= cost
+			Config.APType.FUNCTION:
+				if not rogue_free_seize:
+					player.ap_function -= cost
 	var result = _execute_card_effect(player_idx, card)
 	if not result.get("success", false) and result.get("phase") != "choose":
 		if not (rapid_mode or infinite_play) and not free_sharpshooter and cd.ap != Config.APType.NONE:
@@ -795,6 +799,12 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		final_damage = char_skills.on_taking_damage(defender_idx, attacker_idx, final_damage)
 		if final_damage != before_skill:
 			formula += "-%d" % (before_skill - final_damage)
+		# 劫富（盗贼）：最终实际伤害>0 时——盗贼受击（来源=攻击者）或盗贼近战命中（来源=目标）触发
+		if final_damage > 0:
+			if players[defender_idx].char_id == "rogue":
+				_rogue_rob(defender_idx, attacker_idx)
+			elif players[attacker_idx].char_id == "rogue" and pending_attack_card in ["near", "heavy"]:
+				_rogue_rob(attacker_idx, defender_idx)
 		# 反击（圣骑士）：被动圣盾减伤把伤害完全抵挡（归0）也触发（无需使用响应卡）
 		if final_damage <= 0 and before_skill > 0 and players[defender_idx].char_id == "paladin":
 			players[defender_idx].buffs.append({type="paladin_counter", value=1, duration=2, turn=turn_number})
@@ -1100,6 +1110,23 @@ func _apply_vine_entangle(player_idx: int):
 	stats[player_idx]["damage_from_dot"] += 1
 	status.add_buff(player_idx, "vine_entangle_ap", -1, -1)  # 当回合攻击行动点-1（回合结束清除）
 	add_log(player_idx, "缠绕: 站在2层蔓生种子上，-1HP且本回合攻击行动点-1")
+
+# 劫富（盗贼）：近战命中或受击后，来源手牌≥盗贼手牌 → 随机夺取其1张（每回合限1次）
+func _rogue_rob(rogue_idx: int, source_idx: int):
+	if rogue_idx < 0 or source_idx < 0 or rogue_idx == source_idx: return
+	var rogue = players[rogue_idx]
+	if rogue.char_id != "rogue": return
+	if rogue.get("rogue_stole_this_turn", false): return
+	if players[source_idx].get("eliminated", false): return
+	var r_hand = card_systems[rogue_idx].hand.size()
+	var s_hand = card_systems[source_idx].hand.size()
+	if s_hand < r_hand: return  # 只劫比自己富的（手牌不少于自己）
+	var taken = card_systems[source_idx].random_take()
+	if taken.is_empty(): return
+	card_systems[rogue_idx].add_to_hand(taken)
+	rogue["rogue_stole_this_turn"] = true
+	add_log(rogue_idx, "劫富: 从%s夺走「%s」（其手牌%d≥你%d）" % [
+		_target_name(source_idx), Config.card_name(taken.type_id), s_hand, r_hand])
 
 # 致残：叠加层数（永久持续），位移时受2点真伤并掉1层（蔓生种子/尖刺链枷共用）
 func _apply_cripple(player_idx: int, layers: int):

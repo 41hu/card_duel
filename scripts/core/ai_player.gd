@@ -1111,6 +1111,15 @@ func decide_action(player_idx: int) -> Dictionary:
 						if s > best_score:
 							best_score = s
 							best_action = {"action": "use_skill", "skill": "mage_phantom", "card_uid": phantom_uid}
+			"rogue_give":
+				# 济贫（盗贼 AI）：自己手牌少于对手且本回合尚未劫富成功时喂牌，
+				# 让劫富条件（对手手牌≥自己）重新满足，配合近战贴脸偷牌
+				if not match_ref.players[player_idx].get("rogue_stole_this_turn", false) \
+						and hand.size() < match_ref.card_systems[opp_idx].hand.size():
+					var s9 = 4
+					if s9 > best_score:
+						best_score = s9
+						best_action = {"action": "use_skill", "skill": "rogue_give", "target": opp_idx}
 			"vine_spread":
 				# 蔓延（树妖 AI）：弃1张攻击卡新种——优先直接种敌人脚下（立即致残），
 				# 否则选种子相邻且靠近敌人的无种子格

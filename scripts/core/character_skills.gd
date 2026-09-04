@@ -97,6 +97,7 @@ func on_turn_start(player_idx: int):
 	p.skills_used = []
 	p.used_function_card = false
 	p.combo_attacks_this_turn = []
+	p["rogue_stole_this_turn"] = false  # 劫富（盗贼）：每回合重置偷牌次数
 	match p.char_id:
 		"warlock": p.ap_function = 2
 		_: p.ap_function = 1
@@ -200,6 +201,9 @@ func has_active_skills(player_idx: int) -> Array:
 		"vine_ent":
 			# 蔓延：手牌有攻击卡时可用（每回合限1次，弃1张攻击卡新种种子）
 			if _has_attack_card(player_idx): skills.append("vine_spread")
+		"rogue":
+			# 济贫：始终可用（每回合限1次由 skill_turn_limit 控制）
+			skills.append("rogue_give")
 		"hunter":
 			# 埋伏：手牌有远程攻击牌（range/pierce）时才显示
 			if _has_range_attack(player_idx): skills.append("hunter_ambush")
@@ -278,6 +282,7 @@ func skill_button_name(skill: String) -> String:
 		"priest_chant": return "真言"
 		"mage_phantom": return "幻影"
 		"vine_spread": return "蔓延"
+		"rogue_give": return "济贫"
 	return skill
 
 func use_skill(player_idx: int, skill: String, params: Dictionary) -> Dictionary:
@@ -314,6 +319,7 @@ func use_skill(player_idx: int, skill: String, params: Dictionary) -> Dictionary
 		"priest_chant": skill_result = _priest_chant(player_idx, params)
 		"mage_phantom": skill_result = _mage_phantom(player_idx, params)
 		"vine_spread": skill_result = _vine_spread(player_idx, params)
+		"rogue_give": skill_result = _rogue_give(player_idx, params)
 		_: skill_result = {success=false, msg="未知技能"}
 	if not skill_result.get("success", false):
 		p.skills_used.pop_back()
@@ -448,6 +454,16 @@ func _vine_spread(player_idx: int, params: Dictionary) -> Dictionary:
 			if p.char_id != "vine_ent":
 				_ms._apply_cripple(i, 1)
 			break
+	return {success=true}
+
+# 济贫（盗贼）：每回合限1次，选一名对手其抽1张并公示（喂肥目标→劫富条件更容易满足）
+func _rogue_give(player_idx: int, params: Dictionary) -> Dictionary:
+	var opp = _ms.get_opponent(player_idx, int(params.get("target", -1)))
+	if opp < 0: return {success=false, msg="请选择目标"}
+	var drawn = _ms.card_systems[opp].draw_cards(1)
+	if drawn.is_empty():
+		return {success=false, msg="对方牌堆为空"}
+	_ms.add_log(player_idx, "济贫: %s抽到「%s」（公示）" % [_ms._target_name(opp), Config.card_name(str(drawn[0].type_id))])
 	return {success=true}
 
 # 被动：装备护甲耐久上限 +1（铸甲师 max_durability=4；由 equip_armor 调用）

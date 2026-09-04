@@ -1253,7 +1253,38 @@ func _exec_skill(sk_id: String):
 	elif sk_id == "priest_chant": _show_priest_chant_pick()
 	elif sk_id == "mage_phantom": _show_mage_phantom_pick()
 	elif sk_id == "vine_spread": _show_vine_spread_pick()
+	elif sk_id == "rogue_give":
+		if _game_state.players.size() > 2:
+			_show_rogue_give_pick()
+		else:
+			_n().send_use_skill("rogue_give")
 	else: _n().send_use_skill(sk_id)
+
+# 济贫（盗贼，多人局）：选择一名对手送其抽1张并公示
+func _show_rogue_give_pick():
+	var c = Control.new()
+	c.name = "RogueGivePick"
+	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
+	var vb = _popup_box(c, 560, 420)
+	vb.add_child(_lbl("济贫：选择目标（其抽1张并公示）"))
+	var any = false
+	for p in _game_state.players:
+		if p.index == _player_index or p.get("eliminated", false): continue
+		any = true
+		var b = _mkbtn(Config.char_name(str(p.get("char_id", "?"))))
+		b.pressed.connect(func(pid = p.index):
+			c.queue_free()
+			_n().send_use_skill("rogue_give", {"target": pid})
+		)
+		vb.add_child(b)
+	if not any:
+		vb.add_child(_lbl("没有可选目标"))
+	var cl = _mkbtn("取消")
+	cl.pressed.connect(func(): c.queue_free())
+	vb.add_child(cl)
+	add_child(c)
 
 # 蔓延（蔓生树妖）：先选一张攻击卡弃置，再进入棋盘选格新种蔓生种子
 func _show_vine_spread_pick():

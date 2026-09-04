@@ -22,6 +22,9 @@ var _modifier_handlers: Dictionary = {
 	# 攻击行动点削减（时滞）：回合开始设置攻击点时应用
 	"ap_attack_down": func(buff, aspect, _damage_type):
 		return buff.value if aspect == "ap_attack" else 0,
+	# 缠绕（蔓生种子2层）：当回合攻击行动点-1（独立类型避免与时滞互斥）
+	"vine_entangle_ap": func(buff, aspect, _damage_type):
+		return buff.value if aspect == "ap_attack" else 0,
 }
 
 # Buff 叠加规则（触发次数开关）：max_stacks = N 同类型最多 N 层（达上限命中只刷新时长）；-1 无限叠加（默认）

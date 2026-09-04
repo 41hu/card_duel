@@ -980,6 +980,16 @@ func _on_board_cell_clicked(cell_pos: Vector2i):
 		card_info.text = ""
 		status_label.text = ""
 		return
+	if _selected_type == "vine_spread" and _is_my_turn:
+		# 蔓延：点击地格新种蔓生种子
+		_n().send_use_skill("vine_spread", {"card_uid": _selected_uid, "pos": pos_dict})
+		_selected_uid = -1
+		_selected_type = ""
+		confirm_btn.visible = false
+		cancel_btn.visible = false
+		card_info.text = ""
+		status_label.text = ""
+		return
 	if _selected_type != "item" or not _is_my_turn:
 		return
 	_n().send_play_card(_selected_uid, {"trap_pos": pos_dict})
@@ -1130,7 +1140,12 @@ func _enter_destroy_trap(card_uid: int):
 	status_label.text = "点击棋盘上有道具的格子进行摧毁"
 
 func _popup_item(card_uid: int):
-	status_label.text = "已选道具,点击棋盘格子放置"
+	var me0 = _find_self()
+	# 蔓生树妖：道具卡只能叠加（点击已有蔓生种子的地格升到2层=缠绕）；其余角色正常放置
+	if me0.get("char_id", "") == "vine_ent":
+		status_label.text = "点击已有蔓生种子的地格叠加（2层=缠绕）"
+	else:
+		status_label.text = "已选道具,点击棋盘格子放置"
 	_selected_uid = card_uid
 	_selected_type = "item"
 
@@ -1237,7 +1252,38 @@ func _exec_skill(sk_id: String):
 	elif sk_id == "spellblade_channel": _show_spellblade_pick()
 	elif sk_id == "priest_chant": _show_priest_chant_pick()
 	elif sk_id == "mage_phantom": _show_mage_phantom_pick()
+	elif sk_id == "vine_spread": _show_vine_spread_pick()
 	else: _n().send_use_skill(sk_id)
+
+# 蔓延（蔓生树妖）：先选一张攻击卡弃置，再进入棋盘选格新种蔓生种子
+func _show_vine_spread_pick():
+	var c = Control.new()
+	c.name = "VineSpreadPick"
+	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
+	var vb = _popup_box(c, 620, 460)
+	vb.add_child(_lbl("蔓延：弃1张攻击卡，点击与种子相邻的空地新种（可种敌人脚下）"))
+	var me = _find_self()
+	var has_any = false
+	for card in me.get("hand", []):
+		if card.type_id in ["near", "range", "magic", "heavy", "pierce", "chant"]:
+			has_any = true
+			var b = _mkbtn(Config.card_name(str(card.type_id)))
+			b.pressed.connect(func(uid = int(card.uid)):
+				c.queue_free()
+				_selected_uid = uid
+				_selected_type = "vine_spread"
+				cancel_btn.visible = true
+				status_label.text = "点击要蔓延的地格（种子相邻空地）"
+			)
+			vb.add_child(b)
+	if not has_any:
+		vb.add_child(_lbl("没有攻击卡"))
+	var cl = _mkbtn("取消")
+	cl.pressed.connect(func(): c.queue_free())
+	vb.add_child(cl)
+	add_child(c)
 
 # ---- 鹰眼暴露：夺取/摧毁指定选择手牌 ----
 func _has_buff(p: Dictionary, buff_type: String) -> bool:

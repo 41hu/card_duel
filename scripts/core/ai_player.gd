@@ -762,7 +762,27 @@ func decide_action(player_idx: int) -> Dictionary:
 				s += 5  # 开局布防习惯（拟人化）：人类前两回合就布置陷阱占位
 			var geo = match_ref.movement.geometry
 			var is_torii = match_ref.char_skills.get_item_type(player_idx) == "torii"
+			var is_vine = match_ref.char_skills.get_item_type(player_idx) == "vine_seed"
 			var trap_pos: Vector2i = Vector2i.ZERO
+			if is_vine:
+				# 树妖道具卡=叠加：选已有种子格（优先敌人脚下的，升 2 层缠绕）
+				var stack_pos: Vector2i = Vector2i.ZERO
+				var stack_found = false
+				var best_opp_d = 999
+				for it in match_ref.items:
+					if it.item_type != "vine_seed": continue
+					if match_ref.item_system.get_seed_layers(it.position) >= 2: continue
+					var d5 = geo.distance(it.position, opp.position)
+					if d5 < best_opp_d:
+						best_opp_d = d5
+						stack_pos = it.position
+						stack_found = true
+				if stack_found:
+					s = 9 if best_opp_d <= 0 else 4  # 敌人脚下升 2 层（缠绕压制）价值高
+					if s > best_score:
+						best_score = s
+						best_action = {"action": "play_card", "card_uid": card.uid, "extra": {"trap_pos": geo.to_dict(stack_pos)}}
+				continue
 			if is_torii:
 				# 巫女鸟居：放自己前方一格——既是自增益点（踩上成长），也是防守地雷（敌人贴脸被推入神隐）
 				trap_pos = geo.step(p.position, geo.direction_between(p.position, opp.position))
@@ -1091,6 +1111,44 @@ func decide_action(player_idx: int) -> Dictionary:
 						if s > best_score:
 							best_score = s
 							best_action = {"action": "use_skill", "skill": "mage_phantom", "card_uid": phantom_uid}
+			"vine_spread":
+				# 蔓延（树妖 AI）：弃1张攻击卡新种——优先直接种敌人脚下（立即致残），
+				# 否则选种子相邻且靠近敌人的无种子格
+				var spread_uid = -1
+				var spread_ap = 999
+				for card in hand:
+					if card.type_id in ["near", "range", "magic", "heavy", "pierce", "chant"]:
+						var v = _card_value(player_idx, card.type_id)
+						if v < spread_ap:
+							spread_ap = v
+							spread_uid = card.uid
+				if spread_uid >= 0:
+					var g4 = match_ref.movement.geometry
+					var opp_pos = opp.position
+					var chosen: Vector2i = Vector2i.ZERO
+					var found_spread = false
+					# 优先：敌人脚下（种子相邻且无种子）
+					if match_ref.item_system.can_spread_to(opp_pos):
+						chosen = opp_pos
+						found_spread = true
+					else:
+						var best_d = 999
+						for it in match_ref.items:
+							if it.item_type != "vine_seed": continue
+							for dir4 in (g4.HEX_DIRS if g4._mode == MapGeometry.MODE_HEX else [g4.DIR_LEFT, g4.DIR_RIGHT]):
+								var pos4 = g4.step(it.position, dir4)
+								if not g4.is_valid(pos4): continue
+								if not match_ref.item_system.can_spread_to(pos4): continue
+								var d4 = g4.distance(pos4, opp_pos)
+								if d4 < best_d:
+									best_d = d4
+									chosen = pos4
+									found_spread = true
+					if found_spread:
+						var s4 = 9 if chosen == opp_pos else 5
+						if s4 > best_score:
+							best_score = s4
+							best_action = {"action": "use_skill", "skill": "vine_spread", "card_uid": spread_uid, "pos": g4.to_dict(chosen)}
 			"assassin_move":
 				if distance > 0:
 					var has_near = false

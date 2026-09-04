@@ -38,27 +38,38 @@ var _item_types: Dictionary = {
 	},
 	"vine_seed": {
 		"name": "蔓生种子",
-		"desc": "蔓生树妖专属：踩到的单位获得1层「致残」（永久可叠加）；带致残的单位每次位移受2点真实伤害并消去1层；持续存在不因踩踏消失；近战/重击可除根（限所在格/相邻格），摧毁卡可任意拆除",
-		"stack": "single",
-		"destroy_rule": "one",
+		"desc": "蔓生树妖专属：1层：踩到/被种脚下的单位获得1层「致残」；2层（缠绕）：踩踏致残照旧，且站在其上的单位判定阶段每回合-1HP（真伤）与攻击行动点-1。持续存在不因踩踏消失；近战/重击除根（限所在格/相邻格）或摧毁卡可拆除（一次全清）",
+		"stack": "max:2",
+		"destroy_rule": "all",
 		"on_step": _vine_seed_step,
 	},
 }
 
-# 蔓生种子：单位到达获得 1 层致残（永久可叠加）；树妖自身无视（不获得）
+# 蔓生种子：踩到/被种脚下的单位获得 1 层致残（永久可叠加）；树妖自身无视（不获得）。
+# 1/2 层踩踏效果相同（挂致残）；2 层（缠绕）的每回合 -1HP/-1AP 在判定阶段结算。
 # 签名与 on_step 统一（player_idx, it）——trigger_on_step 固定传 2 参
 func _vine_seed_step(player_idx: int, _it: Dictionary = {}):
 	var player = match_ref.get_player(player_idx)
 	if player.char_id == "vine_ent": return  # 树妖免疫自己的种子
-	var found = false
-	for b in player.buffs:
-		if b.type == "vine_cripple":
-			b.value += 1
-			found = true
-			break
-	if not found:
-		player.buffs.append({type="vine_cripple", value=1, duration=-2})
-	match_ref.add_log(player_idx, "蔓: 获得1层致残（位移时受2点真伤）")
+	match_ref._apply_cripple(player_idx, 1)
+
+# 指定格蔓生种子层数（同格条目数，0/1/2）
+func get_seed_layers(pos: Vector2i) -> int:
+	var n = 0
+	for it in match_ref.items:
+		if it.item_type == "vine_seed" and it.position == pos:
+			n += 1
+	return n
+
+# 指定格是否有种子邻近格可作为蔓延目标（蔓延只能新种：目标=种子相邻格且该格无种子）
+func can_spread_to(pos: Vector2i) -> bool:
+	if get_seed_layers(pos) > 0:
+		return false  # 已有种子：只能由道具卡叠加
+	for it in match_ref.items:
+		if it.item_type == "vine_seed" \
+				and match_ref.movement.geometry.distance(it.position, pos) == 1:
+			return true
+	return false
 
 # 鸟居触发：自己踩（放置者=巫女）回血2+全属性+1 永久；敌人踩进入神隐（跳过下回合）
 func _torii_step(player_idx: int, item: Dictionary) -> int:

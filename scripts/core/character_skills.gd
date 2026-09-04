@@ -197,6 +197,9 @@ func has_active_skills(player_idx: int) -> Array:
 		"priest":
 			# 真言：手牌有回复卡（heal_3/heal_5）时才可用（每回合限1次由 skill_turn_limit 控制）
 			if _has_heal_card(player_idx): skills.append("priest_chant")
+		"vine_ent":
+			# 蔓延：手牌有攻击卡时可用（每回合限1次，弃1张攻击卡新种种子）
+			if _has_attack_card(player_idx): skills.append("vine_spread")
 		"hunter":
 			# 埋伏：手牌有远程攻击牌（range/pierce）时才显示
 			if _has_range_attack(player_idx): skills.append("hunter_ambush")
@@ -250,6 +253,13 @@ func _has_heal_card(player_idx: int) -> bool:
 			return true
 	return false
 
+# 手牌是否含攻击卡（树妖蔓延消耗条件：近战/远程/魔法/重击/穿心/吟唱）
+func _has_attack_card(player_idx: int) -> bool:
+	for c in _ms.card_systems[player_idx].hand:
+		if c.type_id in ["near", "range", "magic", "heavy", "pierce", "chant"]:
+			return true
+	return false
+
 # 手牌是否含法术攻击卡（法师幻影条件）
 func _has_magic_atk_card(player_idx: int) -> bool:
 	for c in _ms.card_systems[player_idx].hand:
@@ -267,6 +277,7 @@ func skill_button_name(skill: String) -> String:
 		"spellblade_channel": return "魔力引导"
 		"priest_chant": return "真言"
 		"mage_phantom": return "幻影"
+		"vine_spread": return "蔓延"
 	return skill
 
 func use_skill(player_idx: int, skill: String, params: Dictionary) -> Dictionary:
@@ -302,6 +313,7 @@ func use_skill(player_idx: int, skill: String, params: Dictionary) -> Dictionary
 		"spellblade_channel": skill_result = _spellblade_channel(player_idx, params)
 		"priest_chant": skill_result = _priest_chant(player_idx, params)
 		"mage_phantom": skill_result = _mage_phantom(player_idx, params)
+		"vine_spread": skill_result = _vine_spread(player_idx, params)
 		_: skill_result = {success=false, msg="未知技能"}
 	if not skill_result.get("success", false):
 		p.skills_used.pop_back()
@@ -408,6 +420,35 @@ func _priest_chant(player_idx: int, params: Dictionary) -> Dictionary:
 	# 弃置回复卡（进弃牌堆）
 	cs.discard_card(uid)
 	return _ms._begin_priest_chant(player_idx, card, int(params.get("target", -1)))
+
+# 蔓延（蔓生树妖主动技）：每回合限1次，弃1张攻击卡，在与任一蔓生种子相邻的无种子地格新种1层。
+# 可种在敌人脚下——目标格有敌人时立即触发致残 1 层
+func _vine_spread(player_idx: int, params: Dictionary) -> Dictionary:
+	var cs = _ms.card_systems[player_idx]
+	var uid = int(params.get("card_uid", -1))
+	var card = {}
+	for c in cs.hand:
+		if c.uid == uid: card = c; break
+	if card.is_empty() or not card.type_id in ["near", "range", "magic", "heavy", "pierce", "chant"]:
+		return {success=false, msg="请选择攻击卡"}
+	var geo = _ms.movement.geometry
+	var pos = geo.from_dict(params.get("pos", {}))
+	if not geo.is_valid(pos): return {success=false, msg="无效位置"}
+	if not _ms.item_system.can_spread_to(pos):
+		return {success=false, msg="只能蔓延到与已有种子相邻的无种子地格"}
+	# 弃攻击卡（进弃牌堆）
+	cs.discard_card(uid)
+	_ms.items.append({item_type="vine_seed", position=pos, owner=player_idx})
+	_ms.add_log(player_idx, "蔓延: 在(%d,%d)新种蔓生种子" % [pos.x, pos.y])
+	# 种在单位脚下：立即触发致残 1 层（树妖自身免疫）
+	for i in range(_ms.players.size()):
+		var p = _ms.players[i]
+		if p.get("eliminated", false): continue
+		if p.position == pos:
+			if p.char_id != "vine_ent":
+				_ms._apply_cripple(i, 1)
+			break
+	return {success=true}
 
 # 被动：装备护甲耐久上限 +1（铸甲师 max_durability=4；由 equip_armor 调用）
 func armor_durability_bonus(player_idx: int) -> int:

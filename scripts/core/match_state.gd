@@ -314,6 +314,9 @@ func _judgment_phase():
 	# 回合开始钩子（判定阶段最前，DoT 之前）：活铠献祭等
 	char_skills.on_judgment_start(current_player)
 	if phase == Config.Phase.GAME_OVER: return  # 献祭扣血致死淘汰
+	# 缠绕（蔓生种子2层）：站在其上的单位判定阶段-1HP真伤 + 当回合攻击行动点-1
+	_apply_vine_entangle(current_player)
+	if phase == Config.Phase.GAME_OVER: return
 	var player = players[current_player]
 	if player.dots.size() > 0:
 		# 先快照本回合将造成伤害的 DoT 类型（牧师净化用）
@@ -412,18 +415,21 @@ func _handle_vine_remove(player_idx: int, data: Dictionary) -> Dictionary:
 	if not geo.is_valid(pos): return {success=false, msg="无效位置"}
 	if geo.distance(players[player_idx].position, pos) > 1:
 		return {success=false, msg="只能除根所在格或相邻格的种子"}
-	var found = -1
-	for i in range(items.size() - 1, -1, -1):
-		if items[i].item_type == "vine_seed" and items[i].position == pos:
-			found = i
+	var has_seed = false
+	for it in items:
+		if it.item_type == "vine_seed" and it.position == pos:
+			has_seed = true
 			break
-	if found < 0: return {success=false, msg="该格没有蔓生种子"}
+	if not has_seed: return {success=false, msg="该格没有蔓生种子"}
 	# 消耗攻击行动点（与打出该攻击卡一致的成本；默认 1）
 	var cost = char_skills.get_attack_cost(player_idx, card.type_id)
 	if cost < 0: cost = int(Config.CARD_DB[card.type_id].get("ap", 1))
 	if players[player_idx].ap_attack < cost: return {success=false, msg="攻击行动点不足"}
 	players[player_idx].ap_attack -= cost
-	items.remove_at(found)
+	# 一次全清（1/2 层一起移除）
+	for i in range(items.size() - 1, -1, -1):
+		if items[i].item_type == "vine_seed" and items[i].position == pos:
+			items.remove_at(i)
 	_use_card(player_idx, {uid=uid, type_id=card.type_id})
 	add_log(player_idx, "除根: 清除(%d,%d)的蔓生种子" % [pos.x, pos.y])
 	state_changed.emit(get_full_state())
@@ -1053,7 +1059,7 @@ func _advance_to_next_player():
 	_judgment_phase()
 	state_changed.emit(get_full_state())
 
-# 蔓生树妖：所在地格无蔓生种子则立即生成 1 层（位移后/回合开始触发）
+# 蔓生树妖：所在地格无蔓生种子则立即生成 1 层（判定阶段/位移后触发；只保 1 层不参与叠层）
 func _ensure_vine_seed(player_idx: int):
 	if player_idx < 0 or player_idx >= players.size(): return
 	if players[player_idx].char_id != "vine_ent": return
@@ -1061,6 +1067,17 @@ func _ensure_vine_seed(player_idx: int):
 		if it.item_type == "vine_seed" and it.position == players[player_idx].position:
 			return
 	items.append({item_type="vine_seed", position=players[player_idx].position, owner=player_idx})
+
+# 缠绕（蔓生种子2层）：判定阶段结算——-1HP 真伤 + 当回合攻击行动点-1
+# AP 修正挂独立 buff（vine_entangle_ap），在 AP 刷新（on_turn_start）时经 query_modifier 生效
+func _apply_vine_entangle(player_idx: int):
+	var pos = players[player_idx].position
+	if item_system.get_seed_layers(pos) < 2: return
+	_damage_player(player_idx, 1)
+	stats[player_idx]["damage_taken"] += 1
+	stats[player_idx]["damage_from_dot"] += 1
+	status.add_buff(player_idx, "vine_entangle_ap", -1, -1)  # 当回合攻击行动点-1（回合结束清除）
+	add_log(player_idx, "缠绕: 站在2层蔓生种子上，-1HP且本回合攻击行动点-1")
 
 # 致残：叠加层数（永久持续），位移时受2点真伤并掉1层（蔓生种子/尖刺链枷共用）
 func _apply_cripple(player_idx: int, layers: int):

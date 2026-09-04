@@ -654,6 +654,24 @@ func _begin_attack_segment(player_idx: int) -> Dictionary:
 				if player.buffs[i].type == "paladin_counter":
 					player.buffs.remove_at(i)
 			add_log(player_idx, "反击: 攻击伤害+%d" % counter_bonus)
+	# 失修的铳：每发远程攻击（远程/穿心）掷骰——1=哑火(0) 2=-1 3/4=正常 5=+2 6=+3
+	if not player.weapon.is_empty() and player.weapon.id == "rusted_gun" \
+			and type_id in ["range", "pierce"]:
+		var roll = randi() % 6 + 1
+		var rust_mod = 0
+		match roll:
+			1: rust_mod = -attacker_last_damage  # 哑火：伤害归 0
+			2: rust_mod = -1
+			3, 4: rust_mod = 0
+			5: rust_mod = 2
+			6: rust_mod = 3
+		if roll == 1:
+			_pending_formula += "（哑火）"
+		elif rust_mod != 0:
+			attacker_last_damage = max(0, attacker_last_damage + rust_mod)
+			_pending_formula += "%+d" % rust_mod
+		var roll_tag = {1: "哑火", 2: "卡壳-1", 5: "走火+2", 6: "爆膛+3"}.get(roll, "正常")
+		add_log(player_idx, "失修的铳掷出%d（%s）" % [roll, roll_tag])
 	_armor_hit = calc.get("armor_hit", false)
 	# 穿甲标记：强化攻击（heavy/pierce/chant）命中防具时额外-2耐久
 	_armor_pierce = _armor_hit and type_id in ["heavy", "pierce", "chant"]

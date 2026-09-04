@@ -16,6 +16,7 @@ const WEAPON_DB = {
 	"hawkeye":        {name="鹰眼",     type="range", effect="reveal_hand", value=0, desc="命中后查看对方手牌并赋予暴露1回合（暴露期间对其夺取/摧毁可指定选择手牌）"},
 	"toxic_fang":     {name="毒牙",     type="range", effect="poison",     value=2, desc="中毒2层（每回合-1HP，可叠加）"},
 	"wind_god_bow":   {name="风神弓",   type="range", effect="pierce_move", value=1, desc="穿心命中并造成伤害后，可控制对方移动1格（方向自由）"},
+	"rusted_gun":     {name="失修的铳", type="range", effect="rusted_dice", value=0, desc="每发远程攻击（远程/穿心）掷骰：1=哑火(0伤害) 2=伤害-1 3/4=正常 5=伤害+2 6=伤害+3"},
 
 	# 法术武器
 	"sage_book":      {name="贤者之书", type="magic", effect="magic_dmg",  value=2, desc="魔法伤害+2"},
@@ -23,6 +24,7 @@ const WEAPON_DB = {
 	"time_lag":       {name="时滞",     type="magic", effect="ap_attack_down", value=1, desc="命中后对方下回合攻击行动点-1"},
 	"resonance":      {name="共鸣",     type="magic", effect="resonance_rebound", value=2, desc="法术攻击被完全抵挡时额外造成2点伤害"},
 	"void_grimoire":  {name="虚空魔典", type="magic", effect="wither_apply", value=1, desc="法术攻击命中后附加凋零2回合（回复量-1，再次命中刷新）"},
+	"banish_page":    {name="放逐书页", type="magic", effect="banish_page", value=1, desc="法术攻击命中后，从对方牌堆随机取1张牌移入弃牌堆并公示（本轮牌组循环内对方抽不到该卡）"},
 }
 
 const ARMOR_DB = {

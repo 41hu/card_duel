@@ -99,6 +99,17 @@ func random_take() -> Dictionary:
 	hand.remove_at(idx)
 	return card
 
+# 放逐（放逐书页）：从牌堆随机取一张移入弃牌堆并返回（牌堆空返回空字典）
+# 弃牌堆洗回后该卡可再次进入循环——"本轮牌组循环内抽不到"
+func banish_random_from_deck() -> Dictionary:
+	if deck.is_empty():
+		return {}
+	var idx = randi() % deck.size()
+	var card = deck[idx]
+	deck.remove_at(idx)
+	_append_discard(card)
+	return card
+
 # ---------- 卡牌流转统一入口（防牌堆污染） ----------
 # 所有卡牌必须是 {uid, type_id} 结构；非法卡（如装备数据结构）直接拒绝并报错。
 # 新增牌堆操作功能时，必须走这些入口，禁止直接碰 hand/discard/deck 数组。

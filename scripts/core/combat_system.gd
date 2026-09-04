@@ -279,6 +279,14 @@ func apply_on_hit_effects(attacker_idx: int, defender_idx: int, damage: int, dam
 		match_ref.status.add_wither(defender_idx)
 		match_ref.add_log(attacker_idx, "虚空魔典: 附加凋零(回复量-1,2回合)")
 
+	# 放逐书页：从对方牌堆随机取1张移入弃牌堆并公示
+	if weapon_id == "banish_page":
+		var banished = match_ref.card_systems[defender_idx].banish_random_from_deck()
+		if banished.is_empty():
+			match_ref.add_log(attacker_idx, "放逐书页: 对方牌堆已空")
+		else:
+			match_ref.add_log(attacker_idx, "放逐书页: 「%s」被放逐至弃牌堆（本轮抽不到）" % Config.card_name(str(banished.type_id)))
+
 # ---------- 处置DoT伤害 ----------
 # 灼烧: 每回合-2HP，duration-1，到0移除
 # 中毒: 每回合-1HP，duration-1，到0移除

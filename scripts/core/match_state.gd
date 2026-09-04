@@ -1074,6 +1074,7 @@ func _ensure_vine_seed(player_idx: int):
 # 缠绕（蔓生种子2层）：判定阶段结算——-1HP 真伤 + 当回合攻击行动点-1
 # AP 修正挂独立 buff（vine_entangle_ap），在 AP 刷新（on_turn_start）时经 query_modifier 生效
 func _apply_vine_entangle(player_idx: int):
+	if players[player_idx].char_id == "vine_ent": return  # 树妖免疫自身种子效果（含缠绕）
 	var pos = players[player_idx].position
 	if item_system.get_seed_layers(pos) < 2: return
 	_damage_player(player_idx, 1)

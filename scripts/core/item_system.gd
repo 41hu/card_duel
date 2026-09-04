@@ -117,10 +117,12 @@ func place_item(player_idx: int, item_type: String, pos: Vector2i) -> bool:
 	var geo = match_ref.movement.geometry
 	if not geo.is_valid(pos):
 		return false
-	var p0 = match_ref.get_player(0)
-	var p1 = match_ref.get_player(1)
-	if pos == p0.position or pos == p1.position:
-		return false
+	# 蔓生种子（树妖）：可放置在单位脚下（蔓延新种/道具叠加到脚下）；其余道具禁止占用单位格
+	if item_type != "vine_seed":
+		for p in match_ref.players:
+			if p.get("eliminated", false): continue
+			if p.position == pos:
+				return false
 	var t = get_item_type(item_type)
 	if t.is_empty():
 		return false

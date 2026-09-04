@@ -40,6 +40,8 @@ const _STATUS_ICONS := {
 	"paladin_counter": {"icon": "反", "accent": Color(0.9, 0.8, 0.4), "name": "反击"},
 	"tracker_chase": {"icon": "追", "accent": Color(0.6, 0.85, 0.5), "name": "追击"},
 	"vine_cripple": {"icon": "残", "accent": Color(0.75, 0.45, 0.3), "name": "致残"},
+	"vine_entangle_ap": {"icon": "缠", "accent": Color(0.4, 0.75, 0.5), "name": "缠绕"},
+	"wither_weapon": {"icon": "凋", "accent": Color(0.5, 0.4, 0.6), "name": "凋零"},
 	"神隐": {"icon": "隐", "accent": Color(0.6, 0.5, 0.9), "name": "神隐"},
 }
 # 状态槽一行上限（面板宽度约 10 个），超出合并为 "+N" 槽，详情放 tooltip

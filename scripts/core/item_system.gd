@@ -61,15 +61,26 @@ func get_seed_layers(pos: Vector2i) -> int:
 			n += 1
 	return n
 
-# 指定格是否有种子邻近格可作为蔓延目标（蔓延只能新种：目标=种子相邻格且该格无种子）
-func can_spread_to(pos: Vector2i) -> bool:
-	if get_seed_layers(pos) > 0:
-		return false  # 已有种子：只能由道具卡叠加
+# 场上全部蔓生种子位置（诊断用）
+func all_seed_positions() -> Array:
+	var out: Array = []
 	for it in match_ref.items:
-		if it.item_type == "vine_seed" \
-				and match_ref.movement.geometry.distance(it.position, pos) == 1:
-			return true
-	return false
+		if it.item_type == "vine_seed":
+			out.append(it.position)
+	return out
+
+# 指定格是否有种子邻近格可作为蔓延目标（蔓延只能新种：目标=种子相邻格且该格无种子）
+# 返回 "" = 可蔓延；否则返回失败原因（细分诊断：目标格已有种子 / 场上无种子 / 无相邻种子）
+func can_spread_to(pos: Vector2i) -> String:
+	if get_seed_layers(pos) > 0:
+		return "目标格已有种子（蔓延只能新种，叠加请用道具卡）"
+	var seeds = all_seed_positions()
+	if seeds.is_empty():
+		return "场上没有蔓生种子（需先由生根/蔓延种下第一颗）"
+	for sp in seeds:
+		if match_ref.movement.geometry.distance(sp, pos) == 1:
+			return ""
+	return "目标格与所有种子（%s）都不相邻" % str(seeds)
 
 # 鸟居触发：自己踩（放置者=巫女）回血2+全属性+1 永久；敌人踩进入神隐（跳过下回合）
 func _torii_step(player_idx: int, item: Dictionary) -> int:

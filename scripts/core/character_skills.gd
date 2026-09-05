@@ -440,8 +440,9 @@ func _vine_spread(player_idx: int, params: Dictionary) -> Dictionary:
 	var geo = _ms.movement.geometry
 	var pos = geo.from_dict(params.get("pos", {}))
 	if not geo.is_valid(pos): return {success=false, msg="无效位置"}
-	if not _ms.item_system.can_spread_to(pos):
-		return {success=false, msg="只能蔓延到与已有种子相邻的无种子地格"}
+	var spread_check = _ms.item_system.can_spread_to(pos)
+	if spread_check != "":
+		return {success=false, msg="无法蔓延：%s" % spread_check}
 	# 弃攻击卡（进弃牌堆）
 	cs.discard_card(uid)
 	_ms.items.append({item_type="vine_seed", position=pos, owner=player_idx})

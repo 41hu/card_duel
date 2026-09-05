@@ -1137,7 +1137,7 @@ func decide_action(player_idx: int) -> Dictionary:
 					var chosen: Vector2i = Vector2i.ZERO
 					var found_spread = false
 					# 优先：敌人脚下（种子相邻且无种子）
-					if match_ref.item_system.can_spread_to(opp_pos):
+					if match_ref.item_system.can_spread_to(opp_pos) == "":
 						chosen = opp_pos
 						found_spread = true
 					else:
@@ -1147,7 +1147,7 @@ func decide_action(player_idx: int) -> Dictionary:
 							for dir4 in (g4.HEX_DIRS if g4._mode == MapGeometry.MODE_HEX else [g4.DIR_LEFT, g4.DIR_RIGHT]):
 								var pos4 = g4.step(it.position, dir4)
 								if not g4.is_valid(pos4): continue
-								if not match_ref.item_system.can_spread_to(pos4): continue
+								if match_ref.item_system.can_spread_to(pos4) != "": continue
 								var d4 = g4.distance(pos4, opp_pos)
 								if d4 < best_d:
 									best_d = d4

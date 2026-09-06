@@ -1254,33 +1254,53 @@ func _exec_skill(sk_id: String):
 	elif sk_id == "mage_phantom": _show_mage_phantom_pick()
 	elif sk_id == "vine_spread": _show_vine_spread_pick()
 	elif sk_id == "rogue_give":
-		if _game_state.players.size() > 2:
-			_show_rogue_give_pick()
-		else:
-			_n().send_use_skill("rogue_give")
+		_show_rogue_give_pick()
 	else: _n().send_use_skill(sk_id)
 
-# 济贫（盗贼，多人局）：选择一名对手送其抽1张并公示
+# 济贫（盗贼）：先选一张自己手牌送出，再选目标（2人局直接送对手）
 func _show_rogue_give_pick():
 	var c = Control.new()
 	c.name = "RogueGivePick"
 	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
-	var vb = _popup_box(c, 560, 420)
-	vb.add_child(_lbl("济贫：选择目标（其抽1张并公示）"))
-	var any = false
-	for p in _game_state.players:
-		if p.index == _player_index or p.get("eliminated", false): continue
-		any = true
-		var b = _mkbtn(Config.char_name(str(p.get("char_id", "?"))))
-		b.pressed.connect(func(pid = p.index):
+	var vb = _popup_box(c, 620, 460)
+	vb.add_child(_lbl("济贫：选择一张要送出的手牌"))
+	var me = _find_self()
+	var has_any = false
+	var multi = _game_state.players.size() > 2
+	for card in me.get("hand", []):
+		has_any = true
+		var b = _mkbtn(Config.card_name(str(card.type_id)))
+		b.pressed.connect(func(uid = int(card.uid)):
 			c.queue_free()
-			_n().send_use_skill("rogue_give", {"target": pid})
+			if not multi:
+				_n().send_use_skill("rogue_give", {"card_uid": uid})
+				return
+			# 多人局：再选目标（任意存活玩家，含队友）
+			var t = Control.new()
+			t.name = "RogueGiveTarget"
+			t.z_index = 10; t.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			var bg2 = ColorRect.new(); bg2.color = Style.POPUP_BG
+			bg2.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); t.add_child(bg2)
+			var vb2 = _popup_box(t, 560, 460)
+			vb2.add_child(_lbl("济贫：选择送给谁"))
+			for p in _game_state.players:
+				if p.index == _player_index or p.get("eliminated", false): continue
+				var pb = _mkbtn(Config.char_name(str(p.get("char_id", "?"))))
+				pb.pressed.connect(func(pid = p.index):
+					t.queue_free()
+					_n().send_use_skill("rogue_give", {"card_uid": uid, "target": pid})
+				)
+				vb2.add_child(pb)
+			var cl2 = _mkbtn("取消")
+			cl2.pressed.connect(func(): t.queue_free())
+			vb2.add_child(cl2)
+			add_child(t)
 		)
 		vb.add_child(b)
-	if not any:
-		vb.add_child(_lbl("没有可选目标"))
+	if not has_any:
+		vb.add_child(_lbl("没有手牌可送"))
 	var cl = _mkbtn("取消")
 	cl.pressed.connect(func(): c.queue_free())
 	vb.add_child(cl)

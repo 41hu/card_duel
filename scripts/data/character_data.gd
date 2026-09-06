@@ -18,7 +18,7 @@ const CHARACTER_DB = {
 	"miko":        {name="巫女",   hp=24, near=2, range=3, magic=3, skill="miko",         skill_desc="结界：道具卡放置鸟居，自己踩上+2HP并全属性+1（永久）；敌人踩上进入神隐（跳过下回合）；鸟居可被摧毁卡拆除"},
 	"armor_feeder": {name="饲甲人", hp=27, near=4, range=3, magic=3, skill="armor_feeder", skill_desc="活铠：自带全类型魔甲（耐久2，无完全免疫）攻击减半；耐久<2回合开始扣1HP回1耐久；护甲卡改修复活铠；摧毁免疫"},
 	"vine_ent":    {name="蔓生树妖", hp=25, near=3, range=3, magic=4, skill="vine_ent",     skill_desc="生根：判定阶段或位移后，所在格自动长出1层「蔓生种子」（只保1层，自身免疫效果）。蔓延：每回合限1次，弃1张攻击卡，在与已有种子相邻的无种子地格新种1层（可种敌人脚下并立即致残）。缠绕：道具卡只能给已有种子叠加（1→2层）；2层种子上单位判定阶段每回合-1HP（真伤）且攻击行动点-1。致残：到达/被种脚下的单位获得1层（永久可叠加），每次位移受2点真伤并消去1层。摧残：对带致残目标的攻击伤害+1。种子可被除根（近战/重击，限相邻格）或摧毁卡（任意格）一次全清"},
-	"rogue":       {name="盗贼",    hp=23, near=6, range=3, magic=1, skill="rogue",        skill_desc="妙手：你打出的「夺取」卡不消耗功能行动点。劫富：近战命中或受到攻击（被造成伤害）后，若来源手牌不少于你，随机夺取其1张（每回合限1次）。济贫：每回合限1次，选择一名对手，其抽1张牌并公示（手牌多者被劫富盯上）"},
+	"rogue":       {name="盗贼",    hp=23, near=6, range=3, magic=1, skill="rogue",        skill_desc="妙手：你打出的「夺取」卡不消耗功能行动点。劫富：近战命中或受到攻击（被造成伤害）后，若来源手牌不少于你，随机夺取其1张并进入潜行（每回合限1次）。潜行：远程/法术无法瞄准你，近战可命中（命中后现形），你打出任何手牌即现形；在你触发来源角色的下一次回合开始时自然消失。济贫：每回合限1次，选一张自己的手牌送给任意目标（含4人局队友）并公示（喂肥目标使劫富更易触发）"},
 }
 
 const CHARACTER_IDS = ["fighter", "sharpshooter", "mage", "paladin", "assassin", "priest", "berserker", "warlock", "gunslinger", "hunter", "tracker", "wardsmith", "spellblade", "miko", "armor_feeder", "vine_ent", "rogue"]

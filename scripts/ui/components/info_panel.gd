@@ -35,6 +35,7 @@ const _STATUS_ICONS := {
 	"mage_empower": {"icon": "法", "accent": Color(0.75, 0.5, 1.0), "name": "魔法强化"},
 	"mage_phantom": {"icon": "幻", "accent": Color(0.75, 0.5, 1.0), "name": "幻影"},
 	"exposed": {"icon": "暴", "accent": Color(0.95, 0.6, 0.3), "name": "暴露"},
+	"rogue_stealth": {"icon": "潜", "accent": Color(0.5, 0.5, 0.65), "name": "潜行"},
 	"ap_attack_down": {"icon": "滞", "accent": Color(0.7, 0.6, 1.0), "name": "攻击行动点-1"},
 	"no_move": {"icon": "移", "accent": Color(0.85, 0.85, 0.85), "name": "无法移动"},
 	"paladin_counter": {"icon": "反", "accent": Color(0.9, 0.8, 0.4), "name": "反击"},

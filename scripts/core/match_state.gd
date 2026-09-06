@@ -453,6 +453,12 @@ func _do_play_card(player_idx: int, data: Dictionary) -> Dictionary:
 		card.type_id = extra.as_type
 	var type_id = card.type_id
 	var player = players[player_idx]
+	# 潜行（盗贼）：打出任何手牌即现形（出手后命中的劫富可重新进入潜行）
+	if _rogue_is_stealthed(player_idx):
+		for i in range(player.buffs.size() - 1, -1, -1):
+			if player.buffs[i].type == "rogue_stealth":
+				player.buffs.remove_at(i)
+		add_log(player_idx, "潜行解除: 出手现形")
 	var cd = Config.CARD_DB[type_id]
 	# 角色专属消耗覆盖（如快枪手远程 2AP）；-1 = 用卡牌默认消耗
 	var cost = char_skills.get_attack_cost(player_idx, type_id)
@@ -566,6 +572,8 @@ func _use_card(player_idx: int, card: Dictionary):
 func _begin_priest_chant(player_idx: int, card: Dictionary, target_idx: int) -> Dictionary:
 	var opp = get_opponent(player_idx, target_idx)
 	if opp < 0: return {success=false, msg="请选择目标"}
+	if _rogue_is_stealthed(opp):
+		return {success=false, msg="目标潜行中，无法瞄准"}
 	var dmg = 3 if card.type_id == "heal_3" else 5
 	_pending_target = opp
 	pending_attack_card = "priest_chant"
@@ -615,6 +623,9 @@ func _handle_attack_card(player_idx: int, card: Dictionary) -> Dictionary:
 	var type_id = card.type_id
 	_pending_target = get_opponent(player_idx, int(card.get("target", -1)))
 	if _pending_target < 0: return {success=false, msg="请选择目标"}
+	# 潜行（盗贼）：远程/法术攻击无法瞄准潜行目标（近战可命中，命中后现形）
+	if type_id in ["range", "pierce", "magic", "chant"] and _rogue_is_stealthed(_pending_target):
+		return {success=false, msg="目标潜行中，无法瞄准"}
 	# ignore_distance（魔力引导等技能）：近战/重击无视距离限制打出
 	if type_id in ["near", "heavy"] and movement.get_distance(_pending_target) != 0 and not card.get("ignore_distance", false):
 		return {success=false, msg="必须贴脸"}
@@ -799,12 +810,18 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		final_damage = char_skills.on_taking_damage(defender_idx, attacker_idx, final_damage)
 		if final_damage != before_skill:
 			formula += "-%d" % (before_skill - final_damage)
+		# 潜行（盗贼）：受到近战伤害现形（先于劫富受击判定——受击偷牌可重新进入潜行）
+		if pending_attack_card in ["near", "heavy"] and _rogue_is_stealthed(defender_idx):
+			for i in range(players[defender_idx].buffs.size() - 1, -1, -1):
+				if players[defender_idx].buffs[i].type == "rogue_stealth":
+					players[defender_idx].buffs.remove_at(i)
+			add_log(defender_idx, "潜行解除: 被近战命中现形")
 		# 劫富（盗贼）：最终实际伤害>0 时——盗贼受击（来源=攻击者）或盗贼近战命中（来源=目标）触发
 		if final_damage > 0:
 			if players[defender_idx].char_id == "rogue":
-				_rogue_rob(defender_idx, attacker_idx)
+				_rogue_rob(defender_idx, attacker_idx, attacker_idx)
 			elif players[attacker_idx].char_id == "rogue" and pending_attack_card in ["near", "heavy"]:
-				_rogue_rob(attacker_idx, defender_idx)
+				_rogue_rob(attacker_idx, defender_idx, attacker_idx)
 		# 反击（圣骑士）：被动圣盾减伤把伤害完全抵挡（归0）也触发（无需使用响应卡）
 		if final_damage <= 0 and before_skill > 0 and players[defender_idx].char_id == "paladin":
 			players[defender_idx].buffs.append({type="paladin_counter", value=1, duration=2, turn=turn_number})
@@ -1086,6 +1103,7 @@ func _advance_to_next_player():
 	# 回合切换：未完成的风神弓方向选择视为放弃（防断线/超时残留吞掉后续触发）
 	_wind_bow_pending = false
 	_wind_bow_target = -1
+	_expire_rogue_stealth()  # 潜行：触发来源角色的回合开始 → 自然消失
 	_ensure_vine_seed(current_player)  # 蔓生树妖：回合开始补漏生根
 	_judgment_phase()
 	state_changed.emit(get_full_state())
@@ -1112,7 +1130,9 @@ func _apply_vine_entangle(player_idx: int):
 	add_log(player_idx, "缠绕: 站在2层蔓生种子上，-1HP且本回合攻击行动点-1")
 
 # 劫富（盗贼）：近战命中或受击后，来源手牌≥盗贼手牌 → 随机夺取其1张（每回合限1次）
-func _rogue_rob(rogue_idx: int, source_idx: int):
+# 偷牌成功后进入潜行（turn_source = 触发来源攻击者：命中=盗贼自己/受击=攻击者，
+# 潜行在其下一次回合开始时自然消失）
+func _rogue_rob(rogue_idx: int, source_idx: int, turn_source: int):
 	if rogue_idx < 0 or source_idx < 0 or rogue_idx == source_idx: return
 	var rogue = players[rogue_idx]
 	if rogue.char_id != "rogue": return
@@ -1127,6 +1147,24 @@ func _rogue_rob(rogue_idx: int, source_idx: int):
 	rogue["rogue_stole_this_turn"] = true
 	add_log(rogue_idx, "劫富: 从%s夺走「%s」（其手牌%d≥你%d）" % [
 		_target_name(source_idx), Config.card_name(taken.type_id), s_hand, r_hand])
+	# 潜行：偷牌成功后进入（source 回合锚点；打出任何手牌或受近战伤害提前解除）
+	rogue.buffs.append({type="rogue_stealth", value=1, duration=-2, source=turn_source})
+	add_log(rogue_idx, "潜行: 隐入暗影（远程/法术无法瞄准你；打出牌或受近战伤害现形）")
+
+# 盗贼是否处于潜行
+func _rogue_is_stealthed(player_idx: int) -> bool:
+	for b in players[player_idx].buffs:
+		if b.type == "rogue_stealth": return true
+	return false
+
+# 潜行自然消失：当前玩家回合开始，清除 source==当前玩家的潜行
+func _expire_rogue_stealth():
+	for p in players:
+		for i in range(p.buffs.size() - 1, -1, -1):
+			if p.buffs[i].type == "rogue_stealth" and int(p.buffs[i].get("source", -1)) == current_player:
+				p.buffs.remove_at(i)
+				if p.char_id == "rogue":
+					add_log(current_player, "潜行结束: 现身")
 
 # 致残：叠加层数（永久持续），位移时受2点真伤并掉1层（蔓生种子/尖刺链枷共用）
 func _apply_cripple(player_idx: int, layers: int):

@@ -457,14 +457,30 @@ func _vine_spread(player_idx: int, params: Dictionary) -> Dictionary:
 			break
 	return {success=true}
 
-# 济贫（盗贼）：每回合限1次，选一名对手其抽1张并公示（喂肥目标→劫富条件更容易满足）
+# 济贫（盗贼）：每回合限1次，从自己手牌选一张送给目标（任意存活玩家，含4人局队友；公示日志）
+# 送出的牌喂肥对方手牌 → 劫富条件（对方手牌≥自己）更容易满足
 func _rogue_give(player_idx: int, params: Dictionary) -> Dictionary:
-	var opp = _ms.get_opponent(player_idx, int(params.get("target", -1)))
-	if opp < 0: return {success=false, msg="请选择目标"}
-	var drawn = _ms.card_systems[opp].draw_cards(1)
-	if drawn.is_empty():
-		return {success=false, msg="对方牌堆为空"}
-	_ms.add_log(player_idx, "济贫: %s抽到「%s」（公示）" % [_ms._target_name(opp), Config.card_name(str(drawn[0].type_id))])
+	var cs = _ms.card_systems[player_idx]
+	var uid = int(params.get("card_uid", -1))
+	var card = {}
+	for c in cs.hand:
+		if c.uid == uid: card = c; break
+	if card.is_empty(): return {success=false, msg="请选择要送出的手牌"}
+	var target = int(params.get("target", -1))
+	if target < 0 or target >= _ms.players.size() or target == player_idx:
+		return {success=false, msg="请选择目标"}
+	if _ms.players[target].get("eliminated", false):
+		return {success=false, msg="目标已淘汰"}
+	# 从手牌移除并交给目标
+	var idx = -1
+	for i in range(cs.hand.size()):
+		if cs.hand[i].uid == uid: idx = i; break
+	if idx < 0: return {success=false, msg="手牌中没有此卡"}
+	var given = cs.hand[idx]
+	cs.hand.remove_at(idx)
+	_ms.card_systems[target].add_to_hand(given)
+	_ms.add_log(player_idx, "济贫: 送出「%s」给%s（公示）" % [
+		Config.card_name(str(given.type_id)), _ms._target_name(target)])
 	return {success=true}
 
 # 被动：装备护甲耐久上限 +1（铸甲师 max_durability=4；由 equip_armor 调用）

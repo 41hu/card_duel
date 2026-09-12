@@ -64,6 +64,8 @@ func _process(_delta):
 			if room.match != null:
 				room.match.check_timers()
 			# 自定义卡组配置超时：未上报的玩家自动使用默认卡组
+			if room.stage == "deck":
+				_broadcast_to_room(room, {"t": "deck_timer", "time_left": maxi(0, ceili((int(room.deck_deadline) - Time.get_ticks_msec()) / 1000.0))})
 			if room.stage == "deck" and Time.get_ticks_msec() >= int(room.get("deck_deadline", 0)):
 				for i in range(room.decks.size()):
 					if room.decks[i].is_empty():
@@ -73,7 +75,13 @@ func _process(_delta):
 
 func _handle_message(peer_idx: int, raw: String):
 	var data = JSON.parse_string(raw)
-	if data == null: return
+	if not data is Dictionary or not data.get("t") is String: return
+	for key in ["extra", "config", "weapon_pool", "direction", "pos"]:
+		if data.has(key) and not data[key] is Dictionary: return
+	for key in ["cards", "card_uids"]:
+		if data.has(key) and not data[key] is Array: return
+	for key in ["skill", "action", "char_id", "player_name", "room_id", "mode", "package"]:
+		if data.has(key) and not data[key] is String: return
 	var t = data.get("t", "")
 	log_msg("P%d << %s" % [_peers[peer_idx].player_index, t])
 	match t:
@@ -95,6 +103,9 @@ func _handle_message(peer_idx: int, raw: String):
 		"deck_ready": _on_deck_ready(peer_idx, data)
 
 func _create_room(peer_idx: int, data: Dictionary):
+	if _find_room(_peers[peer_idx].room_id) != null:
+		_send_to(peer_idx, {"t": "error", "msg": "请先退出当前房间"})
+		return
 	var rid = str(_next_room_id); _next_room_id += 1
 	var peer = _peers[peer_idx]
 	# 模式映射：classic=2人标准 / rapid=2人快速 / ffa=4人混战（未来夺旗在此扩展）
@@ -116,7 +127,13 @@ func _create_room(peer_idx: int, data: Dictionary):
 
 func _join_room(peer_idx: int, data: Dictionary):
 	var rid = data.get("room_id", ""); var peer = _peers[peer_idx]; var room = _find_room(rid)
+	if _find_room(peer.room_id) != null:
+		_send_to(peer_idx, {"t": "error", "msg": "请先退出当前房间"})
+		return
 	if room == null: _send_to(peer_idx, {"t":"error","msg":"房间不存在"}); return
+	if room.stage != "waiting":
+		_send_to(peer_idx, {"t": "error", "msg": "对局已开始，无法加入"})
+		return
 	if room.peer_indices.size() >= room.max_players:
 		# 满员时区分「对局已开始」与「人满」，避免误导（对局已开始无法再加入）
 		if room.stage != "waiting":
@@ -171,7 +188,7 @@ func _start_ffa(room):
 	room.match._start_game()
 	var st = room.match.get_full_state()
 	for p_idx in room.peer_indices:
-		_send_to(p_idx, {"t": "game_starting", "ffa": true, "state": st})
+		_send_to(p_idx, {"t": "game_starting", "ffa": true, "state": _state_for_player(st, _peers[p_idx].player_index)})
 	log_msg("4人混战开局 %s" % str(picked))
 
 func _find_room(room_id: String):
@@ -222,7 +239,7 @@ func _after_bp(room):
 		room.bp_chars = chars
 		room.bp_first = bf
 		room.deck_deadline = Time.get_ticks_msec() + DECK_TIME * 1000
-		_broadcast_to_room(room, {"t": "deck_config", "chars": chars, "first": bf})
+		_broadcast_to_room(room, {"t": "deck_config", "chars": chars, "first": bf, "time_left": DECK_TIME})
 		log_msg("BP完成，等待双方卡组 P1=%s P2=%s" % [chars[0], chars[1]])
 		return
 	room.match.rapid_mode = room.rapid_mode  # 快速模式（房间创建时指定）
@@ -270,7 +287,7 @@ func _try_start_deck(room):
 	room.stage = "game"
 	var st = room.match.get_full_state()
 	for p_idx in room.peer_indices:
-		_send_to(p_idx, {"t": "game_starting", "state": st})
+		_send_to(p_idx, {"t": "game_starting", "state": _state_for_player(st, _peers[p_idx].player_index)})
 	log_msg("自定义卡组开战 P1=%s P2=%s" % [chars[0], chars[1]])
 
 func _broadcast_bp_state(room):
@@ -280,6 +297,11 @@ func _broadcast_bp_state(room):
 func _on_play_card(peer_idx: int, data: Dictionary):
 	var peer = _peers[peer_idx]; var room = _find_room(peer.room_id)
 	if room == null or room.match == null: return
+	# Card identity and skill-only transformations are owned by the match engine.
+	for key in data.get("extra", {}):
+		if key not in ["target", "steps", "direction", "trap_pos", "destroy_target", "equip_type", "chosen_uid"]:
+			_send_to(peer_idx, {"t": "error", "msg": "无效出牌参数"})
+			return
 	data["action"] = "play_card"
 	var result = room.match.process_action(peer.player_index, data)
 	if not result.get("success", false) and result.get("phase") != "weapon_choose":
@@ -294,6 +316,7 @@ func _on_end_turn(peer_idx: int):
 func _on_wind_bow_move(peer_idx: int, data: Dictionary):
 	var peer = _peers[peer_idx]; var room = _find_room(peer.room_id)
 	if room == null or room.match == null: return
+	data["action"] = "wind_bow_move"
 	var result = room.match.process_action(peer.player_index, data)
 	if not result.get("success", false):
 		_send_to(peer_idx, {"t":"error","msg":result.get("msg","失败")})
@@ -302,6 +325,7 @@ func _on_wind_bow_move(peer_idx: int, data: Dictionary):
 func _on_vine_remove(peer_idx: int, data: Dictionary):
 	var peer = _peers[peer_idx]; var room = _find_room(peer.room_id)
 	if room == null or room.match == null: return
+	data["action"] = "vine_remove"
 	var result = room.match.process_action(peer.player_index, data)
 	if not result.get("success", false):
 		_send_to(peer_idx, {"t":"error","msg":result.get("msg","失败")})
@@ -337,7 +361,9 @@ func _on_use_skill(peer_idx: int, data: Dictionary):
 	if skill.begins_with("_"):
 		return
 	data["action"] = "use_skill"
-	room.match.process_action(peer.player_index, data)
+	var result = room.match.process_action(peer.player_index, data)
+	if not result.get("success", false):
+		_send_to(peer_idx, {"t": "error", "msg": result.get("msg", "操作失败")})
 
 func _on_fighter_choice(peer_idx: int, data: Dictionary):
 	var peer = _peers[peer_idx]; var room = _find_room(peer.room_id)
@@ -352,10 +378,24 @@ func _on_confirm_discard_msg(peer_idx: int, data: Dictionary):
 func _on_match_state_changed(state: Dictionary, room):
 	state["t"] = "game_state"
 	for p_idx in room.peer_indices:
-		var ps = state.duplicate(true)
-		for pl in ps.players:
-			if pl.index != _peers[p_idx].player_index: pl.hand = []
-		_send_to(p_idx, ps)
+		_send_to(p_idx, _state_for_player(state, _peers[p_idx].player_index))
+
+func _state_for_player(state: Dictionary, player_idx: int) -> Dictionary:
+	var out = state.duplicate(true)
+	for p in out.get("players", []):
+		var exposed := false
+		for buff in p.get("buffs", []):
+			if buff.type == "exposed": exposed = true
+		if p.index != player_idx and not exposed:
+			p.hand = []
+		if p.index != player_idx:
+			for skill in p.get("active_skills", []):
+				skill.erase("available")
+				skill.erase("blocked_reason")
+	if out.get("revealed_to", -1) != player_idx:
+		for key in ["revealed_hand", "revealed_to", "revealed_from"]:
+			out.erase(key)
+	return out
 
 func _on_weapon_prompt(player_idx: int, weapon: Dictionary, room):
 	for p_idx in room.peer_indices:

@@ -5,7 +5,12 @@
 # ============================================================
 extends RefCounted
 
-var match_ref  # Weak reference to MatchState for accessing player data
+var _owner_ref: WeakRef
+var match_ref:
+	get:
+		return _owner_ref.get_ref() if _owner_ref != null else null
+	set(value):
+		_owner_ref = weakref(value) if value != null else null
 
 func _init(match):
 	match_ref = match

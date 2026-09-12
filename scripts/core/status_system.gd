@@ -1,7 +1,12 @@
 # status_system.gd — 状态系统（Buff、DoT、冻结、被动技能标记）
 extends RefCounted
 
-var match_ref
+var _owner_ref: WeakRef
+var match_ref:
+	get:
+		return _owner_ref.get_ref() if _owner_ref != null else null
+	set(value):
+		_owner_ref = weakref(value) if value != null else null
 
 # Buff 修正注册表：新增影响攻击/移动的 buff 只需在这里注册一个 handler，
 # 无需改 get_attack_modifier / get_move_modifier 等消费点（开闭原则）

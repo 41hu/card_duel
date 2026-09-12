@@ -7,7 +7,12 @@
 # ============================================================
 extends RefCounted
 
-var match_ref
+var _owner_ref: WeakRef
+var match_ref:
+	get:
+		return _owner_ref.get_ref() if _owner_ref != null else null
+	set(value):
+		_owner_ref = weakref(value) if value != null else null
 
 # 道具类型注册表
 # name:         道具名（卡面/日志显示）；desc: 效果描述（点击卡牌说明区显示）

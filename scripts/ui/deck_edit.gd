@@ -436,9 +436,10 @@ func _refresh_edit(count_label: Label, pool_box: VBoxContainer, sel_box: VBoxCon
 			var minus: Button = row.get_child(2)
 			minus.disabled = is_heal or n <= 0 or _draft.is_empty()
 			var plus: Button = row.get_child(3)
-			plus.disabled = is_heal or n >= lim or _draft.size() >= DeckData.DECK_SIZE
+			plus.disabled = not DeckData.can_add_card(_draft, tid, _package_id).ok
 	# 已选列表重建
 	for c in sel_box.get_children():
+		sel_box.remove_child(c)
 		c.queue_free()
 	for tid in _draft:
 		var row := HBoxContainer.new()
@@ -479,25 +480,15 @@ func _on_package_switch(pid: String):
 	_refresh_edit_keep()
 
 func _on_add(tid: String):
-	var n := 0
-	for c in _draft:
-		if c == tid: n += 1
-	if n >= DeckData.card_limit(tid, _package_id):
-		_flash("%s 已达上限 %d 张" % [DeckData.card_name(tid), n], Style.ERROR_RED)
-		return
-	# 大池上限检查
-	var cat = DeckData.category_of(tid)
-	var summary = DeckData.summarize(_draft)
-	if int(summary.get(cat, 0)) >= DeckData.category_max(cat):
-		_flash("%s已满（%d）" % [DeckData.category_name(cat), DeckData.category_max(cat)], Style.ERROR_RED)
-		return
-	if _draft.size() >= DeckData.DECK_SIZE:
-		_flash("卡组已满 %d 张" % DeckData.DECK_SIZE, Style.ERROR_RED)
+	var result = DeckData.can_add_card(_draft, tid, _package_id)
+	if not result.ok:
+		_flash(result.msg, Style.ERROR_RED)
 		return
 	_draft.append(tid)
 	_refresh_edit_keep()
 
 func _on_remove(tid: String):
+	if tid in ["heal_3", "heal_5"]: return
 	var idx = _draft.find(tid)
 	if idx >= 0:
 		_draft.remove_at(idx)

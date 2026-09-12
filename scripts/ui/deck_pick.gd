@@ -38,10 +38,12 @@ var _edit_ok_btn: Button  # 编辑页确认按钮（联机时文案改为"准备
 var _edit_vs_info: Button  # 双方角色信息行（点击看技能）
 var _pkg_buttons: Dictionary = {}  # 编辑页套餐按钮（pid -> Button）
 var _flash_label: Label  # 临时提示（新提示覆盖旧的防残留）
+var _deadline_label: Label
 
 func _ready():
 	Style.scale_node_fonts(self)
 	_build_layout()
+	_build_deadline_label()
 	_apply_safe_area()  # 手机端刘海屏：选择页/编辑页整体右移避开
 	BackHandler.scene_back = func() -> bool:
 		if _page == "edit":
@@ -65,6 +67,35 @@ func _exit_tree():
 		Network.game_ended.disconnect(_on_game_ended)
 	if Network.server_disconnected.is_connected(_on_server_disconnected):
 		Network.server_disconnected.disconnect(_on_server_disconnected)
+
+func _build_deadline_label():
+	# Reserve the top strip on every page; switching pages never restarts the clock.
+	for page in [pick_root, edit_root, wait_root]:
+		page.offset_top = 76
+	_deadline_label = Label.new()
+	_deadline_label.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	_deadline_label.offset_top = 8
+	_deadline_label.offset_bottom = 72
+	_deadline_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_deadline_label.add_theme_font_size_override("font_size", Style.fs(28))
+	_deadline_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_deadline_label)
+	_process(0)
+
+func _process(_delta: float):
+	if _deadline_label == null: return
+	if not _is_online():
+		_deadline_label.text = "卡组配置 · 不限时"
+		return
+	var deadline := int(Network.deck_config_data.get("local_deadline", -1))
+	if deadline < 0:
+		_deadline_label.text = "配置限时以服务器为准 · 超时未确认将使用默认卡组"
+		return
+	var seconds := maxi(0, ceili((deadline - Time.get_ticks_msec()) / 1000.0))
+	var waiting := wait_root.visible
+	_deadline_label.text = "%s · %02d:%02d · %s" % ["等待对手" if waiting else "调整卡组", seconds / 60, seconds % 60, "你的卡组已确认" if waiting else "超时未确认将使用默认卡组"]
+	if seconds == 0: _deadline_label.text = "等待服务器开始对局 · " + ("你的卡组已确认" if waiting else "配置时间已结束")
+	_deadline_label.add_theme_color_override("font_color", Style.ERROR_RED if seconds <= 15 else Style.MODE_TITLE)
 
 # 全面屏/刘海屏安全区：横屏刘海在左时，选择页/编辑页整体右移、返回按钮右移避开
 func _apply_safe_area():
@@ -217,6 +248,12 @@ func _build_layout():
 	vs_info.offset_left = -450
 	vs_info.offset_right = 450
 	vs_info.add_theme_font_size_override("font_size", Style.fs(24))
+	vs_info.anchor_left = 0
+	vs_info.anchor_right = 1
+	vs_info.offset_left = 24
+	vs_info.offset_right = -24
+	vs_info.clip_text = true
+	vs_info.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	vs_info.add_theme_color_override("font_color", Style.CONFIG_VALUE)
 	vs_info.pressed.connect(_show_char_skills)
 	edit_root.add_child(vs_info)
@@ -228,6 +265,10 @@ func _build_layout():
 	top.offset_bottom = 246
 	top.offset_left = -260
 	top.offset_right = 260
+	top.anchor_left = 0
+	top.anchor_right = 1
+	top.offset_left = 24
+	top.offset_right = -24
 	top.add_theme_constant_override("separation", Style.fs(20))
 	top.alignment = BoxContainer.ALIGNMENT_CENTER
 	edit_root.add_child(top)
@@ -257,6 +298,10 @@ func _build_layout():
 	pkg_row.offset_bottom = 322
 	pkg_row.offset_left = -260
 	pkg_row.offset_right = 260
+	pkg_row.anchor_left = 0
+	pkg_row.anchor_right = 1
+	pkg_row.offset_left = 24
+	pkg_row.offset_right = -24
 	pkg_row.add_theme_constant_override("separation", Style.fs(12))
 	pkg_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	edit_root.add_child(pkg_row)
@@ -639,7 +684,7 @@ func _refresh_edit():
 			var minus: Button = row.get_child(2)
 			minus.disabled = is_heal or n <= 0
 			var plus: Button = row.get_child(3)
-			plus.disabled = is_heal or n >= lim or _draft.size() >= DeckData.DECK_SIZE
+			plus.disabled = not DeckData.can_add_card(_draft, tid, _package_id).ok
 	# 已选列表重建（remove_child 立即移出树，防旧行残留）
 	for c in _edit_sel_box.get_children():
 		_edit_sel_box.remove_child(c)
@@ -665,23 +710,15 @@ func _refresh_edit():
 		row.add_child(rm)
 
 func _on_add(tid: String):
-	var n := 0
-	for c in _draft:
-		if c == tid:
-			n += 1
-	if n >= DeckData.card_limit(tid, _package_id):
-		return
-	# 大池上限检查
-	var cat = DeckData.category_of(tid)
-	var summary = DeckData.summarize(_draft)
-	if int(summary.get(cat, 0)) >= DeckData.category_max(cat):
-		return
-	if _draft.size() >= DeckData.DECK_SIZE:
+	var result = DeckData.can_add_card(_draft, tid, _package_id)
+	if not result.ok:
+		_flash_status(result.msg)
 		return
 	_draft.append(tid)
 	_refresh_edit()
 
 func _on_remove(tid: String):
+	if tid in ["heal_3", "heal_5"]: return
 	var idx = _draft.find(tid)
 	if idx >= 0:
 		_draft.remove_at(idx)
@@ -717,6 +754,7 @@ func _on_edit_confirm():
 func _flash_status(text: String):
 	# 覆盖旧提示，避免快速连续触发时多个 Label 叠加残留
 	if _flash_label != null and is_instance_valid(_flash_label):
+		_flash_label.hide()
 		_flash_label.queue_free()
 	var l := Label.new()
 	l.text = text
@@ -726,11 +764,16 @@ func _flash_status(text: String):
 	l.offset_left = -400
 	l.offset_right = 400
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	l.add_theme_font_size_override("font_size", Style.fs(24))
 	l.add_theme_color_override("font_color", Style.ERROR_RED)
 	edit_root.add_child(l)
 	_flash_label = l
-	get_tree().create_timer(1.5).timeout.connect(l.queue_free)
+	var label_ref = weakref(l)
+	get_tree().create_timer(3.0).timeout.connect(func():
+		var label = label_ref.get_ref()
+		if label != null: label.queue_free()
+	)
 
 # 打开武器幻化池编辑器（覆盖层组件；返回时校验恰好 4 把，见 weapon_pool_editor.gd）
 func _open_weapon_pool_editor():
@@ -757,7 +800,7 @@ func _start_battle():
 		var ai_pool: Dictionary = AIDeckBuilder.build_weapon_pool(str(chars[1]), str(chars[0]))
 		LocalGame.start_ai_game(str(chars[0]), str(chars[1]), LocalGame.ai_difficulty,
 			[decks[0], ai_deck], true,
-			[pools[0], ai_pool])
+			[pools[0], ai_pool], bf)
 	else:
 		LocalGame.start_local_game(str(chars[0]), str(chars[1]), bf, decks, true, pools)
 	get_tree().change_scene_to_file("res://scenes/battle_scene.tscn")

@@ -10,7 +10,12 @@
 # ============================================================
 extends RefCounted
 
-var _m
+var _owner_ref: WeakRef
+var _m:
+	get:
+		return _owner_ref.get_ref() if _owner_ref != null else null
+	set(value):
+		_owner_ref = weakref(value) if value != null else null
 var _handlers: Dictionary
 
 

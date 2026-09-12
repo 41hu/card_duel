@@ -2,7 +2,12 @@
 # 位置 = Vector2i（当前线性地图 Vector2i(x,0)；未来六边形轴向坐标，只换 geometry 实现）
 extends RefCounted
 
-var match_ref
+var _owner_ref: WeakRef
+var match_ref:
+	get:
+		return _owner_ref.get_ref() if _owner_ref != null else null
+	set(value):
+		_owner_ref = weakref(value) if value != null else null
 var geometry: RefCounted  # BoardGeometry 实例
 
 func _init(match):
@@ -28,6 +33,7 @@ func move_player(player_idx: int, dir: Vector2i, allow_push: bool = true) -> boo
 		return false
 	var player = match_ref.get_player(player_idx)
 	var new_pos = geometry.clamp_position(geometry.step(player.position, dir))
+	if new_pos == player.position: return false
 
 	# 贴脸时朝对手方向移动可推人（先判断推人，再判断阻挡；多人局取该方向上的对手）
 	var push_idx = _opponent_in_dir(player_idx, dir)
@@ -91,7 +97,13 @@ func _can_push(player_idx: int, push_idx: int) -> bool:
 	if new_pos == other.position:
 		return false
 	# 不能推到和推动者重合
-	return new_pos != my_pos
+	return new_pos != my_pos and not _occupied_by_other(new_pos, push_idx)
+
+func _occupied_by_other(pos: Vector2i, moving_idx: int) -> bool:
+	for p in match_ref.players:
+		if p.index != moving_idx and not p.get("eliminated", false) and p.position == pos:
+			return true
+	return false
 
 func _push_opponent(player_idx: int, push_idx: int):
 	var other = match_ref.get_player(push_idx)
@@ -116,6 +128,7 @@ func attract(player_idx: int, target: int = -1) -> bool:
 		# 我无法实际后退（板边 clamp 不动 / 位置被占）→ 吸引失败，不位移（卡不消耗）
 		if my_new == other.position or my_new == my_pos:
 			return false
+		if _occupied_by_other(my_new, player_idx): return false
 		other.position = my_pos
 		_add_move_stat(opp)
 		_trigger_items_on_step(opp)
@@ -123,6 +136,7 @@ func attract(player_idx: int, target: int = -1) -> bool:
 		_add_move_stat(player_idx)
 		_trigger_items_on_step(player_idx)
 		return true
+	if new_pos == other.position or _occupied_by_other(new_pos, opp): return false
 	other.position = new_pos
 	_add_move_stat(opp)
 	_trigger_items_on_step(opp)
@@ -142,6 +156,7 @@ func deter(player_idx: int, target: int = -1) -> bool:
 	# 对方在板边推不动（clamp 后原地不动）→ 威慑失败，不位移（卡不消耗）
 	if new_pos == other.position:
 		return false
+	if _occupied_by_other(new_pos, opp): return false
 	other.position = new_pos
 	_add_move_stat(opp)  # 被威慑推远的位移
 	_trigger_items_on_step(opp)

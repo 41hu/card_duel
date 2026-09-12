@@ -1,5 +1,5 @@
 # info_panel.gd — 对战信息面板（己方/对手共用）
-# 结构：头部行(名字+HP数值+HP条) / 属性行(面板+AP+坐标+装备) / 状态行(状态槽 FlowContainer)
+# 结构：头部 / 属性 / 行动点图标 / 手牌与牌堆 / 装备 / 状态槽。
 # 状态槽固定尺寸 + 超量合并，buff 再多也不会撑爆信息栏。
 # ---- 后期加美术资源：只改 _STATUS_ICONS 注册表 ----
 # 注册表 icon 值有两种：
@@ -10,6 +10,7 @@ extends PanelContainer
 
 const Style = preload("res://scripts/theme/style_const.gd")
 const StatusSlot = preload("res://scripts/ui/components/status_slot.gd")
+const APBadge = preload("res://scripts/ui/components/action_point_badge.gd")
 
 signal status_clicked(text: String)
 
@@ -17,11 +18,16 @@ var _name_label: Button
 var _hp_num: Label
 var _hp_bar: ProgressBar
 var _attr_label: Label
+var _ap_row: HBoxContainer
+var _ap_buttons: Array = []
+var _ap_badges: Array = []
 var _deck_label: Label
 var _equip_label: Button
 var _status_row: FlowContainer
 var _skill_desc: String = ""
 var _equip_detail: String = ""
+var _hp_color := Color(0.9, 0.95, 0.9)
+var _hp_tween: Tween
 
 # 状态图标注册表：icon(文字占位或贴图路径) + 强调色 + 中文名
 const _STATUS_ICONS := {
@@ -58,13 +64,16 @@ func content_height(pw: float = 0.0) -> float:
 	var h := 0.0
 	var rows := 0
 	if _name_label != null:
-		h += _name_label.get_combined_minimum_size().y
+		h += _name_label.get_parent().get_combined_minimum_size().y
 		rows += 1
 	if _attr_label != null:
 		h += _attr_label.get_combined_minimum_size().y
 		rows += 1
 	if _deck_label != null:
 		h += _deck_label.get_combined_minimum_size().y
+		rows += 1
+	if _ap_row != null:
+		h += _ap_row.get_combined_minimum_size().y
 		rows += 1
 	if _equip_label != null and _equip_label.visible:
 		h += _equip_label.get_combined_minimum_size().y
@@ -82,16 +91,19 @@ func content_height(pw: float = 0.0) -> float:
 # （"-3·2回" 等）会把槽加宽到 ~60，取 58 保守估计（行数偏多 → 面板偏高 20px 也不裁切）。
 # 最窄面板内宽 444 也放得下 ≥7 槽/行，11 槽封顶 → 实际最多 2 行，估算不会失控。
 func _status_rows_height(pw: float) -> float:
-	var n := _status_row.get_child_count()
-	if n <= 0:
-		return 0.0
-	var w := pw
-	if w <= 0.0:
-		w = 460.0
-	var inner := w - 16.0
-	var per_row := maxi(1, int(inner / 58.0))
-	var rows := ceili(float(n) / float(per_row))
-	return rows * 46.0 + (rows - 1) * 4.0
+	var inner := maxf(1.0, (pw if pw > 0.0 else 460.0) - 16.0)
+	var height := 0.0
+	var row_width := 0.0
+	var row_height := 0.0
+	for slot in _status_row.get_children():
+		var minimum: Vector2 = slot.get_combined_minimum_size()
+		if row_width > 0.0 and row_width + 4.0 + minimum.x > inner:
+			height += row_height + 4.0
+			row_width = 0.0
+			row_height = 0.0
+		row_width += minimum.x + (4.0 if row_width > 0.0 else 0.0)
+		row_height = maxf(row_height, minimum.y)
+	return height + row_height
 
 func _ready():
 	var sb := StyleBoxFlat.new()
@@ -110,6 +122,9 @@ func _ready():
 	# 角色名可点击：PC 悬停看技能效果，移动端点击显示到底部状态栏
 	_name_label = Button.new()
 	_name_label.flat = true
+	_name_label.clip_text = true
+	_name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_name_label.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_name_label.add_theme_font_size_override("font_size", Style.fs(28))
 	_name_label.pressed.connect(func(): status_clicked.emit(_skill_desc))
 	head.add_child(_name_label)
@@ -118,7 +133,7 @@ func _ready():
 	head.add_child(_hp_num)
 	_hp_bar = ProgressBar.new()
 	_hp_bar.show_percentage = false
-	_hp_bar.custom_minimum_size = Vector2(0, 14)
+	_hp_bar.custom_minimum_size = Vector2(60, 14)
 	_hp_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_hp_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var bg := StyleBoxFlat.new()
@@ -126,15 +141,33 @@ func _ready():
 	bg.set_corner_radius_all(4)
 	_hp_bar.add_theme_stylebox_override("background", bg)
 	head.add_child(_hp_bar)
-	# 属性行：面板 + AP + 坐标
+	# 属性行与行动额度分开，卡牌和额度共用同一组图标。
 	_attr_label = Label.new()
 	_attr_label.add_theme_font_size_override("font_size", Style.fs(22))
 	_attr_label.add_theme_color_override("font_color", Color(0.88, 0.9, 0.95))
-	# 单行显示（数字 AP 后宽度足够，邪术师两点功能点也完整）：不加 autowrap——
-	# autowrap 会让 get_combined_minimum_size 在布局前算出虚高最小尺寸（每字符一行），
-	# 导致面板高度失控顶高挡技能按钮。不加 ellipsis：正常宽度内完整显示
 	_attr_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_attr_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vb.add_child(_attr_label)
+	_ap_row = HBoxContainer.new()
+	_ap_row.add_theme_constant_override("separation", 8)
+	vb.add_child(_ap_row)
+	for kind in range(1, 4):
+		var button := Button.new()
+		button.flat = true
+		button.custom_minimum_size = Vector2(84, 70)
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_ap_row.add_child(button)
+		var badge = APBadge.new()
+		button.add_child(badge)
+		badge.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+		badge.offset_left = -42
+		badge.offset_top = -35
+		badge.offset_right = 42
+		badge.offset_bottom = 35
+		badge.setup(kind, "0/0")
+		button.pressed.connect(func(): status_clicked.emit(button.tooltip_text))
+		_ap_buttons.append(button)
+		_ap_badges.append(badge)
 	# 牌堆/弃牌行：独立一行（独立牌堆模式下每人各自显示，共享模式下双方一致）
 	_deck_label = Label.new()
 	_deck_label.add_theme_font_size_override("font_size", Style.fs(20))
@@ -143,6 +176,7 @@ func _ready():
 	# 装备行：武器/防具短信息，点击显示完整效果（PC 悬停 tooltip）
 	_equip_label = Button.new()
 	_equip_label.flat = true
+	_equip_label.clip_text = true
 	_equip_label.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_equip_label.add_theme_font_size_override("font_size", Style.fs(20))
 	_equip_label.add_theme_color_override("font_color", Color(0.75, 0.8, 0.85))
@@ -161,7 +195,8 @@ func refresh(p: Dictionary, tag: String, accent: Color):
 	_name_label.tooltip_text = _skill_desc
 	_hp_num.text = "%d/%d" % [p.hp, p.max_hp]
 	var pct: float = float(p.hp) / max(p.max_hp, 1)
-	_hp_num.add_theme_color_override("font_color", Color(0.95, 0.3, 0.3) if pct <= 0.35 else Color(0.9, 0.95, 0.9))
+	_hp_color = Color(0.95, 0.3, 0.3) if pct <= 0.35 else Color(0.9, 0.95, 0.9)
+	_hp_num.add_theme_color_override("font_color", _hp_color)
 	_hp_bar.max_value = max(p.max_hp, 1)
 	_hp_bar.value = p.hp
 	var fg := StyleBoxFlat.new()
@@ -169,12 +204,16 @@ func refresh(p: Dictionary, tag: String, accent: Color):
 	# fill 不设圆角：ProgressBar 满值时 fill 圆角会在右端留出空隙（看似没填满）
 	fg.set_corner_radius_all(0)
 	_hp_bar.add_theme_stylebox_override("fill", fg)
-	# 属性行：面板 + AP + 手牌。去掉"格X"坐标（棋盘上可见，省宽度让 AP 完整显示）
-	_attr_label.text = "近%d 远%d 魔%d | %s | 手:%d/%d" % [p.near_power, p.range_power, p.magic_power,
-		_ap_circles(p.get("ap_attack", 0), p.get("ap_move", 0), p.get("ap_function", 0),
-			2 if p.get("char_id", "") == "warlock" else 1),
-		p.get("hand_size", 0), p.get("hand_limit", 5)]
-	_deck_label.text = "牌堆 %d · 弃牌 %d" % [p.get("deck_size", 0), p.get("discard_size", 0)]
+	# The denominator is the turn-start grant, not the remaining value or a buff query.
+	_attr_label.text = "近%d 远%d 魔%d" % [p.near_power, p.range_power, p.magic_power]
+	var fields := ["ap_attack", "ap_move", "ap_function"]
+	var defaults := [2, 1, 2 if p.get("char_id", "") == "warlock" else 1]
+	for i in range(3):
+		var remaining := int(p.get(fields[i], 0))
+		var capacity := int(p.get(fields[i] + "_max", defaults[i]))
+		_ap_badges[i].setup(i + 1, "%d/%d" % [remaining, capacity], 26, remaining <= 0)
+		_ap_buttons[i].tooltip_text = "%s：剩余 %d / 本回合额度 %d" % [APBadge.NAMES[i + 1], remaining, capacity]
+	_deck_label.text = "手 %d/%d · 牌堆 %d · 弃牌 %d" % [p.get("hand_size", 0), p.get("hand_limit", 5), p.get("deck_size", 0), p.get("discard_size", 0)]
 	_refresh_equip(p)
 	_refresh_status(p)
 
@@ -188,6 +227,7 @@ func _refresh_equip(p: Dictionary):
 		detail += "武器 %s（%s）：%s" % [p.weapon.data.name, wtype, p.weapon.data.desc]
 	if not p.armor.is_empty():
 		var maxd: int = p.armor.get("max_durability", 3)
+		if not eq.is_empty(): eq = eq.strip_edges() + "\n"
 		eq += "甲:%s(%d/%d)" % [p.armor.data.name, p.armor.durability, maxd]
 		if detail != "": detail += "\n"
 		detail += "防具 %s：%s（耐久%d/%d）" % [p.armor.data.name, p.armor.data.desc, p.armor.durability, maxd]
@@ -198,6 +238,7 @@ func _refresh_equip(p: Dictionary):
 
 func _refresh_status(p: Dictionary):
 	for c in _status_row.get_children():
+		_status_row.remove_child(c)
 		c.queue_free()
 	var slots: Array = []
 	if p.get("frozen", false):
@@ -222,9 +263,9 @@ func _refresh_status(p: Dictionary):
 		if b.type == "paladin_counter" or b.type == "tracker_chase":
 			# 反击（圣骑士）/追击（寻踪者）：每层独立计时（各 2 回合后清除，不因再触发刷新）；
 			# 按叠加回合分组：同一回合叠的层合并一个槽（显示层数），不同回合各占一槽
-			var bt := int(b.get("turn", 0))
+			var bt = "%s:%d" % [b.type, int(b.get("turn", 0))]
 			if not counter_groups.has(bt):
-				counter_groups[bt] = {"value": 0, "duration": int(b.duration), "kind": b.type}
+				counter_groups[bt] = {"value": 0, "duration": int(b.duration), "kind": b.type, "turn": int(b.get("turn", 0))}
 			counter_groups[bt].value += int(b.value)
 			continue
 		if b.type == "mage_phantom":
@@ -253,10 +294,10 @@ func _refresh_status(p: Dictionary):
 		var g: Dictionary = counter_groups[bt]
 		if g.kind == "tracker_chase":
 			slots.append(_slot_data("tracker_chase", "+%d·%d回" % [g.value, g.duration],
-				"追击：可抵消%d次校准清空（第%d回合叠加），剩余%d回合" % [g.value, bt, g.duration]))
+				"追击：可抵消%d次校准清空（第%d回合叠加），剩余%d回合" % [g.value, g.turn, g.duration]))
 		else:
 			slots.append(_slot_data("paladin_counter", "+%d·%d回" % [g.value, g.duration],
-				"反击：下次攻击伤害+%d（第%d回合叠加），剩余%d回合" % [g.value, bt, g.duration]))
+				"反击：下次攻击伤害+%d（第%d回合叠加），剩余%d回合" % [g.value, g.turn, g.duration]))
 	# 幻影（法师）：层数合计，闪避概率 = 层数/(层数+1)，永久存在
 	if phantom_total > 0:
 		slots.append(_slot_data("mage_phantom", "+%d·永久" % phantom_total,
@@ -288,16 +329,12 @@ func _dur_text(duration: int) -> String:
 	if duration == -2: return "永久持续"
 	return "剩余%d回" % duration
 
-func _ap_circles(atk: int, mov: int, fun: int, _fun_max: int = 1) -> String:
-	# 数字格式（攻2移1功2）：信息等价、宽度约为圆点版一半，配合 460 面板宽完整显示不换行；
-	# 上限隐含（攻击2/位移1/功能1，邪术师功能2），比圆点更省空间且不会挤棋盘
-	return "攻%d移%d功%d" % [atk, mov, fun]
-
 # HP 变化闪烁：改色 0.9 秒后恢复（低血红色由下次 refresh 覆盖）
 func flash_hp(is_heal: bool):
+	if _hp_tween != null: _hp_tween.kill()
 	_hp_num.add_theme_color_override("font_color", Style.ME_GREEN if is_heal else Style.OPP_RED)
-	var tw := create_tween().set_ease(Tween.EASE_OUT)
-	tw.tween_interval(0.9)
-	tw.tween_callback(func():
-		_hp_num.add_theme_color_override("font_color", Color(0.9, 0.95, 0.9))
+	_hp_tween = create_tween().set_ease(Tween.EASE_OUT)
+	_hp_tween.tween_interval(0.9)
+	_hp_tween.tween_callback(func():
+		_hp_num.add_theme_color_override("font_color", _hp_color)
 	)

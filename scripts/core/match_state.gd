@@ -194,8 +194,10 @@ func player_count() -> int:
 
 # 目标解析：target >= 0 显式指定（多人局点选）；2 人局自动返回唯一对手
 func get_opponent(player_idx: int, target: int = -1) -> int:
-	if target >= 0 and target < players.size() and target != player_idx:
-		return target
+	if target >= 0:
+		if target < players.size() and target != player_idx and not players[target].get("eliminated", false):
+			return target
+		return -1
 	if players.size() == 2:
 		return 1 - player_idx
 	return -1
@@ -266,14 +268,14 @@ var resurrect_limit_override: int = -1   # 复活次数上限（-1 = 无限）
 # 应用自定义房间规则（对局创建后调用；服务器/本地共用）
 func _apply_game_config(cfg: Dictionary):
 	game_config = cfg.duplicate()
-	infinite_play = bool(cfg.get("infinite_play", false))
-	freeze_no_cooldown = bool(cfg.get("freeze_no_cooldown", false))
-	blessing_unlimited = bool(cfg.get("blessing_unlimited", false))
+	infinite_play = bool(cfg.get("infinite_play", rapid_mode))
+	freeze_no_cooldown = bool(cfg.get("freeze_no_cooldown", rapid_mode))
+	blessing_unlimited = bool(cfg.get("blessing_unlimited", rapid_mode))
 	hand_limit_override = int(cfg.get("hand_limit", -1))
 	hand_min_override = int(cfg.get("hand_min", 0))
 	resurrect_limit_override = int(cfg.get("resurrect_limit", -1))
-	# rapid_mode 兼容旧检查点（任一快速规则开启即视为快速模式）
-	rapid_mode = infinite_play or freeze_no_cooldown or blessing_unlimited
+	# Individual rule switches must not enable the other rapid-mode effects.
+	rapid_mode = infinite_play and freeze_no_cooldown and blessing_unlimited
 
 # 构建一副卡组（默认初始构成；custom_decks[idx] 为自定义 type_id 数组时用自定义）
 func _build_card_system(idx: int, custom_decks: Array) -> CardSys:
@@ -287,6 +289,8 @@ func _build_card_system(idx: int, custom_decks: Array) -> CardSys:
 			deck.append({"uid": idx * 1000 + i, "type_id": str(custom_decks[idx][i])})
 	else:
 		deck = Config.build_initial_deck()
+		for card in deck:
+			card.uid += idx * 1000
 	return CardSys.new(deck)
 
 func get_player(idx: int): return players[idx]
@@ -351,6 +355,9 @@ func _judgment_phase():
 
 func _draw_phase():
 	if phase == Config.Phase.GAME_OVER: return
+	if players[current_player].get("eliminated", false):
+		_advance_to_next_player()
+		return
 	turn_phase = Config.TurnPhase.DRAW
 	# 教程模式抑制自然抽牌（手牌由教程完全控制，避免混入随机牌）
 	if not draw_suppressed:
@@ -376,10 +383,16 @@ func _action_phase():
 	state_changed.emit(get_full_state())
 
 func process_action(player_idx: int, action_data: Dictionary) -> Dictionary:
+	if phase == Config.Phase.GAME_OVER or player_idx < 0 or player_idx >= players.size():
+		return {success=false, msg="对局未开始或已结束"}
+	if players[player_idx].get("eliminated", false):
+		return {success=false, msg="你已淘汰"}
 	# 风神弓方向选择：攻击结算后的独立交互，不受阶段限制（放在回合校验前）
 	if action_data.get("action", "") == "wind_bow_move":
 		return _handle_wind_bow_move(player_idx, action_data)
 	if player_idx != current_player: return {success=false, msg="不是你的回合"}
+	if waiting_for_weapon_choice >= 0 or _wind_bow_pending:
+		return {success=false, msg="请先完成当前选择"}
 	if waiting_for_discard:
 		var act = action_data.get("action", "")
 		if act == "discard_one": return {success=discard_one(player_idx, int(action_data.get("card_uid", -1)))}
@@ -389,15 +402,24 @@ func process_action(player_idx: int, action_data: Dictionary) -> Dictionary:
 		return {success=false, msg="当前不在出牌阶段"}
 	var action = action_data.get("action", "")
 	match action:
-		"play_card": return _do_play_card(player_idx, action_data)
+		"play_card":
+			var result = _do_play_card(player_idx, action_data)
+			_advance_if_eliminated(player_idx)
+			return result
 		"end_turn": _discard_phase(); return {success=true, msg="结束出牌"}
 		"use_skill":
 			if action_data.get("skill", "") == "_cheat": return _cheat_card(player_idx, action_data.get("type_id", ""))
 			if action_data.get("skill", "") == "_debug_end": return _debug_end(player_idx, action_data.get("win", true))
-			return _handle_skill(player_idx, action_data.get("skill", ""), action_data)
+			var result = _handle_skill(player_idx, action_data.get("skill", ""), action_data)
+			_advance_if_eliminated(player_idx)
+			return result
 		"fighter_choice": return _handle_fighter_choice(player_idx, action_data)
 		"vine_remove": return _handle_vine_remove(player_idx, action_data)
 	return {success=false, msg="未知行动"}
+
+func _advance_if_eliminated(player_idx: int):
+	if phase != Config.Phase.GAME_OVER and current_player == player_idx and players[player_idx].get("eliminated", false):
+		_advance_to_next_player()
 
 # 除根（反制蔓生种子）：消耗 1 张近战/重击卡 + 1 攻击行动点，
 # 破坏所在格或相邻格的 1 层蔓生种子（不攻击角色、不触发响应）
@@ -422,8 +444,7 @@ func _handle_vine_remove(player_idx: int, data: Dictionary) -> Dictionary:
 			break
 	if not has_seed: return {success=false, msg="该格没有蔓生种子"}
 	# 消耗攻击行动点（与打出该攻击卡一致的成本；默认 1）
-	var cost = char_skills.get_attack_cost(player_idx, card.type_id)
-	if cost < 0: cost = int(Config.CARD_DB[card.type_id].get("ap", 1))
+	var cost = vine_remove_cost(player_idx, card.type_id)
 	if players[player_idx].ap_attack < cost: return {success=false, msg="攻击行动点不足"}
 	players[player_idx].ap_attack -= cost
 	# 一次全清（1/2 层一起移除）
@@ -465,14 +486,7 @@ func _do_play_card(player_idx: int, data: Dictionary) -> Dictionary:
 	if cost < 0: cost = cd.cost
 	# 妙手（盗贼）：夺取卡不消耗功能行动点
 	var rogue_free_seize = type_id == "seize" and player.char_id == "rogue"
-	var ap_ok = rapid_mode or infinite_play  # 快速模式/自定义「无限出牌」：不检查/不消耗行动点
-	if not ap_ok:
-		match cd.ap:
-			Config.APType.ATTACK: ap_ok = (player.ap_attack >= cost)
-			Config.APType.MOVE: ap_ok = (player.ap_move >= cost)
-			Config.APType.FUNCTION: ap_ok = true if rogue_free_seize else (player.ap_function >= cost)
-			Config.APType.NONE: ap_ok = true
-	if not ap_ok: return {success=false, msg="行动点不足"}
+	if not has_card_ap(player_idx, type_id): return {success=false, msg="行动点不足"}
 	var free_sharpshooter = char_skills.can_attack_free(player_idx, type_id)
 	if type_id == "blessing" and not (rapid_mode or blessing_unlimited):  # 快速/自定义「天赐不限」：抽牌效果保留
 		if player.free_move_used: return {success=false, msg="本回合已使用过天赐"}
@@ -499,6 +513,64 @@ func _do_play_card(player_idx: int, data: Dictionary) -> Dictionary:
 
 func _execute_card_effect(player_idx: int, card: Dictionary) -> Dictionary:
 	return card_effects.execute(player_idx, card)
+
+# Shared by the action gate and the private hand snapshot. This is not a full
+# legality check: responses, targets, cooldowns and range have separate rules.
+func attack_target_block_reason(player_idx: int, target_idx: int, type_id: String) -> String:
+	if _rogue_is_stealthed(target_idx) and type_id in ["range", "pierce", "magic", "chant"]:
+		return "目标潜行中，无法瞄准"
+	var distance: int = movement.geometry.distance(players[player_idx].position, players[target_idx].position)
+	if type_id in ["near", "heavy"] and distance != 0:
+		return "距离过远，必须贴近目标"
+	if type_id == "pierce" and char_skills.get_attack_base_damage(player_idx, type_id, distance) < 0:
+		var player = players[player_idx]
+		if player.weapon.get("id", "") == "longbow": distance = maxi(0, distance - 1)
+		if player.range_power <= distance: return "距离过远，穿心无法打出"
+	return ""
+
+func card_block_reason(player_idx: int, type_id: String) -> String:
+	if can_remove_vine_seed(player_idx, type_id): return ""
+	if not has_card_ap(player_idx, type_id): return "行动点不足"
+	if type_id == "move" and players[player_idx].frozen_move: return "移动被冻结"
+	if type_id == "blessing" and not (rapid_mode or blessing_unlimited) and players[player_idx].free_move_used:
+		return "本回合已使用过天赐"
+	if type_id in ["near", "heavy", "range", "pierce", "magic", "chant"]:
+		var reason := "当前没有可选目标"
+		for target in range(players.size()):
+			if target == player_idx or players[target].get("eliminated", false): continue
+			reason = attack_target_block_reason(player_idx, target, type_id)
+			if reason.is_empty(): return ""
+		return reason
+	return ""
+
+func vine_remove_cost(player_idx: int, type_id: String) -> int:
+	# Preserve the existing removal cost, which differs from heavy's attack cost.
+	var cost: int = char_skills.get_attack_cost(player_idx, type_id)
+	return cost if cost >= 0 else int(Config.CARD_DB[type_id].get("ap", 1))
+
+func can_remove_vine_seed(player_idx: int, type_id: String) -> bool:
+	if type_id not in ["near", "heavy"]: return false
+	if int(players[player_idx].get("ap_attack", 0)) < vine_remove_cost(player_idx, type_id): return false
+	var geo = movement.geometry
+	for item in items:
+		if item.item_type == "vine_seed" and geo.is_valid(item.position) and geo.distance(players[player_idx].position, item.position) <= 1:
+			return true
+	return false
+
+func has_card_ap(player_idx: int, type_id: String) -> bool:
+	if not Config.CARD_DB.has(type_id): return false
+	if rapid_mode or infinite_play: return true
+	var player: Dictionary = players[player_idx]
+	var cd: Dictionary = Config.CARD_DB[type_id]
+	var cost: int = char_skills.get_attack_cost(player_idx, type_id)
+	if cost < 0: cost = int(cd.cost)
+	match cd.ap:
+		Config.APType.NONE: return true
+		Config.APType.ATTACK: return int(player.get("ap_attack", 0)) >= cost
+		Config.APType.MOVE: return int(player.get("ap_move", 0)) >= cost
+		Config.APType.FUNCTION:
+			return (type_id == "seize" and player.char_id == "rogue") or int(player.get("ap_function", 0)) >= cost
+	return false
 
 func _handle_skill(player_idx: int, skill: String, params: Dictionary = {}) -> Dictionary:
 	var r = char_skills.use_skill(player_idx, skill, params)
@@ -913,11 +985,14 @@ func skip_response(defender_idx: int): process_response(defender_idx, false)
 func _handle_wind_bow_move(player_idx: int, data: Dictionary) -> Dictionary:
 	if not _wind_bow_pending: return {success=false, msg="无待决的风神弓控制"}
 	if player_idx != _response_attacker: return {success=false, msg="不是你的控制权"}
+	var dir = movement.geometry.from_dict(data.get("direction", {}))
+	if not data.get("cancel", false) and dir != Vector2i.ZERO:
+		var dirs = MapGeometry.HEX_DIRS if players.size() > 2 else [MapGeometry.DIR_LEFT, MapGeometry.DIR_RIGHT]
+		if dir not in dirs: return {success=false, msg="无效移动方向"}
 	var target = _wind_bow_target
 	_wind_bow_pending = false
 	_wind_bow_target = -1
 	if target < 0 or target >= players.size(): return {success=false, msg="目标无效"}
-	var dir = movement.geometry.from_dict(data.get("direction", {}))
 	if data.get("cancel", false) or dir == Vector2i.ZERO:
 		add_log(player_idx, "风神弓: 放弃控制移动")
 		state_changed.emit(get_full_state())
@@ -971,6 +1046,13 @@ func _handle_move_card(player_idx: int, card: Dictionary) -> Dictionary:
 	return {success=true}
 
 func _handle_destroy(player_idx: int, card: Dictionary) -> Dictionary:
+	if card.get("destroy_target", "hand") == "trap":
+		var pos = movement.geometry.from_dict(card.get("trap_pos", {}))
+		if not movement.geometry.is_valid(pos): return {success=false, msg="请选择要摧毁的格子"}
+		if not item_system.destroy_item_at(pos): return {success=false, msg="该格没有道具"}
+		_use_card(player_idx, card)
+		add_log(player_idx, "摧毁%s格道具" % movement.geometry.to_text(pos))
+		return {success=true}
 	var opp = get_opponent(player_idx, int(card.get("target", -1)))
 	if opp < 0: return {success=false, msg="请选择目标"}
 	var target = card.get("destroy_target", "hand")
@@ -986,14 +1068,6 @@ func _handle_destroy(player_idx: int, card: Dictionary) -> Dictionary:
 			card_systems[opp].play_card(chosen)
 			_use_card(player_idx, card); add_log(player_idx, "摧毁手牌: %s（指定）" % _target_name(opp)); return {success=true}
 		card_systems[opp].random_discard(1); _use_card(player_idx, card); add_log(player_idx, "摧毁手牌: %s" % _target_name(opp)); return {success=true}
-	if target == "trap":
-		# 摧毁必须指定格子（客户端走棋盘选格；无位置参数视为操作错误）
-		var pos: Vector2i = movement.geometry.from_dict(card.get("trap_pos", {}))
-		if not movement.geometry.is_valid(pos):
-			return {success=false, msg="请选择要摧毁的格子"}
-		if item_system.destroy_item_at(pos):
-			_use_card(player_idx, card); add_log(player_idx, "摧毁%s格道具" % movement.geometry.to_text(pos)); return {success=true}
-		return {success=false, msg="该格没有道具"}
 	var et = card.get("equip_type", "weapon")
 	if et != "weapon" and et != "armor": return {success=false, msg="无效装备类型"}
 	var msg = equipment.destroy_equipment(opp, et)
@@ -1067,6 +1141,7 @@ func _discard_phase():
 
 func discard_one(player_idx: int, card_uid: int):
 	if not waiting_for_discard or player_idx != current_player: return false
+	if card_systems[current_player].hand.size() <= hand_min_override: return false
 	if not card_systems[current_player].has_card(card_uid): return false
 	card_systems[current_player].discard_card(card_uid)
 	add_log(current_player, "弃1张")
@@ -1076,6 +1151,7 @@ func discard_one(player_idx: int, card_uid: int):
 func confirm_discard(player_idx: int, card_uids: Array = []):
 	if not waiting_for_discard or player_idx != current_player: return
 	for uid in card_uids:
+		if card_systems[current_player].hand.size() <= hand_min_override: break
 		card_systems[current_player].discard_card(uid)
 	state_changed.emit(get_full_state())
 	var limit = movement.get_hand_limit(current_player)
@@ -1098,8 +1174,15 @@ func _advance_to_next_player():
 	while players[next].get("eliminated", false) and guard < n:
 		next = (next + 1) % n
 		guard += 1
+	if (current_player - first_player + n) % n + guard + 1 >= n:
+		turn_number += 1
 	current_player = next
-	if current_player == first_player: turn_number += 1
+	waiting_for_discard = false
+	_discard_deadline = 0
+	if waiting_for_weapon_choice >= 0:
+		equipment.discard_weapon_offer(pending_weapon_id)
+		waiting_for_weapon_choice = -1
+		pending_weapon_id = ""
 	# 回合切换：未完成的风神弓方向选择视为放弃（防断线/超时残留吞掉后续触发）
 	_wind_bow_pending = false
 	_wind_bow_target = -1
@@ -1497,14 +1580,21 @@ func return_card(player_idx: int, card_uid: int) -> bool:
 	return true
 
 func reveal_opponent_hand(asking_player_idx: int) -> Array:
-	var opp = 1 - asking_player_idx
+	var opp = get_opponent(asking_player_idx)
+	if opp < 0 or not _is_exposed(opp): return []
 	return card_systems[opp].get_hand_type_ids()
 
 func _skill_list(player_idx: int) -> Array:
 	var out = []
 	var desc = Config.CHARACTER_DB.get(players[player_idx].char_id, {}).get("skill_desc", "")
-	for sk in char_skills.has_active_skills(player_idx):
-		out.append({"id": sk, "name": char_skills.skill_button_name(sk), "desc": desc})
+	for sk in char_skills.active_skill_ids(player_idx):
+		var reason: String = char_skills.skill_block_reason(player_idx, sk)
+		if players[player_idx].get("eliminated", false): reason = "你已淘汰"
+		elif player_idx != current_player: reason = "尚未轮到你的回合"
+		elif waiting_for_discard: reason = "弃牌阶段不能使用技能"
+		elif waiting_for_weapon_choice >= 0 or _wind_bow_pending: reason = "请先完成当前选择"
+		elif phase != Config.Phase.PLAYER_TURN or turn_phase != Config.TurnPhase.ACTION or response_pending: reason = "当前不在出牌阶段"
+		out.append({"id": sk, "name": char_skills.skill_button_name(sk), "desc": desc, "available": reason.is_empty(), "blocked_reason": reason})
 	return out
 
 func get_full_state(full: bool = false) -> Dictionary:
@@ -1521,6 +1611,9 @@ func get_full_state(full: bool = false) -> Dictionary:
 		phase=phase, turn_phase=turn_phase, current_player=current_player,
 		turn_number=turn_number, first_player=first_player,
 		response_pending=response_pending, pending_attack_card=pending_attack_card,
+		pending_attack_damage=attacker_last_damage,
+		waiting_for_weapon_choice=waiting_for_weapon_choice,
+		wind_bow_pending=_wind_bow_pending, wind_bow_target=_wind_bow_target,
 		pending_attack_segment=pending_attack_segment, pending_attack_segments=pending_attack_segments,
 		pending_target=_pending_target,  # 当前攻击/技能的目标（多人局响应弹窗用）
 		waiting_for_discard=waiting_for_discard, discard_count=discard_count,
@@ -1528,7 +1621,7 @@ func get_full_state(full: bool = false) -> Dictionary:
 		deck_size=card_systems[0].deck.size(), discard_size=card_systems[0].discard.size(),
 		independent_decks=independent_decks,  # 独立牌堆标记（UI 决定显示单方/双方牌堆）
 		players=[], items=_serialize_items(), action_log=action_log.duplicate(),
-		distance=movement.get_distance(_nearest_alive_opponent(current_player)),
+		distance=movement.get_distance(_pending_target if response_pending else _nearest_alive_opponent(current_player)),
 	}
 	for i in range(players.size()):
 		var p = players[i]; var cs = card_systems[i]
@@ -1537,11 +1630,14 @@ func get_full_state(full: bool = false) -> Dictionary:
 			hp=p.hp, max_hp=p.max_hp,
 			near_power=p.near_power, range_power=p.range_power, magic_power=p.magic_power,
 			position=movement.geometry.to_dict(p.position), weapon=p.weapon, armor=p.armor,
-			buffs=p.buffs.duplicate(), dots=p.dots.duplicate(), frozen=p.frozen,
+			buffs=p.buffs.duplicate(true), dots=p.dots.duplicate(true), frozen=p.frozen,
+			frozen_move=p.frozen_move,
 			eliminated=p.get("eliminated", false),
 			ap_attack=p.get("ap_attack",0), ap_move=p.get("ap_move",0), ap_function=p.get("ap_function",0),
+			ap_attack_max=p.get("ap_attack_max", 2), ap_move_max=p.get("ap_move_max", 1),
+			ap_function_max=p.get("ap_function_max", 2 if p.char_id == "warlock" else 1),
 			hand_size=cs.hand.size(), deck_size=cs.deck.size(), discard_size=cs.discard.size(),
-			hand=cs.hand.duplicate(), hand_limit=movement.get_hand_limit(i),
+			hand=cs.hand.duplicate(true), hand_limit=movement.get_hand_limit(i),
 			active_skills=_skill_list(i),
 			pending_fighter_skill=p.get("pending_fighter_skill", false),
 			# 角色道具类型（一张通用道具卡，卡面/说明按角色道具显示）
@@ -1549,6 +1645,17 @@ func get_full_state(full: bool = false) -> Dictionary:
 			item_type_name=item_system.get_item_type(char_skills.get_item_type(i)).get("name", "道具"),
 			item_type_desc=item_system.get_item_type(char_skills.get_item_type(i)).get("desc", ""),
 		})
+		for card in state.players[-1].hand:
+			card["ap_affordable"] = has_card_ap(i, str(card.type_id))
+			card["blocked_reason"] = card_block_reason(i, str(card.type_id))
+			if str(card.type_id) in ["near", "heavy"]:
+				card["root_available"] = can_remove_vine_seed(i, str(card.type_id))
+				card["root_cost"] = vine_remove_cost(i, str(card.type_id))
+			card["valid_attack_targets"] = []
+			if str(card.type_id) in ["near", "heavy", "range", "pierce", "magic", "chant"]:
+				for target in range(players.size()):
+					if target != i and not players[target].get("eliminated", false) and attack_target_block_reason(i, target, str(card.type_id)).is_empty():
+						card["valid_attack_targets"].append(target)
 	if full: state.bp_state = bp.get_bp_state()
 	# 鹰眼等查看手牌效果：快照统一带出 revealed 并立即重置。
 	# 放在 get_full_state 内部可防止 process_response 提前 return 路径漏重置

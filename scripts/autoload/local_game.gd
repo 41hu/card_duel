@@ -167,8 +167,9 @@ func _ai_bp_act():
 
 # 人机对战：不走 BP，直接开战（AI 随机先手，角色由入口传入）
 # custom_decks = [P0卡组, P1卡组]（P1 为空 → AI 用默认 40 张）；independent=true 时双方独立牌堆（自定义卡组模式）
-func start_ai_game(p1_char: String, p2_char: String, difficulty: int, custom_decks: Array = [], independent_decks: bool = false, weapon_pools: Array = []):
+func start_ai_game(p1_char: String, p2_char: String, difficulty: int, custom_decks: Array = [], independent_decks: bool = false, weapon_pools: Array = [], first_idx: int = -1):
 	ai_mode = true
+	tutorial_mode = false
 	ai_difficulty = difficulty
 	ai_idx = 1  # 人类永远 P0，AI 是 P1
 	last_record_path = ""
@@ -182,7 +183,7 @@ func start_ai_game(p1_char: String, p2_char: String, difficulty: int, custom_dec
 	game.response_needed.connect(_on_response)
 	game.game_ended.connect(_on_ended)
 	game._apply_game_config(game_config)  # 自定义房间规则（本地人机同样生效）
-	game.init_match(p1_char, p2_char, randi() % 2, custom_decks, independent_decks, weapon_pools)
+	game.init_match(p1_char, p2_char, first_idx, custom_decks, independent_decks, weapon_pools)
 	_ai = AIPlayerClass.new(game, difficulty)
 	game._start_game()
 	# AI 先手：不立即行动——等场景加载完成后由帧驱动逐步行动，
@@ -250,7 +251,7 @@ func _bp_done():
 		get_tree().change_scene_to_file("res://scenes/deck_pick.tscn")
 		return
 	if ai_mode:
-		start_ai_game(chars[0], chars[1], ai_difficulty)
+		start_ai_game(chars[0], chars[1], ai_difficulty, [], false, [], bf)
 	else:
 		start_local_game(chars[0], chars[1], bf)
 
@@ -368,7 +369,8 @@ func send_use_skill(skill_name: String, extra: Dictionary = {}):
 	if not game: return
 	var data = {"action": "use_skill", "skill": skill_name}
 	for key in extra: data[key] = extra[key]
-	game.process_action(game.current_player, data)
+	var result = game.process_action(game.current_player, data)
+	if not result.get("success", false): network_error.emit(result.get("msg", "操作失败"))
 
 func send_fighter_choice(choice: String):
 	if not game: return
@@ -388,6 +390,8 @@ func disconnect_from_server():
 	_ai_busy = false
 	rapid_mode = false
 	deck_mode = false
+	game_config = {}
+	ai_char_override = ""
 	bp_chars = []
 	bp_first = -1
 	last_game_result = {}

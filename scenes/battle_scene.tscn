@@ -4,6 +4,7 @@
 [ext_resource type="Script" uid="uid://cdu6wbs8dqplt" path="res://scripts/ui/components/board_renderer.gd" id="2_brd"]
 [ext_resource type="Script" uid="uid://dcgefa6avvou7" path="res://scripts/ui/components/action_log.gd" id="3_log"]
 [ext_resource type="Script" path="res://scripts/ui/components/info_panel.gd" id="4_inf"]
+[ext_resource type="Script" path="res://scripts/ui/components/hand_fan.gd" id="5_hand"]
 
 [node name="BattleScene" type="Control" unique_id=62604844]
 layout_mode = 3
@@ -69,7 +70,7 @@ theme_override_colors/font_color = Color(0.8, 0.8, 0.5, 1)
 theme_override_font_sizes/font_size = 32
 horizontal_alignment = 1
 
-[node name="HandScroll" type="ScrollContainer" parent="."]
+[node name="HandScroll" type="Control" parent="."]
 layout_mode = 1
 anchors_preset = -1
 anchor_left = 0.5
@@ -77,19 +78,21 @@ anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
 offset_left = -320.0
-offset_top = -220.0
+offset_top = -412.0
 offset_right = 400.0
 offset_bottom = -20.0
 grow_horizontal = 2
 grow_vertical = 0
-horizontal_scroll_mode = 1
-vertical_scroll_mode = 0
+mouse_filter = 2
 
-[node name="HandArea" type="HBoxContainer" parent="HandScroll"]
-layout_mode = 2
-size_flags_vertical = 3
-theme_override_constants/separation = 4
-alignment = 1
+[node name="HandArea" type="Control" parent="HandScroll"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("5_hand")
 
 [node name="ActionLog" type="ScrollContainer" parent="." unique_id=1493559683]
 layout_mode = 1

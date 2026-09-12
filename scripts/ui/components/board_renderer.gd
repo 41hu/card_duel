@@ -17,6 +17,13 @@ const LONG_PRESS_MS = 500  # 长按判定：按住超过 0.5 秒
 var _geo = Geometry.new()
 var _cells: Dictionary = {}  # Vector2i → Panel（仅 LINEAR 模式使用）
 var _mode: int = Geometry.MODE_LINEAR
+var _target_cells: Array = []
+var _selected_target := Vector2i(-999, -999)
+
+func set_targets(cells: Array, selected: Vector2i = Vector2i(-999, -999)):
+	_target_cells = cells.duplicate()
+	_selected_target = selected
+	update(_players_draw, _items_draw, _my_index)
 
 # 长按检测状态（LINEAR/HEX 共用）
 var _press_time: int = 0
@@ -41,7 +48,7 @@ func cell_global_center(pos: Vector2i) -> Vector2:
 	if _mode == Geometry.MODE_HEX:
 		return global_position + _hex_center(pos)
 	if _cells.has(pos):
-		return _cells[pos].global_position + Vector2(50, 50)
+		return _cells[pos].global_position + _cells[pos].size / 2.0
 	return global_position
 
 # HEX 自绘状态
@@ -53,6 +60,7 @@ var _drag_start: Vector2 = Vector2.ZERO
 var _dragging: bool = false
 
 func _ready():
+	resized.connect(_layout_linear_cells)
 	_rebuild_cells()
 
 # 切换地图模式（线性/六边形）并重建；模式不变时跳过
@@ -66,6 +74,7 @@ func set_geometry_mode(mode: int):
 
 func _rebuild_cells():
 	for key in _cells:
+		remove_child(_cells[key])
 		_cells[key].queue_free()
 	_cells.clear()
 	if _mode == Geometry.MODE_HEX:
@@ -75,6 +84,14 @@ func _rebuild_cells():
 		var cell = _create_cell(pos)
 		add_child(cell)
 		_cells[pos] = cell
+	_layout_linear_cells()
+
+func _layout_linear_cells():
+	if _mode != Geometry.MODE_LINEAR: return
+	var width = size.x / Geometry.WIDTH
+	for pos in _cells:
+		_cells[pos].position = Vector2(pos.x * width, 0)
+		_cells[pos].size = Vector2(width, minf(width, size.y))
 
 # 创建一个格子及其标签（仅 LINEAR 模式）
 func _create_cell(pos: Vector2i) -> Panel:
@@ -97,6 +114,8 @@ func _create_cell(pos: Vector2i) -> Panel:
 	var l = Label.new()
 	l.position = Vector2(0, 0)
 	l.size = Vector2(100, 100)
+	l.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	l.add_theme_font_size_override("font_size", Style.fs(26))
@@ -115,9 +134,10 @@ func _on_cell_input(event: InputEvent, cell_pos: Vector2i):
 			_press_pos_px = event.position
 		else:
 			var was_long = _long_fired
+			var was_pressed = _pressed_cell == cell_pos
 			_pressed_cell = Vector2i(-999, -999)
 			cell_released.emit(cell_pos)
-			if not was_long:
+			if was_pressed and not was_long:
 				cell_clicked.emit(cell_pos)  # 短按=正常点击；长按后松手不触发点击（防误触）
 	elif event is InputEventMouseMotion and _pressed_cell != Vector2i(-999, -999):
 		if (event.position - _press_pos_px).length() > 12.0:
@@ -158,6 +178,9 @@ func update(players: Array, items: Array, my_index: int):
 		else:
 			sb.border_color = Style.CELL_BORDER
 			sb.set_border_width_all(2)
+		if key in _target_cells:
+			sb.border_color = Color("55ceb1") if key == _selected_target else Color("83aebd")
+			sb.set_border_width_all(5 if key == _selected_target else 3)
 
 # ==================== HEX 自绘（六边形蜂窝） ====================
 # 像素布局：尖顶六边形，轴向 (q, r) → 像素（棋盘局部坐标，中心格 (0,0) 在原点）
@@ -183,6 +206,12 @@ func _draw():
 			if not _geo.is_valid(pos): continue
 			var c = _hex_center(pos)
 			_draw_hex_cell(c, radius)
+			if pos in _target_cells:
+				var outline := PackedVector2Array()
+				for corner in range(7):
+					var angle := deg_to_rad(60.0 * (corner % 6) - 30.0)
+					outline.append(c + Vector2(cos(angle), sin(angle)) * radius)
+				draw_polyline(outline, Color("55ceb1") if pos == _selected_target else Color("83aebd"), 5.0 if pos == _selected_target else 3.0)
 			if has_item.has(pos):
 				var pts2 = PackedVector2Array()
 				for i2 in range(6):

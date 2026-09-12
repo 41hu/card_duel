@@ -25,6 +25,7 @@ var bp_state_cache: Dictionary = {}
 var battle_state_cache: Dictionary = {}
 # 最近一局结果缓存（结算界面从缓存读取，避免信号时序问题）
 var last_game_result: Dictionary = {}
+var last_game_player_index: int = -1
 # 自定义卡组联机：BP 完成后的配置数据（{chars, first}），deck_pick 场景读取
 var deck_config_data: Dictionary = {}
 
@@ -35,8 +36,9 @@ func _process(_delta):
 	if _socket == null:
 		return
 
-	_socket.poll()
-	var st = _socket.get_ready_state()
+	var socket = _socket
+	socket.poll()
+	var st = socket.get_ready_state()
 
 	match st:
 		WebSocketPeer.STATE_OPEN:
@@ -44,20 +46,21 @@ func _process(_delta):
 				_active = true
 				print("[Network] WebSocket 已连接")
 				connected_to_server.emit()
-			while _socket.get_available_packet_count() > 0:
-				var raw = _socket.get_packet().get_string_from_utf8()
+			while _socket == socket and socket.get_available_packet_count() > 0:
+				var raw = socket.get_packet().get_string_from_utf8()
 				_handle_packet(raw)
 
 		WebSocketPeer.STATE_CLOSED:
-			if _socket != null:
+			if _socket == socket:
 				# 先排空缓冲中的最后一包（如对手逃跑的 game_over 结算），再发断开
-				while _socket.get_available_packet_count() > 0:
-					_handle_packet(_socket.get_packet().get_string_from_utf8())
-				if _active:
-					_active = false
+				while _socket == socket and socket.get_available_packet_count() > 0:
+					_handle_packet(socket.get_packet().get_string_from_utf8())
+				if _socket != socket: return
+				var was_active = _active
+				_close()
+				if was_active:
 					print("[Network] 连接关闭")
 					server_disconnected.emit()
-				_close()
 
 func connect_to_server(url: String = ""):
 	if url == "":
@@ -169,7 +172,7 @@ func send_deck_ready(cards: Array, package_id: String = "B", weapon_pool: Dictio
 
 func _handle_packet(raw: String):
 	var data = JSON.parse_string(raw)
-	if data == null:
+	if not data is Dictionary:
 		return
 	var msg_type = data.get("t", "")
 
@@ -182,11 +185,15 @@ func _handle_packet(raw: String):
 			player_index = int(data.get("player_index", -1))
 			room_joined.emit(str(data.get("room_id", "")), data.get("players", []), str(data.get("mode", "classic")))
 		"game_starting":
+			if data.has("state"): battle_state_cache = data.state
+			if data.has("bp_state"): bp_state_cache = data.bp_state
 			game_starting.emit(data)
 		"bp_state":
+			bp_state_cache = data
 			bp_state_updated.emit(data)
 		"game_state":
 			if data.has("phase"):
+				battle_state_cache = data
 				state_updated.emit(data)
 		"weapon_prompt":
 			weapon_prompt.emit(data.get("weapon", {}))
@@ -195,6 +202,8 @@ func _handle_packet(raw: String):
 		"response_needed":
 			response_needed.emit(data)
 		"game_over":
+			last_game_result = data
+			last_game_player_index = player_index
 			game_ended.emit(data)
 		"error":
 			network_error.emit(data.get("msg", "未知错误"))
@@ -204,4 +213,10 @@ func _handle_packet(raw: String):
 			hand_revealed.emit(data.get("cards", []))
 		"deck_config":
 			deck_config_data = {"chars": data.get("chars", []), "first": int(data.get("first", -1))}
+			_set_deck_time(int(data.get("time_left", -1)))
 			deck_config.emit(data)
+		"deck_timer":
+			if not deck_config_data.is_empty(): _set_deck_time(int(data.get("time_left", -1)))
+
+func _set_deck_time(seconds: int):
+	deck_config_data["local_deadline"] = Time.get_ticks_msec() + seconds * 1000 if seconds >= 0 else -1

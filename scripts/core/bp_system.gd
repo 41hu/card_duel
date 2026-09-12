@@ -4,7 +4,12 @@ extends RefCounted
 const BP_TIME = 30
 const VERSION_SCRIPT = preload("res://scripts/version.gd")
 
-var match_ref
+var _owner_ref: WeakRef
+var match_ref:
+	get:
+		return _owner_ref.get_ref() if _owner_ref != null else null
+	set(value):
+		_owner_ref = weakref(value) if value != null else null
 var bp_phase: String = ""
 var _bp_first: int = 0
 var banned_chars: Array = []

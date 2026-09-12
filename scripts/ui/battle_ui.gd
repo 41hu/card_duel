@@ -27,6 +27,46 @@ var _discard_selected: Array = []
 @onready var skill_row = $SkillRow
 var _last_hp: Array = [-1, -1]
 var _last_turn: int = -1
+var _turn_notice: Label
+var _turn_notice_tween: Tween
+
+func _turn_owner_text() -> String:
+	var current := int(_game_state.get("current_player", -1))
+	for player in _game_state.get("players", []):
+		if int(player.index) == current:
+			return "你的回合" if current == _player_index else "P%d %s的回合" % [current + 1, player.get("char_name", "")]
+	return "等待回合"
+
+func _show_turn_notice():
+	if _turn_notice == null:
+		_turn_notice = Label.new()
+		_turn_notice.name = "TurnNotice"
+		_turn_notice.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_turn_notice.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+		_turn_notice.anchor_left = 0.22
+		_turn_notice.anchor_right = 0.66
+		_turn_notice.offset_top = 106
+		_turn_notice.offset_bottom = 190
+		_turn_notice.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_turn_notice.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		_turn_notice.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_turn_notice.add_theme_font_size_override("font_size", 34)
+		_turn_notice.z_index = 20
+		var background := StyleBoxFlat.new()
+		background.bg_color = Color(0.06, 0.08, 0.12, 0.94)
+		background.border_color = Color(0.5, 0.8, 1)
+		background.border_width_bottom = 3
+		_turn_notice.add_theme_stylebox_override("normal", background)
+		add_child(_turn_notice)
+	if _turn_notice_tween != null: _turn_notice_tween.kill()
+	_turn_notice.text = "第 %d 回合 · %s" % [_game_state.get("turn_number", 1), _turn_owner_text()]
+	_turn_notice.add_theme_color_override("font_color", Color(0.5, 0.85, 1) if int(_game_state.current_player) == _player_index else Color(1, 0.75, 0.5))
+	_turn_notice.modulate.a = 1
+	_turn_notice.show()
+	_turn_notice_tween = create_tween()
+	_turn_notice_tween.tween_interval(1.6)
+	_turn_notice_tween.tween_property(_turn_notice, "modulate:a", 0.0, 0.3)
+	_turn_notice_tween.tween_callback(_turn_notice.hide)
 var _last_player: int = -1
 var _board_hex: bool = false  # 棋盘当前是否六边形模式（多人局）
 # 数据驱动玩家面板：自己面板（左下）+ 对手面板（右侧竖排，数量随玩家数动态增减）
@@ -34,11 +74,19 @@ var _board_hex: bool = false  # 棋盘当前是否六边形模式（多人局）
 var _self_panel: PanelContainer = null
 var _opp_panels: Array = []
 var _opp_indices: Array = []  # 与 _opp_panels 平行：每个面板对应的玩家 index（HP 闪烁/安全区定位用）
+var _opp_scroll: ScrollContainer
+var _opp_box: VBoxContainer
+var _transient_popups: Array = []
+var _transport: Node
 var _cheat_on: bool = false
 var _timer_left: int = -1
 var _resp_popup: Control
 var tutorial = null  # 教程控制器（新手教程模式时非空）
 var _wpn_popup: Control
+var _staged_extra: Dictionary = {}
+var _pick_mode := ""
+var _submitting := false
+var _selected_cell := Vector2i(-999, -999)
 
 func _n():
 	if LocalGame.game != null: return LocalGame
@@ -65,18 +113,44 @@ func _find_opponent(pls: Array = []) -> Dictionary:
 	return {}
 
 func _ready():
+	phase_label.offset_left = -590
+	phase_label.offset_right = 380
+	phase_label.add_theme_font_size_override("font_size", 32)
+	phase_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	Style.scale_node_fonts(self)  # 移动端字号适配（tscn 写死的字号）
 	board.cell_clicked.connect(_on_board_cell_clicked)
 	board.cell_long_pressed.connect(_on_cell_long_pressed)  # 长按查看地格道具
 	board.cell_released.connect(_on_cell_released)  # 松手隐藏道具悬浮框
 	_create_self_panel()
+	_opp_scroll = ScrollContainer.new()
+	_opp_scroll.name = "OpponentScroll"
+	_opp_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_opp_scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_opp_scroll.anchor_left = 1.0
+	_opp_scroll.offset_top = 110
+	_opp_scroll.offset_bottom = -340
+	add_child(_opp_scroll)
+	_opp_box = VBoxContainer.new()
+	_opp_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_opp_box.add_theme_constant_override("separation", 8)
+	_opp_scroll.add_child(_opp_box)
 	_build_popups()
+	_transport = _n()
+	BackHandler.scene_back = _handle_back
+	resized.connect(_apply_safe_area)
+	card_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	card_info.offset_left = -440; card_info.offset_right = 440
+	card_info.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# 日志加宽后左缘与棋盘第 0/1 格有重叠：PASS 让点按穿透到棋盘，
 	# 拖动仍由 ScrollContainer 先处理（发生滚动时 accept，否则继续下传）
 	action_log.mouse_filter = Control.MOUSE_FILTER_PASS
 	end_turn_btn.pressed.connect(_on_end_turn)
 	confirm_btn.pressed.connect(_on_confirm_card)
 	cancel_btn.pressed.connect(_on_cancel_select)
+	hand_area.card_clicked.connect(_on_card_clicked)
+	hand_area.card_details.connect(_on_card_details)
+	hand_area.empty_clicked.connect(_on_cancel_select)
+	$Bg.gui_input.connect(_on_background_input)
 	_n().state_updated.connect(_on_state_updated)
 	_n().response_needed.connect(_on_response_needed)
 	_n().hand_revealed.connect(_on_hand_revealed)
@@ -100,8 +174,10 @@ func _ready():
 		tutorial = tm
 
 func _exit_tree():
+	if BackHandler.scene_back == _handle_back: BackHandler.scene_back = Callable()
 	# 与其它场景风格对齐：显式断开全部信号，防未来节点复用累积重复连接
-	var n = _n()
+	var n = _transport
+	if not is_instance_valid(n): return
 	if n.state_updated.is_connected(_on_state_updated):
 		n.state_updated.disconnect(_on_state_updated)
 	if n.response_needed.is_connected(_on_response_needed):
@@ -120,6 +196,20 @@ func _exit_tree():
 		Network.server_disconnected.disconnect(_on_server_disconnected)
 	# 教程控制器随场景释放（其引导横幅/跳过按钮已挂在本节点下）
 
+func _handle_back() -> bool:
+	for i in range(_transient_popups.size() - 1, -1, -1):
+		var popup = _transient_popups[i]
+		if not is_instance_valid(popup) or popup.is_queued_for_deletion() or not popup.visible: continue
+		if popup.name == "SwordsmanPopup": return false
+		popup.hide()
+		popup.queue_free()
+		if popup.name == "WindBowPopup": _n().send_wind_bow_move({}, true)
+		return true
+	if _selected_uid != -1:
+		_on_cancel_select()
+		return true
+	return false
+
 # 自己面板（左下角，动态创建，替代原场景 MeInfo 固定节点）
 func _create_self_panel():
 	var pc: PanelContainer = InfoPanel.new()
@@ -130,6 +220,7 @@ func _create_self_panel():
 	pc.offset_top = -220
 	pc.offset_right = 594
 	pc.offset_bottom = -20
+	pc.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	pc.status_clicked.connect(_on_status_clicked)
 	add_child(pc)
 	_self_panel = pc
@@ -201,7 +292,10 @@ func _apply_safe_area():
 	var sa = DisplayServer.get_display_safe_area()
 	var win = DisplayServer.window_get_size()
 	var vp = get_viewport_rect().size
-	if vp.x <= 0 or vp.y <= 0: return
+	if vp.x <= 0 or vp.y <= 0 or _self_panel == null: return
+	if win.x <= 0 or win.y <= 0: win = Vector2i(vp)
+	if not OS.has_feature("android") and not OS.has_feature("ios"):
+		sa = Rect2i(Vector2i.ZERO, win)
 	var sx = win.x / vp.x
 	var sy = win.y / vp.y
 	var left = sa.position.x / sx
@@ -215,27 +309,60 @@ func _apply_safe_area():
 	# 避免 buff/装备行贴边被裁切（与敌方面板对称处理；刘海时再多 12 间距）
 	var safe_left = clampf(left, 32.0, 100.0) + 12.0
 	_self_panel.offset_left = safe_left
-	if _safe_bottom > 0:
-		_self_panel.offset_top -= _safe_bottom
-		_self_panel.offset_bottom -= _safe_bottom
-	if left > 0:
-		action_log.offset_left += left
-		action_log.offset_right += left
-	if right > 0:
-		# 技能按钮已挪到右下（结束按钮上方）：右安全区内缩，保持不贴边
-		skill_row.offset_left -= right
-		skill_row.offset_right -= right
-		for p in _opp_panels:
-			# 左缘同步内移保持宽度：只改 offset_right 会让面板变窄、文字被裁切
-			p.offset_left = -(460 + _safe_right)
-			p.offset_right = -_safe_right
-	if bottom > 0:
-		end_turn_btn.offset_top -= bottom
-		end_turn_btn.offset_bottom -= bottom
-		skill_row.offset_top -= bottom
-		skill_row.offset_bottom -= bottom
+	action_log.offset_left = safe_left
+	action_log.offset_right = safe_left + 312
+	skill_row.offset_left = -400 - _safe_right
+	skill_row.offset_right = -_safe_right
+	skill_row.offset_top = -320 - _safe_bottom
+	skill_row.offset_bottom = -230 - _safe_bottom
+	end_turn_btn.offset_left = -400 - _safe_right
+	end_turn_btn.offset_right = -_safe_right
+	end_turn_btn.offset_top = -130 - _safe_bottom
+	end_turn_btn.offset_bottom = -20 - _safe_bottom
+	_opp_scroll.offset_left = -560 - _safe_right
+	_opp_scroll.offset_right = -_safe_right
+	_opp_scroll.offset_bottom = -432 - _safe_bottom
+	$HandScroll.anchor_left = 0.0
+	$HandScroll.anchor_right = 0.0
+	$HandScroll.offset_left = 610
+	$HandScroll.offset_right = vp.x - 416 - _safe_right
+	$HandScroll.offset_top = -412 - _safe_bottom
+	$HandScroll.offset_bottom = -20 - _safe_bottom
+	for button in [confirm_btn, cancel_btn]:
+		button.add_theme_font_size_override("font_size", 30)
+		button.anchor_left = 1.0
+		button.anchor_right = 1.0
+		button.offset_top = -212 - _safe_bottom
+		button.offset_bottom = -142 - _safe_bottom
+	confirm_btn.offset_left = -400 - _safe_right
+	confirm_btn.offset_right = -116 - _safe_right
+	cancel_btn.offset_left = -104 - _safe_right
+	cancel_btn.offset_right = -_safe_right
+	status_label.anchor_left = 1.0
+	status_label.anchor_right = 1.0
+	status_label.offset_left = -400 - _safe_right
+	status_label.offset_right = -_safe_right
+	status_label.offset_top = -416 - _safe_bottom
+	status_label.offset_bottom = -328 - _safe_bottom
+	status_label.add_theme_font_size_override("font_size", 22)
+	_layout_self_panel.call_deferred()
+
+func _layout_self_panel():
+	if not is_inside_tree() or _self_panel == null: return
+	var self_w = 594.0 - _self_panel.offset_left
+	var height = maxf(160.0, _self_panel.content_height(self_w))
+	_self_panel.offset_top = -height - 20.0 - _safe_bottom
+	_self_panel.offset_bottom = -20.0 - _safe_bottom
+	action_log.anchor_bottom = 1.0
+	action_log.offset_bottom = _self_panel.offset_top - 12.0
 
 func _input(event):
+	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+		if _handle_back(): get_viewport().set_input_as_handled()
+		return
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
+		if _handle_back(): get_viewport().set_input_as_handled()
+		return
 	if not OS.has_feature("editor"): return  # F12 作弊仅在编辑器运行时有效
 	if not event is InputEventKey or not event.pressed: return
 	if event.keycode == KEY_F12: _cheat_on = not _cheat_on; return
@@ -246,16 +373,43 @@ func _input(event):
 
 # 状态槽/角色名/装备点击（移动端无 hover）：详情显示到状态栏，3 秒自动消失
 func _on_status_clicked(text: String):
-	status_label.text = text
-	_status_msg_timer = 3.0
+	if text.is_empty(): return
+	var old = get_node_or_null("StatusDetailPopup")
+	if old != null:
+		remove_child(old)
+		old.queue_free()
+	var c = Control.new()
+	c.name = "StatusDetailPopup"
+	c.z_index = 12
+	c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var bg = ColorRect.new()
+	bg.color = Style.POPUP_BG
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	c.add_child(bg)
+	var vb = _popup_box(c, 960, 680)
+	vb.add_child(_lbl(text))
+	var close = _mkbtn("关闭")
+	close.pressed.connect(c.queue_free)
+	vb.add_child(close)
+	add_child(c)
 
 func _on_cancel_select():
+	_pick_mode = ""
+	_staged_extra.clear()
+	_selected_cell = Vector2i(-999, -999)
+	board.set_targets([])
+	hand_area.clear_focus()
 	_selected_uid = -1
 	_selected_type = ""  # 清类型：残留会导致点棋盘误发 play_card（"手牌中没有此卡"）
 	_discard_selected.clear()
 	confirm_btn.visible = false
 	cancel_btn.visible = false
 	card_info.text = ""
+	_hunter_pos1.clear()
+	_skip_root_choice = false
+	_status_msg_timer = 0.0
+	status_label.text = ""
+	_refresh_highlight()
 
 func _build_popups():
 	_resp_popup = _make_resp_popup()
@@ -273,76 +427,30 @@ func _make_resp_popup() -> Control:
 	return c
 
 func _show_resp_popup(atk_card: String, dmg: int = 0):
-	var c = _resp_popup
-	for child in c.get_children():
-		if child is ColorRect: continue
-		c.remove_child(child); child.queue_free()
-	var box = _box(c, 140, 100, 720, 520)
-	box.name = "RespBox"
-	# 多段攻击显示段号（如 第1/2段）
-	var seg = int(_game_state.get("pending_attack_segment", 0))
-	var segs = int(_game_state.get("pending_attack_segments", 1))
-	var seg_txt = "（第%d/%d段）" % [seg, segs] if segs > 1 else ""
-	var dmg_txt = "（伤害 %d）" % dmg if dmg > 0 else ""
-	var t = _lbl("对方使用「%s」攻击%s%s！选择响应卡：" % [
-		"真言" if atk_card == "priest_chant" else Config.card_name(atk_card), seg_txt, dmg_txt])
-	t.add_theme_font_size_override("font_size", Style.fs(30))
-	t.add_theme_color_override("font_color", Color(1, 0.9, 0.6))
-	t.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
-	t.add_theme_constant_override("outline_size", Style.fs(5))
-	box.add_child(t)
-	var has_any = false
-	var defender_hand = []
-	var defender = {}
-	# 防守方 = 攻击目标（state.pending_target）；旧状态无此字段时兜底取第一个非攻击者
-	var target_idx = int(_game_state.get("pending_target", -1))
-	for p in _game_state.players:
-		if p.index == target_idx or (target_idx < 0 and p.index != _game_state.current_player):
-			defender_hand = p.get("hand", [])
-			defender = p
-			break
-	# 牵制减免值（与服务端一致：远程面板-距离，连弩+2）
-	var dist = int(_game_state.get("distance", 0))
-	var restrain_value = max(0, int(defender.get("range_power", 0)) - dist)
-	if not defender.get("weapon", {}).is_empty() and defender.weapon.id == "repeater":
-		restrain_value += 2
-	for card in defender_hand:
-		var tid = card.type_id
-		var ok = false
-		var effect = ""
-		if tid in ["magic"]:
-			ok = true
-			# 冻结需用魔法闪避；其他攻击闪避免疫伤害
-			effect = "闪避：免疫此次%s" % ("冻结" if atk_card == "freeze" else "伤害")
-		elif tid in ["range"] and atk_card in ["range", "pierce", "magic", "chant"]:
-			ok = true
-			effect = "牵制：减免%d伤害" % restrain_value
-		elif tid in ["near"] and atk_card in ["near", "heavy"]:
-			ok = true
-			effect = "格挡：伤害减半"
-		if ok:
-			has_any = true
-			var rb = _mkbtn("  %s（%s）  " % [Config.card_name(tid), effect])
-			rb.custom_minimum_size = Vector2(380, 110)
-			rb.add_theme_font_size_override("font_size", Style.fs(34))
-			rb.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
-			rb.add_theme_constant_override("outline_size", Style.fs(5))
-			rb.pressed.connect(func(uid=card.uid): c.visible = false; _n().send_response(true, uid))
-			box.add_child(rb)
-	# 教程强制响应步骤：隐藏"不响应"（引导玩家必须响应）
-	if tutorial != null and tutorial.force_response():
-		var tip = _lbl("请选择一张响应卡（教程步骤）")
-		tip.add_theme_font_size_override("font_size", Style.fs(26))
-		tip.add_theme_color_override("font_color", Color(1, 0.9, 0.5))
-		box.add_child(tip)
-	else:
-		var sb = _mkbtn("不响应" if has_any else "无法响应（跳过）")
-		sb.pressed.connect(func(): c.visible = false; _n().send_response(false))
-		box.add_child(sb)
-	c.visible = true
-
+	var root = _resp_popup
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for child in root.get_children():
+		root.remove_child(child)
+		child.queue_free()
+	var panel := PanelContainer.new()
+	panel.position = Vector2(610, 130)
+	panel.size = Vector2(maxf(500, size.x - 1250), 180)
+	root.add_child(panel)
+	var content := VBoxContainer.new()
+	panel.add_child(content)
+	var attack_name := "真言" if atk_card == "priest_chant" else Config.card_name(atk_card)
+	var segment := ""
+	if int(_game_state.get("pending_attack_segments", 1)) > 1:
+		segment = " 第%d/%d段" % [_game_state.get("pending_attack_segment", 1), _game_state.pending_attack_segments]
+	content.add_child(_lbl("响应：%s%s%s" % [attack_name, segment, " 伤害%d" % dmg if dmg > 0 else ""]))
+	if tutorial == null or not tutorial.force_response():
+		var skip = _mkbtn("不响应")
+		skip.pressed.connect(func(): _submit_response(false))
+		content.add_child(skip)
+	root.visible = true
 func _make_wpn_popup() -> Control:
 	var c = Control.new()
+	c.name = "WpnPopupRoot"
 	c.visible = false; c.z_index = 10
 	c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var bg = ColorRect.new()
@@ -373,12 +481,19 @@ func _box(parent: Control, _x: float, _y: float, w: float, h: float) -> VBoxCont
 	return _popup_box(parent, w, h)
 
 func _popup_box(parent: Control, w: float, h: float) -> VBoxContainer:
+	if parent.name not in ["RespPopupRoot", "WpnPopupRoot"]:
+		_transient_popups.append(parent)
 	# 居中滚动弹窗：内容超出时滚动，最大占屏幕 92%，适配手机小屏
 	var vp = get_viewport_rect().size
 	w = min(w, vp.x * 0.92)
 	h = min(h, vp.y * 0.92)
 	var sc = ScrollContainer.new()
 	sc.name = "PopupScroll"
+	var panel := StyleBoxFlat.new()
+	panel.bg_color = Color(0.08, 0.1, 0.14, 0.98)
+	panel.set_content_margin_all(16)
+	panel.set_corner_radius_all(8)
+	sc.add_theme_stylebox_override("panel", panel)
 	sc.layout_mode = 1
 	sc.anchor_left = 0.5; sc.anchor_right = 0.5
 	sc.anchor_top = 0.5; sc.anchor_bottom = 0.5
@@ -399,6 +514,8 @@ func _flash(node: Control):
 
 func _lbl(txt: String) -> Label:
 	var l = Label.new()
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	l.text = txt
 	l.add_theme_color_override("font_color", Style.LOG_TEXT)
 	l.add_theme_font_size_override("font_size", Style.fs(28))
@@ -408,10 +525,14 @@ func _mkbtn(txt: String) -> Button:
 	var b = Button.new()
 	b.text = txt
 	b.custom_minimum_size = Vector2(220, 100)
+	b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	b.add_theme_font_size_override("font_size", Style.fs(32))
 	return b
 
 func _on_state_updated(state: Dictionary):
+	_submitting = false
+	hand_area.locked = false
+	var previous = _game_state
 	_game_state = state
 	if _n() == LocalGame:
 		if LocalGame.tutorial_mode:
@@ -425,27 +546,57 @@ func _on_state_updated(state: Dictionary):
 		else:
 			# 自我对战：轮流操作，视角跟随当前回合玩家
 			if state.get("response_pending", false):
-				_player_index = 1 - state.current_player
+				_player_index = int(state.get("pending_target", 1 - state.current_player))
 			else:
 				_player_index = state.current_player
 			_is_my_turn = (state.phase == Config.Phase.PLAYER_TURN)
 	else:
 		_player_index = _n().player_index
 		_is_my_turn = (state.current_player == _player_index) and (state.phase == Config.Phase.PLAYER_TURN)
-	if not _is_my_turn:
-		_selected_uid = -1
-		_discard_selected.clear()
-		confirm_btn.visible = false
-		cancel_btn.visible = false
-		card_info.text = ""
+	var context_changed = previous.get("current_player", -1) != state.current_player \
+		or previous.get("turn_number", -1) != state.turn_number \
+		or previous.get("phase", -1) != state.phase \
+		or previous.get("waiting_for_discard", false) != state.get("waiting_for_discard", false)
+	var hand_changed = previous.get("players", []) != state.get("players", [])
+	if not _is_my_turn or context_changed or hand_changed:
+		_on_cancel_select()
+	_sync_popups(context_changed or hand_changed)
+	_hide_item_popup()
 	_refresh_all(state)
+	_restore_card_controls()
+	if state.get("revealed_to", -1) == _player_index:
+		_on_hand_revealed(state.get("revealed_hand", []), int(state.get("revealed_from", -1)))
+
+func _is_response_target() -> bool:
+	return _game_state.get("response_pending", false) and int(_game_state.get("pending_target", -1)) == _player_index
+
+func _sync_popups(context_changed: bool):
+	_resp_popup.visible = _is_response_target()
+	if _game_state.has("waiting_for_weapon_choice") and int(_game_state.waiting_for_weapon_choice) != _player_index:
+		_wpn_popup.visible = false
+	var kept: Array = []
+	for popup in _transient_popups:
+		if not is_instance_valid(popup) or popup.is_queued_for_deletion(): continue
+		var close = context_changed
+		if popup.name == "WindBowPopup":
+			close = not _game_state.get("wind_bow_pending", false) or _game_state.current_player != _player_index
+		elif popup.name == "SwordsmanPopup":
+			close = not _is_my_turn or not _find_self().get("pending_fighter_skill", false) or _game_state.get("waiting_for_discard", false)
+		elif popup.name in ["RevealedHandPopup", "StatusDetailPopup"]:
+			close = true
+		if close:
+			popup.hide()
+			popup.queue_free()
+		else:
+			kept.append(popup)
+	_transient_popups = kept
 
 func _update_timer_label():
-	if _timer_left <= 0:
+	if _timer_left < 0:
 		return
 	var tp = ["判定", "摸牌", "出牌", "弃牌"]
 	var tn = tp[_game_state.get("turn_phase", 0)] if _game_state.get("turn_phase", 0) < tp.size() else "?"
-	var who = "你的回合" if _is_my_turn else "对手回合"
+	var who = _turn_owner_text()
 	phase_label.text = "T%d | %s | %s | %ds" % [_game_state.turn_number, tn, who, _timer_left]
 
 func _process(delta):
@@ -483,10 +634,10 @@ func _refresh_all(state: Dictionary):
 	# 2 人局线性棋盘 1100×160（11 格×100）；4 人局六边形棋盘 900×640
 	if want_hex:
 		board.offset_left = -510; board.offset_right = 390
-		board.offset_top = -380; board.offset_bottom = 260
+		board.offset_top = -380; board.offset_bottom = 150
 	else:
 		# 2 人局棋盘 1020 宽（原 1100 缩 80）：给右侧对手面板（460+safe）腾空间，防棋盘右缘与面板重叠
-		board.offset_left = -560; board.offset_right = 460
+		board.offset_left = -560; board.offset_right = 350
 		board.offset_top = -140; board.offset_bottom = 20
 	# HP 闪烁记录数组按玩家数扩展（4 人局原 2 元素会越界）
 	while _last_hp.size() < pls.size():
@@ -498,9 +649,7 @@ func _refresh_all(state: Dictionary):
 	# （技能按钮 SkillRow 顶部 y≈760，面板底部 -20 → 高度 ≤300 不重叠）。
 	# 用 content_height(面板宽)（基础行 + 状态行按槽数×每行槽数估行数）且 +20 抵消 offset_bottom=-20，
 	# 保证设定高 ≥ 内容高 → PanelContainer 不强制扩展（扩展会把面板底推出屏幕裁切）
-	var self_w := 594.0 - _self_panel.offset_left
-	_self_panel.offset_top = -(clampf(_self_panel.content_height(self_w), 160.0, 300.0) + 20.0) - _safe_bottom
-	_self_panel.offset_bottom = -20.0 - _safe_bottom
+	_layout_self_panel.call_deferred()
 	_refresh_opp_panels(pls)
 	for p in pls:
 		if p.hp != _last_hp[p.index]:
@@ -510,7 +659,7 @@ func _refresh_all(state: Dictionary):
 			_last_hp[p.index] = p.hp
 	var tp = ["判定", "摸牌", "出牌", "弃牌"]
 	var tn = tp[state.get("turn_phase", 0)] if state.get("turn_phase", 0) < tp.size() else "?"
-	var who = "你的回合" if _is_my_turn else "对手回合"
+	var who = _turn_owner_text()
 	# 从服务端同步计时器
 	var timer = state.get("action_time_left", -1)
 	if timer <= 0: timer = state.get("discard_time_left", -1)
@@ -523,52 +672,26 @@ func _refresh_all(state: Dictionary):
 	if state.turn_number != _last_turn or state.current_player != _last_player:
 		_last_turn = state.turn_number; _last_player = state.current_player
 		_flash(phase_label)
+		_show_turn_notice()
 
 	board.update(pls, state.get("items", []), _player_index)
 
-	for c in hand_area.get_children():
-		c.queue_free()
-	var mh = me.get("hand", [])
-	if mh.is_empty():
-		var el = _lbl("无手牌")
-		el.add_theme_color_override("font_color", Style.EMPTY_HAND)
-		hand_area.add_child(el)
-	else:
-		var can_resp = state.get("response_pending", false) and state.current_player != _player_index
-		var in_disc = state.get("waiting_for_discard", false) and _is_my_turn
-		if in_disc: _selected_uid = -1
-		for card in mh:
-			var tid = card.type_id
-			var cd = Config.CARD_DB.get(tid, {})
-			var cw = CardWidget.new()
-			# 通用道具卡：卡面按角色道具显示（猎人手里显示"捕兽夹"而非"陷阱"）
-			var cname = cd.get("name", tid)
-			if tid == "item":
-				cname = me.get("item_type_name", cname)
-			# 注意：网络 JSON 传输后 uid 是 float，而 CardWidget.setup(uid: int) 强转 int，
-			# 必须统一 int 比较（`in` 是严格类型匹配，37.0 in [37] 为 false → 弃牌红框不显示）
-			cw.setup(card.uid, tid, cname, cd.get("ap", 0), int(card.uid) in _discard_selected)
-			cw.pressed.connect(_on_card_clicked.bind(tid))
-			if can_resp:
-				var atk = state.get("pending_attack_card", "")
-				if tid in ["magic"]: cw.set_respondable(true)
-				elif tid in ["range"]: cw.set_respondable(atk in ["range", "pierce", "magic", "chant"])
-				elif tid in ["near"]: cw.set_respondable(atk in ["near", "heavy"])
-			if in_disc and int(card.uid) in _discard_selected:
-				cw.set_discard_mark(true)
-			if card.uid == _selected_uid:
-				cw.set_selected(true)
-			hand_area.add_child(cw)
-
+	var responding: Array = []
+	if _is_response_target():
+		var attack := str(state.get("pending_attack_card", ""))
+		responding = ["magic"]
+		if attack in ["range", "pierce", "magic", "chant"]: responding.append("range")
+		if attack in ["near", "heavy"]: responding.append("near")
+	hand_area.sync_hand(me.get("hand", []), me, responding, _discard_selected,
+		_is_response_target() or (state.get("waiting_for_discard", false) and _is_my_turn))
+	hand_area.select(_selected_uid)
 	action_log.show_logs(state.get("action_log", []), 8, _player_index)
 
-	if state.get("revealed_to", -1) == _player_index:
-		_on_hand_revealed(state.get("revealed_hand", []), int(state.get("revealed_from", -1)))
-
-	if state.get("response_pending", false) and state.current_player != _player_index:
-		_show_resp_popup(state.get("pending_attack_card", ""))
+	if _is_response_target():
+		_show_resp_popup(state.get("pending_attack_card", ""), int(state.get("pending_attack_damage", 0)))
 
 	var in_discard = state.get("waiting_for_discard", false)
+	_refresh_skill_row(me)
 	if in_discard and _is_my_turn:
 		var need = me.get("hand", []).size() - me.get("hand_limit", 5)
 		var txt = "确认弃牌(%d张)" % _discard_selected.size()
@@ -589,51 +712,190 @@ func _refresh_all(state: Dictionary):
 		cancel_btn.visible = false
 		_status_msg_timer = 0
 		status_label.text = ""
-		_refresh_skill_row(me)
-		if me.get("pending_fighter_skill", false):
+		if _is_my_turn and me.get("pending_fighter_skill", false):
 			_show_fighter_popup()
 
 func _on_card_clicked(card_uid: int, type_id: String):
-	var state = _game_state
-	if state.get("response_pending", false) and state.current_player != _player_index:
-		_resp_popup.visible = false
-		_n().send_response(true, card_uid)
-		return
-	if not _is_my_turn:
-		return
-	# 教程限制：当前步骤不允许的卡不响应点击
-	if tutorial != null and not tutorial.allow_card_click(card_uid, type_id):
+	if _submitting or hand_area.get_card(card_uid) == null: return
+	type_id = hand_area.get_card(card_uid).type_id
+	if tutorial != null and not _is_response_target() and not tutorial.allow_card_click(card_uid, type_id):
 		status_label.text = "当前步骤请按引导操作"
 		return
-
-	if state.get("waiting_for_discard", false):
-		if card_uid in _discard_selected:
-			_discard_selected.erase(card_uid)
-		else:
-			_discard_selected.append(card_uid)
-		_refresh_all(state)
+	if _is_my_turn and _game_state.get("waiting_for_discard", false):
+		if card_uid in _discard_selected: _discard_selected.erase(card_uid)
+		else: _discard_selected.append(card_uid)
+		_refresh_all(_game_state)
 		return
-
 	if _selected_uid == card_uid:
-		_selected_uid = -1
-		confirm_btn.visible = false
-		cancel_btn.visible = false
-		card_info.text = ""
+		_on_cancel_select()
+		return
+	_on_cancel_select()
+	_selected_uid = card_uid
+	_selected_type = type_id
+	hand_area.select(card_uid)
+	cancel_btn.show()
+	if _is_response_target():
+		_pick_mode = "response"
+		confirm_btn.text = "确认响应"
+		confirm_btn.visible = hand_area.get_card(card_uid)._respondable
+		confirm_btn.disabled = false
+		status_label.text = _response_description(type_id)
+		return
+	if not _is_my_turn or int(_game_state.get("waiting_for_weapon_choice", -1)) == _player_index or _game_state.get("wind_bow_pending", false):
+		return
+	confirm_btn.show()
+	confirm_btn.disabled = false
+	confirm_btn.text = "确认使用"
+	var reason: String = hand_area.get_card(card_uid).blocked_reason
+	if not reason.is_empty():
+		confirm_btn.disabled = true
+		status_label.text = reason
+		return
+	if type_id in ["near", "heavy"] and _has_removable_seed():
+		confirm_btn.text = "选择用途"
+		return
+	if type_id == "move":
+		_pick_mode = "move"
+	elif type_id == "item":
+		_pick_mode = "item"
+	elif _is_targeted_card(type_id) and type_id != "destroy":
+		_pick_mode = "target"
+	if not _pick_mode.is_empty():
+		confirm_btn.disabled = true
+		confirm_btn.text = "选择目标"
+		var targets := _card_targets()
+		board.set_targets(targets)
+		if targets.is_empty(): status_label.text = "当前没有可选目标"
+		if _pick_mode == "target" and targets.size() == 1: _stage_board_target(targets[0])
+	elif _is_armor_override(type_id):
+		confirm_btn.text = "装备"
+	elif type_id == "destroy":
+		confirm_btn.text = "选择用途"
+
+func _card_targets() -> Array:
+	var geo = MapGeometry.new()
+	geo.set_mode(MapGeometry.MODE_HEX if _board_hex else MapGeometry.MODE_LINEAR)
+	var me := _find_self()
+	var origin: Vector2i = geo.from_dict(me.get("position", {}))
+	var result: Array = []
+	if _pick_mode == "move":
+		if me.get("frozen_move", false): return result
+		var dirs: Array = MapGeometry.HEX_DIRS if _board_hex else [Vector2i(-1, 0), Vector2i(1, 0)]
+		for direction in dirs:
+			if tutorial != null and not _board_hex and not direction.x in tutorial.allowed_move_dirs(): continue
+			if geo.is_valid(origin + direction): result.append(origin + direction)
+	elif _pick_mode == "item":
+		for x in range(-MapGeometry.HEX_RADIUS if _board_hex else 0, MapGeometry.HEX_RADIUS + 1 if _board_hex else MapGeometry.WIDTH):
+			for y in range(-MapGeometry.HEX_RADIUS if _board_hex else 0, MapGeometry.HEX_RADIUS + 1 if _board_hex else 1):
+				var pos := Vector2i(x, y)
+				if not geo.is_valid(pos): continue
+				if tutorial != null:
+					var allowed = tutorial.allowed_trap_positions()
+					if not allowed.is_empty() and not pos in allowed: continue
+				if me.get("char_id", "") == "vine_ent":
+					var seed := false
+					for item in _game_state.get("items", []):
+						if item.get("item_type", "") == "vine_seed" and geo.from_dict(item.position) == pos: seed = true
+					if not seed: continue
+				result.append(pos)
 	else:
-		_selected_uid = card_uid
-		_selected_type = type_id
-		confirm_btn.visible = true
-		cancel_btn.visible = true
-		# 通用道具卡：点击说明按角色道具显示（道具名 + 效果描述）
-		if type_id == "item":
-			var me2 = _find_self()
-			card_info.text = "%s：%s" % [me2.get("item_type_name", "道具"), me2.get("item_type_desc", "")]
-		else:
-			card_info.text = Config.card_name(type_id) + ": " + Config.CARD_DB.get(type_id, {}).get("desc", "")
-	_refresh_highlight()
+		for p in _game_state.players:
+			if p.index == _player_index or p.get("eliminated", false): continue
+			var valid_target := true
+			for data in me.get("hand", []):
+				if int(data.uid) == _selected_uid and _selected_type in ["near", "heavy", "range", "pierce", "magic", "chant"]:
+					valid_target = not data.has("valid_attack_targets") or p.index in data.valid_attack_targets
+			if not valid_target: continue
+			var pos: Vector2i = geo.from_dict(p.position)
+			if _selected_type in ["near", "heavy"] and geo.distance(origin, pos) != 0: continue
+			if _selected_type in ["range", "pierce", "magic", "chant"] and _has_buff(p, "rogue_stealth"): continue
+			result.append(pos)
+	return result
+
+func _stage_board_target(pos: Vector2i):
+	if not pos in _card_targets(): return
+	var geo = MapGeometry.new()
+	_staged_extra.clear()
+	_selected_cell = pos
+	if _pick_mode == "move":
+		var direction: Vector2i = pos - geo.from_dict(_find_self().position)
+		_staged_extra = {"steps": 1, "direction": geo.to_dict(direction)}
+		confirm_btn.text = "确认移动"
+	elif _pick_mode == "item":
+		_staged_extra = {"trap_pos": geo.to_dict(pos)}
+		confirm_btn.text = "确认放置"
+	else:
+		for p in _game_state.players:
+			if geo.from_dict(p.position) == pos and p.index != _player_index:
+				_staged_extra = {"target": int(p.index)}
+				status_label.text = "目标：P%d %s" % [p.index + 1, p.get("char_name", "")]
+				if not p.get("armor", {}).is_empty():
+					status_label.text += " · %s %d/%d" % [p.armor.data.name, p.armor.durability, p.armor.get("max_durability", 3)]
+		confirm_btn.text = "确认使用"
+	confirm_btn.disabled = _staged_extra.is_empty()
+	board.set_targets(_card_targets(), pos)
+
+func _on_card_details(uid: int, type_id: String):
+	var card = hand_area.get_card(uid)
+	if card == null: return
+	var description := "%s\n基础消耗：%s %s\n\n%s" % [card._name_label.text, card._ap_label.text, Config.get_card_ap_cost(type_id), card._description.text]
+	if not card.blocked_reason.is_empty(): description += "\n\n" + card.blocked_reason
+	if _is_response_target(): description += "\n\n" + _response_description(type_id)
+	_on_status_clicked(description)
+
+func _response_description(type_id: String) -> String:
+	var card_types: Array = ["magic"]
+	var attack := str(_game_state.get("pending_attack_card", ""))
+	if attack in ["near", "heavy"]: card_types.append("near")
+	if attack in ["range", "pierce", "magic", "chant"]: card_types.append("range")
+	if not type_id in card_types: return "此牌不能响应当前攻击"
+	if type_id == "magic": return "闪避：免疫此次伤害或冻结，不消耗行动点"
+	if type_id == "near": return "格挡：伤害减半，不消耗行动点"
+	var me := _find_self()
+	var reduction := maxi(0, int(me.get("range_power", 0)) - int(_game_state.get("distance", 0)))
+	if me.get("weapon", {}).get("id", "") == "repeater": reduction += 2
+	return "牵制：减免%d伤害，不消耗行动点" % reduction
+
+func _restore_card_controls():
+	if _selected_uid == -1: return
+	var card = hand_area.get_card(_selected_uid)
+	if card == null: return
+	cancel_btn.show()
+	if _pick_mode == "response":
+		confirm_btn.visible = _is_response_target() and card._respondable
+		confirm_btn.disabled = false
+	elif _is_my_turn and int(_game_state.get("waiting_for_weapon_choice", -1)) != _player_index and not _game_state.get("wind_bow_pending", false):
+		confirm_btn.show()
+		confirm_btn.disabled = not _pick_mode.is_empty() and _staged_extra.is_empty()
+		if not _staged_extra.is_empty(): _stage_board_target(_selected_cell)
+
+func _on_background_input(event: InputEvent):
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+		_on_cancel_select()
+
 
 func _on_confirm_card():
 	if _selected_uid == -1:
+		return
+	if _submitting: return
+	if _pick_mode == "response":
+		var response = hand_area.get_card(_selected_uid)
+		if not _is_response_target() or response == null or not response._respondable: return
+		_submit_response(true, _selected_uid)
+		return
+	if not _is_my_turn: return
+	if not _pick_mode.is_empty():
+		if _staged_extra.is_empty(): return
+		var uid := _selected_uid
+		var extra := _staged_extra.duplicate(true)
+		var tid := _selected_type
+		if tid == "seize":
+			for p in _game_state.players:
+				if p.index == extra.get("target", -1) and _has_buff(p, "exposed") and not p.get("hand", []).is_empty():
+					_on_cancel_select()
+					_show_exposed_hand_pick(uid, tid, int(p.index), extra)
+					return
+		_submit_card(uid, extra)
 		return
 	# 除根二选一跳过标志（选择"攻击"后不再弹二选一）
 	var skip_root = _skip_root_choice
@@ -650,7 +912,7 @@ func _on_confirm_card():
 		if _has_buff(opp2, "exposed") and not opp2.get("hand", []).is_empty():
 			_show_exposed_hand_pick(_selected_uid, "seize", opp2.get("index", 1 - _player_index), {})
 		else:
-			_n().send_play_card(_selected_uid)
+			_submit_card(_selected_uid)
 		_selected_uid = -1
 		confirm_btn.visible = false
 	elif _selected_type == "item":
@@ -672,10 +934,11 @@ func _on_confirm_card():
 			_show_target_pick(_selected_uid, _selected_type)
 			_selected_uid = -1
 		else:
-			_n().send_play_card(_selected_uid)
+			_submit_card(_selected_uid)
 			_selected_uid = -1
 	confirm_btn.visible = false
 	cancel_btn.visible = false
+	_refresh_highlight()
 
 # 数据驱动对手面板：右侧竖排，数量随对手数动态（2 人局 1 个，4 人局 3 个）
 func _refresh_opp_panels(pls: Array):
@@ -690,34 +953,9 @@ func _refresh_opp_panels(pls: Array):
 	while _opp_panels.size() > need:
 		_opp_panels.pop_back().queue_free()
 		_opp_indices.pop_back()
-	# 面板宽：2 人局 460（属性行数字 AP 单行放下，不挤棋盘 1020 宽）；4 人局 500（右侧空间充足）
-	var pw := 460.0 if need == 1 else 500.0
-	# 面板高：2 人局上限 300（基础行+装备行+2 行状态槽 ≈264 能完整放下）；
-	# 4 人局 3 面板按屏幕高度压缩（保底 0.6），保证不超出屏幕底部。
-	# 属性行已改单行数字 AP（无 autowrap），get_combined_minimum_size 不会虚高；
-	# 状态行是 FlowContainer，content_height 按槽数×每行槽数估算换行行数（传入面板宽 pw）
-	var vph = get_viewport_rect().size.y
-	var y := 110.0
-	var heights: Array = []
 	for i in range(need):
 		_opp_indices[i] = int(opps[i].index)
 		_update_opp_panel(_opp_panels[i], opps[i])
-		# +20 保证面板高 ≥ 内容高（PanelContainer 不会强制扩展）
-		heights.append(clampf(_opp_panels[i].content_height(pw), 160.0, 300.0) + 20.0)
-	var total := 0.0
-	for h in heights: total += h
-	total += (need - 1) * 8.0
-	var scale := 1.0
-	if vph > 0 and y + total > vph - 12.0:
-		scale = max(0.6, (vph - y - 12.0) / total)
-	for i in range(need):
-		var ph: float = heights[i] * scale
-		var pc = _opp_panels[i]
-		pc.offset_left = -(pw + _safe_right)
-		pc.offset_right = -_safe_right
-		pc.offset_top = int(y)
-		pc.offset_bottom = int(y + ph)
-		y += ph + 8.0
 
 # 指定玩家索引 → 其面板（自己 → 左下；对手 → 右侧竖排对应项）；找不到返回 null
 func _panel_for(index: int) -> PanelContainer:
@@ -730,14 +968,13 @@ func _panel_for(index: int) -> PanelContainer:
 
 func _make_opp_panel() -> PanelContainer:
 	var pc: PanelContainer = InfoPanel.new()
-	pc.anchor_left = 1.0; pc.anchor_right = 1.0
 	# 安全区内缩与宽度/高度由 _refresh_opp_panels 统一设置（按人数/屏幕高）
 	pc.status_clicked.connect(_on_status_clicked)
-	add_child(pc)
+	_opp_box.add_child(pc)
 	return pc
 
 func _update_opp_panel(pc: PanelContainer, p: Dictionary):
-	var tag = "P%d %s" % [p.index + 1, p.get("char_name", "?")]
+	var tag = "P%d" % [p.index + 1]
 	if p.get("eliminated", false):
 		tag += "（已淘汰）"
 	pc.refresh(p, tag, Color(1, 0.7, 0.5))
@@ -773,7 +1010,7 @@ func _show_target_pick(card_uid: int, type_id: String, extra: Dictionary = {}):
 			if want_pick and _has_buff(p, "exposed") and not p.get("hand", []).is_empty():
 				_show_exposed_hand_pick(card_uid, type_id, pid, send_extra)
 				return
-			_n().send_play_card(card_uid, send_extra)
+			_submit_card(card_uid, send_extra)
 		)
 		vb.add_child(b)
 	if not any:
@@ -805,7 +1042,7 @@ func _show_armor_override_confirm(card_uid: int):
 	var ok = _mkbtn("确定装备")
 	ok.pressed.connect(func():
 		c.queue_free()
-		_n().send_play_card(card_uid)
+		_submit_card(card_uid)
 	)
 	hb.add_child(ok)
 	var no = _mkbtn("取消")
@@ -845,7 +1082,7 @@ func _show_armor_confirm(card_uid: int, _attack_type: String):
 	vb.add_child(_lbl("确定要打出吗？"))
 	var hb = HBoxContainer.new(); vb.add_child(hb)
 	var ok = _mkbtn("确定")
-	ok.pressed.connect(func(): c.queue_free(); _n().send_play_card(card_uid))
+	ok.pressed.connect(func(): c.queue_free(); _submit_card(card_uid))
 	hb.add_child(ok)
 	var no = _mkbtn("取消")
 	no.pressed.connect(func(): c.queue_free())
@@ -853,9 +1090,7 @@ func _show_armor_confirm(card_uid: int, _attack_type: String):
 	add_child(c)
 
 func _refresh_highlight():
-	for child in hand_area.get_children():
-		if child is CardWidget:
-			child.set_selected(child.card_uid == _selected_uid)
+	hand_area.select(_selected_uid)
 
 # ---------- 地格道具详情悬浮框（长按查看） ----------
 var _item_popup: Label = null
@@ -922,6 +1157,11 @@ func _hide_item_popup():
 		_item_popup.visible = false
 
 func _on_board_cell_clicked(cell_pos: Vector2i):
+	if _selected_uid == -1: return
+	if _submitting: return
+	if _pick_mode in ["target", "move", "item"]:
+		_stage_board_target(cell_pos)
+		return
 	# 教程限制：当前步骤只允许特定格子放夹子（穿心/陷阱），保证教学流程可控
 	if tutorial != null and _selected_type in ["hunter_ambush", "item"]:
 		var allowed = tutorial.allowed_trap_positions()
@@ -962,7 +1202,7 @@ func _on_board_cell_clicked(cell_pos: Vector2i):
 		status_label.text = ""
 		return
 	if _selected_type == "destroy_trap" and _is_my_turn:
-		_n().send_play_card(_selected_uid, {"destroy_target": "trap", "trap_pos": pos_dict})
+		_submit_card(_selected_uid, {"destroy_target": "trap", "trap_pos": pos_dict})
 		_selected_uid = -1
 		_selected_type = ""
 		confirm_btn.visible = false
@@ -992,7 +1232,7 @@ func _on_board_cell_clicked(cell_pos: Vector2i):
 		return
 	if _selected_type != "item" or not _is_my_turn:
 		return
-	_n().send_play_card(_selected_uid, {"trap_pos": pos_dict})
+	_submit_card(_selected_uid, {"trap_pos": pos_dict})
 	_selected_uid = -1
 	_selected_type = ""
 	confirm_btn.visible = false
@@ -1075,7 +1315,7 @@ func _send_move(card_uid: int, dir: Vector2i):
 	if card_uid == -1:
 		_n().send_use_skill("assassin_move", {"direction": {"x": dir.x, "y": dir.y}})
 	else:
-		_n().send_play_card(card_uid, {"direction": {"x": dir.x, "y": dir.y}, "steps": 1})
+		_submit_card(card_uid, {"direction": {"x": dir.x, "y": dir.y}, "steps": 1})
 
 func _popup_destroy(card_uid: int):
 	var c = Control.new()
@@ -1095,7 +1335,7 @@ func _popup_destroy(card_uid: int):
 		elif _has_buff(opp, "exposed") and not opp.get("hand", []).is_empty():
 			_show_exposed_hand_pick(card_uid, "destroy", opp.get("index", 1 - _player_index), {"destroy_target": "hand"})
 		else:
-			_n().send_play_card(card_uid, {"destroy_target": "hand"})
+			_submit_card(card_uid, {"destroy_target": "hand"})
 	)
 	vb.add_child(hb)
 	# 多人局：武器/防具按钮始终显示（点选目标后由核心校验目标是否有对应装备）
@@ -1106,7 +1346,7 @@ func _popup_destroy(card_uid: int):
 			if multi:
 				_show_target_pick(card_uid, "destroy", {"destroy_target": "equip", "equip_type": "weapon"})
 			else:
-				_n().send_play_card(card_uid, {"destroy_target": "equip", "equip_type": "weapon"})
+				_submit_card(card_uid, {"destroy_target": "equip", "equip_type": "weapon"})
 		)
 		vb.add_child(wb)
 	if multi or not opp.armor.is_empty():
@@ -1121,7 +1361,7 @@ func _popup_destroy(card_uid: int):
 			if multi:
 				_show_target_pick(card_uid, "destroy", {"destroy_target": "equip", "equip_type": "armor"})
 			else:
-				_n().send_play_card(card_uid, {"destroy_target": "equip", "equip_type": "armor"})
+				_submit_card(card_uid, {"destroy_target": "equip", "equip_type": "armor"})
 		)
 		vb.add_child(ab)
 	var traps_list = _game_state.get("items", [])
@@ -1153,6 +1393,7 @@ func _on_response_needed(data: Dictionary):
 	# 教程接管响应：对手自动不响应 / 复活步骤自动跳过
 	if tutorial != null and tutorial.handle_response_needed():
 		return
+	if not _is_response_target(): return
 	var atk = data.get("card", "")
 	# 真言为技能攻击：显示中文名（card_name 对无卡池条目返回英文 id）
 	var atk_display = "真言" if atk == "priest_chant" else Config.card_name(str(atk))
@@ -1168,6 +1409,7 @@ func _on_weapon_prompt(weapon: Dictionary):
 # 风神弓：穿心命中后选择控制对方移动的方向（取消 = 放弃控制）
 func _on_wind_bow_prompt(_target_idx: int):
 	var c = Control.new()
+	c.name = "WindBowPopup"
 	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
@@ -1232,7 +1474,25 @@ func _on_game_ended(r: Dictionary):
 	get_tree().change_scene_to_file("res://scenes/settlement.tscn")
 
 func _on_error(msg: String):
+	_submitting = false
+	hand_area.locked = false
+	_on_cancel_select()
 	status_label.text = "错误: " + msg
+
+func _submit_card(uid: int, extra: Dictionary = {}):
+	if _submitting: return
+	_submitting = true
+	hand_area.locked = true
+	_on_cancel_select()
+	_n().send_play_card(uid, extra)
+
+func _submit_response(respond: bool, uid: int = -1):
+	if _submitting or not _is_response_target(): return
+	_submitting = true
+	hand_area.locked = true
+	_on_cancel_select()
+	_resp_popup.hide()
+	_n().send_response(respond, uid)
 
 func _on_server_disconnected():
 	status_label.text = "连接断开，1秒后返回主菜单..."
@@ -1241,6 +1501,14 @@ func _on_server_disconnected():
 		get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
 
 func _exec_skill(sk_id: String):
+	if _submitting: return
+	for skill in _find_self().get("active_skills", []):
+		if skill.id == sk_id:
+			var reason := _skill_disabled_reason(skill)
+			if not reason.is_empty():
+				_on_status_clicked(reason)
+				return
+	_on_cancel_select()
 	if tutorial != null and not tutorial.allow_skill(sk_id):
 		status_label.text = "当前步骤请按引导操作"
 		return
@@ -1364,7 +1632,7 @@ func _show_exposed_hand_pick(card_uid: int, type_id: String, target_idx: int, ex
 			c.queue_free()
 			var send_extra = {"chosen_uid": uid}
 			for k in extra: send_extra[k] = extra[k]
-			_n().send_play_card(card_uid, send_extra)
+			_submit_card(card_uid, send_extra)
 		)
 		vb.add_child(b)
 	if not has_any:
@@ -1400,6 +1668,11 @@ func _show_attack_or_root(card_uid: int, type_id: String):
 	var vb = _popup_box(c, 620, 360)
 	vb.add_child(_lbl("附近有蔓生种子，选择操作："))
 	var atk = _mkbtn("攻击（正常打出）")
+	var card_data: Dictionary = {}
+	for data in _find_self().get("hand", []):
+		if int(data.uid) == card_uid: card_data = data; break
+	atk.disabled = not bool(card_data.get("ap_affordable", true)) or (card_data.has("valid_attack_targets") and card_data.valid_attack_targets.is_empty())
+	if atk.disabled: atk.text = "攻击（行动点不足或没有近身目标）"
 	atk.pressed.connect(func():
 		c.queue_free()
 		_skip_root_choice = true
@@ -1411,6 +1684,8 @@ func _show_attack_or_root(card_uid: int, type_id: String):
 	)
 	vb.add_child(atk)
 	var root = _mkbtn("除根（清除种子，耗1攻击点）")
+	root.text = "除根（清除种子，耗%d攻击点）" % int(card_data.get("root_cost", 1))
+	root.disabled = not bool(card_data.get("root_available", true))
 	root.pressed.connect(func():
 		c.queue_free()
 		_enter_root_pick(card_uid)
@@ -1625,21 +1900,40 @@ func _enter_hunter_pos(card_uid: int):
 	status_label.text = "选择捕兽夹放置位置"
 
 # 技能按钮行：每个主动技能一个按钮直接使用（多技能角色并排显示，3+ 技能自动加宽）
+func _skill_disabled_reason(skill: Dictionary) -> String:
+	if not _is_my_turn: return "尚未轮到你的出牌阶段"
+	if _game_state.get("waiting_for_discard", false): return "弃牌阶段不能使用技能"
+	if _game_state.get("response_pending", false): return "请先完成响应"
+	if int(_game_state.get("waiting_for_weapon_choice", -1)) >= 0 or _game_state.get("wind_bow_pending", false): return "请先完成当前选择"
+	return str(skill.get("blocked_reason", "" if skill.get("available", true) else "暂时不可用"))
+
 func _refresh_skill_row(me: Dictionary):
 	for c in skill_row.get_children():
 		skill_row.remove_child(c)  # 立即移除（queue_free 延迟删除，同帧多次刷新会残留重复按钮）
 		c.queue_free()
 	var skills = me.get("active_skills", [])
-	if not _is_my_turn or skills.is_empty():
+	if skills.is_empty():
 		skill_row.visible = false
 		return
 	skill_row.visible = true
 	for sk in skills:
 		var b = Button.new()
 		b.text = sk.get("name", sk.get("id", "技能"))
-		b.add_theme_font_size_override("font_size", Style.fs(28))
-		b.custom_minimum_size = Vector2(150, 110)
+		b.add_theme_font_size_override("font_size", 28)
+		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.custom_minimum_size = Vector2(150, 90)
 		b.tooltip_text = sk.get("desc", "")  # 悬停/长按显示技能完整描述（含限制如"不能推人"）
+		var reason := _skill_disabled_reason(sk)
+		b.disabled = not reason.is_empty()
+		if b.disabled:
+			b.modulate = Color(0.55, 0.55, 0.55)
+			b.add_theme_color_override("font_disabled_color", Color(0.85, 0.85, 0.85))
+			b.tooltip_text = reason + "\n\n" + b.tooltip_text
+			b.gui_input.connect(func(event):
+				if (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed) or (event is InputEventScreenTouch and event.pressed):
+					_on_status_clicked(reason)
+			)
 		b.pressed.connect(func(sid = sk.id): _exec_skill(sid))
 		skill_row.add_child(b)
 
@@ -1659,7 +1953,12 @@ func _show_mage_pick():
 	add_child(c)
 
 func _on_hand_revealed(cards: Array, from_idx: int = -1):
+	var old = get_node_or_null("RevealedHandPopup")
+	if old != null:
+		remove_child(old)
+		old.queue_free()
 	var c = Control.new()
+	c.name = "RevealedHandPopup"
 	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
@@ -1686,7 +1985,7 @@ func _show_fighter_popup():
 		return
 	# 防堆叠：状态刷新会多次触发，先移除旧弹窗
 	var old = get_node_or_null("SwordsmanPopup")
-	if old: old.queue_free()
+	if old != null and not old.is_queued_for_deletion(): return
 	var c = Control.new()
 	c.name = "SwordsmanPopup"
 	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -1704,6 +2003,7 @@ func _show_fighter_popup():
 	add_child(c)
 
 func _on_end_turn():
+	if _submitting: return
 	if not _is_my_turn:
 		return
 	if tutorial != null and not tutorial.allow_end_turn():

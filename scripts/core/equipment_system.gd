@@ -1,7 +1,12 @@
 # equipment_system.gd — 装备系统（武器幻化、装备/丢弃、防具管理）
 extends RefCounted
 
-var match_ref
+var _owner_ref: WeakRef
+var match_ref:
+	get:
+		return _owner_ref.get_ref() if _owner_ref != null else null
+	set(value):
+		_owner_ref = weakref(value) if value != null else null
 
 func _init(match):
 	match_ref = match

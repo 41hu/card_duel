@@ -78,15 +78,18 @@ static func default_weapon_pool() -> Dictionary:
 	return pool
 
 # 校验武器池：每类型恰好 4 个且都是该类型的合法武器
-static func validate_weapon_pool(pool: Dictionary) -> bool:
+static func validate_weapon_pool(pool) -> bool:
 	if not (pool is Dictionary): return false
 	for t in WEAPON_POOL_TYPES:
 		var ids = pool.get(t, [])
 		if not (ids is Array) or ids.size() != WEAPON_POOL_SIZE:
 			return false
+		var seen := {}
 		for wid in ids:
 			if not Config.WEAPON_DB.has(str(wid)): return false
 			if str(Config.WEAPON_DB[str(wid)].type) != t: return false
+			if seen.has(str(wid)): return false
+			seen[str(wid)] = true
 	return true
 
 # 归一化：非法/缺字段 → 默认池（旧存档兼容）
@@ -121,6 +124,31 @@ static func card_limit(type_id: String, package_id: String = DEFAULT_PACKAGE) ->
 	if type_id in ["heal_3", "heal_5"]:
 		return 4  # 回复卡数量由套餐校验兜底（套餐固定组合），此处放宽单卡上限（套餐C需heal_3×4）
 	return int(CARD_LIMITS.get(type_id, DEFAULT_CARD_LIMIT))
+
+static func can_add_card(cards: Array, type_id: String, package_id: String = DEFAULT_PACKAGE) -> Dictionary:
+	if not is_valid_card(type_id) or not HEAL_PACKAGES.has(package_id):
+		return {"ok": false, "msg": "无效卡牌或套餐"}
+	if type_id in ["heal_3", "heal_5"]:
+		return {"ok": false, "msg": "回复卡由套餐固定"}
+	if cards.size() >= DECK_SIZE:
+		return {"ok": false, "msg": "卡组已满"}
+	if cards.count(type_id) >= card_limit(type_id, package_id):
+		return {"ok": false, "msg": "%s已达单卡上限" % display_name(type_id)}
+	var category = category_of(type_id)
+	if int(summarize(cards).get(category, 0)) >= category_max(category):
+		return {"ok": false, "msg": "%s已满" % category_name(category)}
+	for sub in SUB_LIMITS:
+		if type_id not in SUB_LIMITS[sub].cards: continue
+		var total := 0
+		for tid in SUB_LIMITS[sub].cards: total += cards.count(tid)
+		if total >= SUB_LIMITS[sub].max:
+			return {"ok": false, "msg": "%s已达上限%d张" % [sub, SUB_LIMITS[sub].max]}
+	if type_id in BUF_CARDS:
+		var total := 0
+		for tid in BUF_CARDS: total += cards.count(tid)
+		if total >= HEAL_PACKAGES[package_id].buf_max:
+			return {"ok": false, "msg": "数值卡已达套餐上限"}
+	return {"ok": true, "msg": ""}
 
 # ---------- 大池归属 ----------
 
@@ -257,7 +285,7 @@ static func load_all() -> Dictionary:
 	if data is Dictionary:
 		# 存档迁移：卡牌 type_id "trap"（道具卡）已改名 "item"（2026-08 消歧义，与地格道具类型区分）
 		for cid in data:
-			var entry: Dictionary = data[cid]
+			var entry = data[cid]
 			if entry is Dictionary:
 				for s in entry:
 					var slot = entry[s]
@@ -281,7 +309,7 @@ static func save_all(data: Dictionary) -> bool:
 # 读某角色的全部槽位（无记录返回 3 个空槽；旧存档补 package/weapon_pool 字段）
 static func get_char_decks(char_id: String) -> Dictionary:
 	var all = load_all()
-	if not all.has(char_id):
+	if not all.get(char_id) is Dictionary:
 		return _empty_char_entry()
 	var entry: Dictionary = all[char_id]
 	for s in entry:
@@ -308,5 +336,6 @@ static func set_deck(char_id: String, slot: int, name: String, package_id: Strin
 		"name": name, "package": package_id, "cards": cards.duplicate(),
 		"weapon_pool": normalize_weapon_pool(weapon_pool),
 	}
-	save_all(all)
+	if not save_all(all):
+		return {"ok": false, "msg": "保存失败，请检查存储空间或写入权限"}
 	return {"ok": true, "msg": "已保存"}

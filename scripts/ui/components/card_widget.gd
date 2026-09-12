@@ -1,157 +1,234 @@
-# CardWidget — 手牌卡牌组件（纯代码创建）
 extends Control
-
-const Style = preload("res://scripts/theme/style_const.gd")
 
 signal pressed(card_uid: int)
 
-var _panel: Panel
-var _name_label: Label
-var _ap_label: Label
-var _select_mark: Label
+const CARD_SIZE := Vector2(180, 264)
+const INK := Color("253238")
+const PAPER := Color("f2f5f3")
+const APBadge = preload("res://scripts/ui/components/action_point_badge.gd")
+# 类型色（免费/攻击/移动/功能）：鲜明高区分度，卡面顶部色带+AP徽章+主体染色共用
+const ACCENTS := [Color("d4a017"), Color("c0392b"), Color("2980b9"), Color("27ae60")]
+
+class SelectionOverlay extends Control:
+	var selected := false
+	var discarded := false
+
+	func _init():
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func set_state(is_selected: bool, is_discarded: bool):
+		if selected == is_selected and discarded == is_discarded:
+			return
+		selected = is_selected
+		discarded = is_discarded
+		visible = selected or discarded
+		queue_redraw()
+
+	func _draw():
+		if not selected and not discarded:
+			return
+		var rect := Rect2(Vector2.ZERO, size)
+		if discarded:
+			draw_rect(rect, Color(0.42, 0.25, 0.74, 0.20), true)
+			for x in range(-int(size.y), int(size.x) + int(size.y), 18):
+				var start_x := maxf(4.0, x)
+				var end_x := minf(size.x - 4.0, x + size.y)
+				if start_x < end_x:
+					draw_line(Vector2(start_x, clampf(size.y + x - start_x, 4, size.y - 4)), Vector2(end_x, clampf(size.y + x - end_x, 4, size.y - 4)), Color(0.83, 0.72, 1.0, 0.42), 5.0)
+			draw_rect(rect.grow(-2), Color(0.74, 0.56, 1.0, 0.92), false, 6.0)
+			draw_rect(Rect2(Vector2(size.x - 39, 5), Vector2(34, 34)), Color(0.24, 0.14, 0.45, 0.74), true)
+			var cx := size.x - 22.0
+			var cy := 22.0
+			draw_line(Vector2(cx - 8, cy - 8), Vector2(cx + 8, cy + 8), Color(0.96, 0.91, 1.0, 0.96), 4.0)
+			draw_line(Vector2(cx + 8, cy - 8), Vector2(cx - 8, cy + 8), Color(0.96, 0.91, 1.0, 0.96), 4.0)
+		if selected:
+			draw_rect(rect, Color(0.28, 0.94, 0.78, 0.10), true)
+			draw_rect(rect.grow(-3), Color(0.28, 0.94, 0.78, 0.98), false, 6.0)
+			draw_rect(rect.grow(-8), Color(0.92, 1.0, 0.96, 0.52), false, 2.0)
 
 var card_uid: int = -1
-var type_id: String = ""
-var ap_type: int = -1
-var _selected: bool = false
-var _respondable: bool = false
-var _is_discarded: bool = false
-# 触摸拖动判定：手指按下位置 + 是否已判定为拖动（拖动时不触发点击，交 ScrollContainer 滚动）
-var _press_pos: Vector2 = Vector2.ZERO
-var _dragging: bool = false
+var type_id := ""
+var ap_type := 0
+var _selected := false
+var _respondable := false
+var _is_discarded := false
+var _unaffordable := false
+var blocked_reason := ""
+var _face: Panel
+var _top_band: ColorRect
+var _ap_badge: Control
+var _name_label: Label
+var _ap_label: Label
+var _description: Label
+var _art: TextureRect
+var _art_bg: ColorRect
+var _mark: Label
+var _overlay: SelectionOverlay
+var _motion: Tween
+var _art_path := ""
+var _flash_active := false
+var _flash_tween: Tween
 
 func _init():
-	custom_minimum_size = Vector2(120, 150)
-	# PASS：处理自身点击，同时放行触摸拖动给父级 ScrollContainer（手牌横向滚动）
-	mouse_filter = Control.MOUSE_FILTER_PASS
-	_panel = Panel.new()
-	_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(_panel)
+	size = CARD_SIZE
+	custom_minimum_size = CARD_SIZE
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_face = Panel.new()
+	_face.size = CARD_SIZE
+	_face.pivot_offset = Vector2(CARD_SIZE.x / 2, CARD_SIZE.y)
+	_face.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_face)
+	# 顶部类型色带（全宽 8px，醒目区分牌类型）
+	_top_band = ColorRect.new()
+	_top_band.position = Vector2.ZERO
+	_top_band.size = Vector2(CARD_SIZE.x, 8)
+	_top_band.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_face.add_child(_top_band)
+	_ap_badge = APBadge.new()
+	_ap_badge.position = Vector2(3, 4)
+	_ap_badge.size = Vector2(46, 42)
+	_face.add_child(_ap_badge)
+	_name_label = _label(Vector2(50, 13), Vector2(120, 30), 22)
+	_name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_art_bg = ColorRect.new()
+	_art_bg.position = Vector2(10, 48)
+	_art_bg.size = Vector2(160, 112)
+	_art_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_face.add_child(_art_bg)
+	_art = TextureRect.new()
+	_art.name = "CardArt"
+	_art.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_art_bg.add_child(_art)
+	_ap_label = _label(Vector2(10, 164), Vector2(160, 26), 19)
+	_description = _label(Vector2(10, 194), Vector2(160, 54), 19)
+	_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_description.max_lines_visible = 2
+	_description.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_mark = _label(Vector2(10, 133), Vector2(160, 27), 19)
+	_mark.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_overlay = SelectionOverlay.new()
+	_overlay.size = CARD_SIZE
+	_overlay.visible = false
+	_face.add_child(_overlay)
 
-	_ap_label = Label.new()
-	_ap_label.position = Vector2(6, 4)
-	_ap_label.size = Vector2(34, 26)
-	_ap_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_panel.add_child(_ap_label)
-
-	_name_label = Label.new()
-	_name_label.position = Vector2(4, 34)
-	_name_label.size = Vector2(112, 90)
-	_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_panel.add_child(_name_label)
-
-	_select_mark = Label.new()
-	_select_mark.position = Vector2(4, 126)
-	_select_mark.size = Vector2(112, 20)
-	_select_mark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_panel.add_child(_select_mark)
-
-func _ready():
-	gui_input.connect(_on_gui_input)
-	mouse_entered.connect(_on_hover)
-	mouse_exited.connect(_on_unhover)
+func _label(pos: Vector2, extent: Vector2, font_size: int) -> Label:
+	var label := Label.new()
+	label.position = pos
+	label.size = extent
+	label.add_theme_font_size_override("font_size", font_size)
+	label.add_theme_color_override("font_color", INK)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_face.add_child(label)
+	return label
 
 func setup(uid: int, tid: String, card_name: String, ap: int, is_discard: bool = false):
 	card_uid = uid
 	type_id = tid
-	ap_type = ap
+	ap_type = clampi(ap, 0, 3)
 	_name_label.text = card_name
+	var data: Dictionary = Config.CARD_DB.get(tid, {})
+	_ap_badge.setup(ap_type, str(data.get("cost", 0)), 19)
+	_ap_label.text = ["免费", "攻击", "移动", "功能"][ap_type]
+	_description.text = data.get("desc", "")
+	_is_discarded = is_discard
+	# Art is presentation-only; local paths never enter network card data.
+	set_art_path(str(data.get("art", "res://art/cards/%s.png" % tid)))
+	_apply_style()
 
-	match ap:
-		Config.APType.ATTACK: _ap_label.text = "攻"
-		Config.APType.MOVE:   _ap_label.text = "移"
-		Config.APType.FUNCTION: _ap_label.text = "功"
-		_:                     _ap_label.text = "免"
+func set_description(text: String):
+	_description.text = text
 
-	var bg_color = _card_bg_color(ap)
-	_apply_panel_style(bg_color, is_discard)
+func set_art_path(path: String):
+	if path == _art_path: return
+	_art_path = path
+	_art.texture = load(path) as Texture2D if not path.is_empty() and ResourceLoader.exists(path) else null
 
-	_name_label.add_theme_font_size_override("font_size", Style.fs(26))
-	_ap_label.add_theme_font_size_override("font_size", Style.fs(24))
-	_select_mark.text = ""
-	_selected = false
+func set_art(texture: Texture2D):
+	_art_path = ""
+	_art.texture = texture
 
-func _card_bg_color(ap: int) -> Color:
-	match ap:
-		Config.APType.ATTACK: return Color(0.25, 0.08, 0.08)
-		Config.APType.MOVE:   return Color(0.05, 0.12, 0.25)
-		Config.APType.FUNCTION: return Color(0.05, 0.2, 0.12)
-		_:                     return Color(0.18, 0.15, 0.05)
+func set_respondable(value: bool):
+	_respondable = value
+	_apply_style()
 
-func _apply_panel_style(bg: Color, is_discard: bool):
-	var s = StyleBoxFlat.new()
-	s.bg_color = bg
-	s.border_width_left = 2; s.border_width_right = 2
-	s.border_width_top = 2; s.border_width_bottom = 2
-	s.corner_radius_top_left = 6; s.corner_radius_top_right = 6
-	s.corner_radius_bottom_left = 6; s.corner_radius_bottom_right = 6
-	if is_discard:
-		s.border_color = Style.DISCARD_RED
-	else:
-		s.border_color = bg.lightened(0.3)
-	_panel.add_theme_stylebox_override("panel", s)
+func set_selected(value: bool):
+	_selected = value
+	_apply_style()
 
-func set_respondable(v: bool):
-	_respondable = v
-	if v:
-		_select_mark.text = "◈"
-		_select_mark.add_theme_color_override("font_color", Style.SELECTED_CYAN)
+func set_discard_mark(value: bool):
+	_is_discarded = value
+	_apply_style()
 
-func set_selected(v: bool):
-	_selected = v
-	if v:
-		_select_mark.text = "◆"
-		_select_mark.add_theme_color_override("font_color", Style.SELECTED_CYAN)
-		var s = _panel.get_theme_stylebox("panel").duplicate()
-		s.border_color = Style.SELECTED_CYAN
-		s.border_width_left = 3; s.border_width_right = 3
-		s.border_width_top = 3; s.border_width_bottom = 3
-		_panel.add_theme_stylebox_override("panel", s)
-	elif not _is_discarded:
-		_select_mark.text = "◈" if _respondable else ""
-		_apply_panel_style(_card_bg_color(ap_type), false)
+func set_unaffordable(value: bool):
+	if _unaffordable == value: return
+	_unaffordable = value
+	_apply_style()
 
-func set_discard_mark(active: bool):
-	_is_discarded = active
-	if active:
-		_selected = false
-		_select_mark.text = "✕"
-		_select_mark.add_theme_color_override("font_color", Style.DISCARD_RED)
-		_apply_panel_style(_card_bg_color(ap_type), true)
-	else:
-		_select_mark.text = ""
-		_apply_panel_style(_card_bg_color(ap_type), false)
+func _apply_style():
+	_face.modulate = Color(0.62, 0.62, 0.62) if _unaffordable else Color.WHITE
+	var accent: Color = ACCENTS[ap_type]
+	var gold := Color(1.0, 0.84, 0.2)
+	var style := StyleBoxFlat.new()
+	style.bg_color = PAPER.lerp(accent, 0.24)
+	style.border_color = accent
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(6)
+	style.shadow_color = gold if _flash_active else Color(0, 0, 0, 0.22)
+	style.shadow_size = 8 if _flash_active else (5 if _selected else 2)
+	_face.add_theme_stylebox_override("panel", style)
+	_top_band.color = accent
+	_art_bg.color = PAPER.lerp(accent, 0.30)
+	_mark.visible = _respondable
+	_overlay.set_state(_selected, _is_discarded)
+	_mark.text = "弃牌" if _is_discarded else ("可响应" if _respondable else "")
 
-func _on_gui_input(event: InputEvent):
-	# 关键：ScrollContainer 的滚动只处理 MouseButton/MouseMotion（触摸由 emulate_mouse_from_touch 模拟）。
-	# 这里区分「点击」与「拖动」：按下记录位置，拖动超过阈值则不触发点击（交 ScrollContainer 滚动），
-	# 抬起且未拖动才触发 pressed。
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		if event.pressed:
-			_press_pos = event.position
-			_dragging = false
-		else:
-			if not _dragging:
-				pressed.emit(card_uid)
+# 新牌使用独立光晕，保留选中和弃牌边框，不给插画和数字染色。
+# 触发来源：摸牌阶段抽牌、夺取（seize）、天赐（blessing）等任何导致手牌新增的时机。
+func mark_new():
+	_flash_active = true
+	_apply_style()
+	if _flash_tween != null:
+		_flash_tween.kill()
+	_flash_tween = create_tween()
+	for _i in range(3):
+		_flash_tween.tween_method(_set_flash_strength, 0.25, 0.8, 0.22)
+		_flash_tween.tween_method(_set_flash_strength, 0.8, 0.25, 0.22)
+	_flash_tween.tween_callback(func():
+		_flash_active = false
+		_apply_style()
+	)
+
+func _set_flash_strength(strength: float):
+	var style := _face.get_theme_stylebox("panel") as StyleBoxFlat
+	style.shadow_color = Color(1.0, 0.84, 0.2, strength)
+
+func pose(offset: Vector2, angle: float, zoom: float, immediate: bool = false):
+	_description.visible = zoom > 1.0
+	if _motion != null: _motion.kill()
+	if immediate:
+		_face.position = offset
+		_face.rotation = angle
+		_face.scale = Vector2.ONE * zoom
 		return
-	if event is InputEventMouseMotion and (event.button_mask & MOUSE_BUTTON_MASK_LEFT):
-		if _press_pos.distance_to(event.position) > 12.0:
-			_dragging = true
+	_motion = create_tween().set_parallel().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_motion.tween_property(_face, "position", offset, 0.15)
+	_motion.tween_property(_face, "rotation", angle, 0.15)
+	_motion.tween_property(_face, "scale", Vector2.ONE * zoom, 0.15)
 
-func _on_hover():
-	var s = _panel.get_theme_stylebox("panel").duplicate()
-	s.bg_color = s.bg_color.lightened(0.15)
-	_panel.add_theme_stylebox_override("panel", s)
+func face_rect() -> Rect2:
+	var transform := _face.get_transform()
+	var rect := Rect2(transform * Vector2.ZERO, Vector2.ZERO)
+	for point in [Vector2(CARD_SIZE.x, 0), CARD_SIZE, Vector2(0, CARD_SIZE.y)]:
+		rect = rect.expand(transform * point)
+	return Rect2(position + rect.position, rect.size)
 
-func _on_unhover():
-	if _is_discarded:
-		_apply_panel_style(_card_bg_color(ap_type), true)
-		return
-	_apply_panel_style(_card_bg_color(ap_type), false)
-	if _selected:
-		set_selected(true)
-	elif _respondable:
-		set_respondable(true)
+func retire():
+	if _motion != null: _motion.kill()
+	if _flash_tween != null: _flash_tween.kill()
+	var exit_tween := create_tween().set_parallel()
+	exit_tween.tween_property(self, "modulate:a", 0.0, 0.15)
+	exit_tween.tween_property(self, "position:y", position.y - 24, 0.15)
+	exit_tween.chain().tween_callback(queue_free)

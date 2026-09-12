@@ -3,7 +3,12 @@
 # ============================================================
 extends RefCounted
 
-var _ms
+var _owner_ref: WeakRef
+var _ms:
+	get:
+		return _owner_ref.get_ref() if _owner_ref != null else null
+	set(value):
+		_owner_ref = weakref(value) if value != null else null
 
 func _init(ms):
 	_ms = ms
@@ -104,6 +109,10 @@ func on_turn_start(player_idx: int):
 	# 攻击行动点应用 buff 修正（时滞 ap_attack_down 等）
 	p.ap_attack = max(0, 2 + _ms.status.query_modifier(player_idx, "ap_attack"))
 	p.ap_move = 1
+	# Snapshot this turn's granted budget; spending must not lower the denominator.
+	p.ap_attack_max = p.ap_attack
+	p.ap_move_max = p.ap_move
+	p.ap_function_max = p.ap_function
 
 # 判定阶段最前钩子（DoT 结算之前）：活铠献祭等
 func on_judgment_start(player_idx: int):
@@ -185,55 +194,89 @@ func _count_type(player_idx: int, types: Array) -> int:
 		if c.type_id in types: n += 1
 	return n
 
-func has_active_skills(player_idx: int) -> Array:
+func active_skill_ids(player_idx: int) -> Array:
+	return {
+		"mage": ["mage_discard", "mage_phantom"],
+		"assassin": ["assassin_move"], "priest": ["priest_chant"],
+		"vine_ent": ["vine_spread"], "rogue": ["rogue_give"],
+		"hunter": ["hunter_ambush"],
+		"wardsmith": ["wardsmith_infuse", "wardsmith_repair"],
+		"spellblade": ["spellblade_channel"],
+	}.get(_ms.players[player_idx].char_id, [])
+
+func skill_block_reason(player_idx: int, skill: String) -> String:
+	if skill not in active_skill_ids(player_idx): return "无此技能"
 	var p = _ms.players[player_idx]
-	var skills = []
-	match p.char_id:
-		"mage":
-			# 法术强化：始终可用（每回合限一次由 skill_turn_limit 控制；效果可叠加，打出魔法攻击后清除）
-			skills.append("mage_discard")
-			# 幻影：手牌有魔法/吟唱卡时可用（弃卡换 1/2 层闪避）
-			if _has_magic_atk_card(player_idx): skills.append("mage_phantom")
-		"assassin": skills.append("assassin_move")
-		"priest":
-			# 真言：手牌有回复卡（heal_3/heal_5）时才可用（每回合限1次由 skill_turn_limit 控制）
-			if _has_heal_card(player_idx): skills.append("priest_chant")
-		"vine_ent":
-			# 蔓延：手牌有攻击卡时可用（每回合限1次，弃1张攻击卡新种种子）
-			if _has_attack_card(player_idx): skills.append("vine_spread")
-		"rogue":
-			# 济贫：始终可用（每回合限1次由 skill_turn_limit 控制）
-			skills.append("rogue_give")
-		"hunter":
-			# 埋伏：手牌有远程攻击牌（range/pierce）时才显示
-			if _has_range_attack(player_idx): skills.append("hunter_ambush")
-		"wardsmith":
-			# 注魔：装备护甲且满耐久、手牌有攻击卡（near/range/magic/heavy/pierce/chant）时可用
-			if not p.armor.is_empty() and p.armor.durability >= p.armor.get("max_durability", 4) \
-					and _has_infuse_card(player_idx):
-				skills.append("wardsmith_infuse")
-			# 修复：装备护甲且耐久未满时可用
-			if not p.armor.is_empty() and p.armor.durability < p.armor.get("max_durability", 3):
-				skills.append("wardsmith_repair")
-		"spellblade":
-			# 魔力引导：装备近战武器时可用（回合不限次数由 skill_turn_limit=-1 控制）
-			if not p.weapon.is_empty() and p.weapon.get("data", {}).get("type", "") == "near":
-				skills.append("spellblade_channel")
-	var result = []
-	for sk in skills:
-		# 每回合限次（数据表 skill_turn_limit，默认 1；-1 = 不限次数）
-		var cd = Config.CHARACTER_DB[p.char_id]
-		var turn_limit = int(cd.get("skill_turn_limit", 1))
-		var turn_used = 0
-		for sku in p.skills_used:
-			if sku == sk: turn_used += 1
-		if turn_limit >= 0 and turn_used >= turn_limit: continue
-		# 整局限次（数据表 skill_game_limit，默认 -1 无限）
-		var game_limit = int(cd.get("skill_game_limit", -1))
-		if game_limit > 0:
-			var used = p.skill_counts.get(sk, 0)
-			if used >= game_limit: continue
-		result.append(sk)
+	var cd: Dictionary = Config.CHARACTER_DB[p.char_id]
+	var game_limit := int(cd.get("skill_game_limit", -1))
+	if game_limit > 0 and int(p.skill_counts.get(skill, 0)) >= game_limit: return "整局使用次数已耗尽"
+	var turn_limit := int(cd.get("skill_turn_limit", 1))
+	if turn_limit >= 0 and p.skills_used.count(skill) >= turn_limit: return "本回合使用次数已耗尽"
+	match skill:
+		"mage_discard", "rogue_give":
+			if _ms.card_systems[player_idx].hand.is_empty(): return "没有可消耗的手牌"
+		"mage_phantom", "spellblade_channel":
+			if not _has_magic_atk_card(player_idx): return "需要魔法或吟唱卡"
+		"priest_chant":
+			if not _has_heal_card(player_idx): return "需要回复卡"
+		"hunter_ambush":
+			if not _has_range_attack(player_idx): return "需要远程或穿心卡"
+		"vine_spread":
+			if not _has_attack_card(player_idx): return "需要攻击卡"
+			var can_spread := false
+			for pos in _valid_skill_cells():
+				if _ms.item_system.can_spread_to(pos).is_empty(): can_spread = true; break
+			if not can_spread: return "没有可蔓延的位置"
+		"wardsmith_infuse":
+			if p.armor.is_empty(): return "尚未装备护甲"
+			if p.armor.durability < p.armor.get("max_durability", 4): return "护甲需要满耐久"
+			if not _has_infuse_card(player_idx): return "需要攻击卡"
+		"wardsmith_repair":
+			if p.armor.is_empty(): return "尚未装备护甲"
+			if p.armor.durability >= p.armor.get("max_durability", 3): return "护甲无需修复"
+			if int(p.get("ap_attack", 0)) < 1: return "攻击行动点不足"
+			var card_type: String = {"near_armor": "heavy", "range_armor": "pierce", "magic_armor": "chant"}.get(p.armor.id, "")
+			if card_type.is_empty() or _count_type(player_idx, [card_type]) == 0: return "需要与护甲匹配的强化攻击卡"
+		"assassin_move":
+			if _ms.status.get_move_modifier(player_idx) < 0: return "当前无法移动"
+			var geo = _ms.movement.geometry
+			var dirs: Array = geo.HEX_DIRS if geo._mode == geo.MODE_HEX else [Vector2i(-1, 0), Vector2i(1, 0)]
+			var can_move := false
+			for direction in dirs:
+				var pos: Vector2i = geo.clamp_position(geo.step(p.position, direction))
+				if pos == p.position or _ms.movement._opponent_in_dir(player_idx, direction) >= 0: continue
+				var occupied := false
+				for other in _ms.players:
+					if not other.get("eliminated", false) and other.position == pos: occupied = true; break
+				if not occupied: can_move = true; break
+			if not can_move: return "没有可移动的方向，暗影步不能推人"
+	if skill == "spellblade_channel":
+		if p.weapon.get("data", {}).get("type", "") != "near": return "需要装备近战武器"
+		var payable := false
+		for card in _ms.card_systems[player_idx].hand:
+			if card.type_id in ["magic", "chant"] and _ms.has_card_ap(player_idx, "near" if card.type_id == "magic" else "heavy"):
+				payable = true; break
+		if not payable: return "攻击行动点不足"
+	if skill in ["rogue_give", "priest_chant", "spellblade_channel"]:
+		var has_target := false
+		for i in range(_ms.players.size()):
+			if i != player_idx and not _ms.players[i].get("eliminated", false): has_target = true; break
+		if not has_target: return "没有可选目标"
+	return ""
+
+func _valid_skill_cells() -> Array:
+	var geo = _ms.movement.geometry
+	var cells: Array = []
+	for x in range(-geo.HEX_RADIUS if geo._mode == geo.MODE_HEX else 0, geo.HEX_RADIUS + 1 if geo._mode == geo.MODE_HEX else geo.WIDTH):
+		for y in range(-geo.HEX_RADIUS if geo._mode == geo.MODE_HEX else 0, geo.HEX_RADIUS + 1 if geo._mode == geo.MODE_HEX else 1):
+			var pos := Vector2i(x, y)
+			if geo.is_valid(pos): cells.append(pos)
+	return cells
+
+func has_active_skills(player_idx: int) -> Array:
+	var result: Array = []
+	for skill in active_skill_ids(player_idx):
+		if skill_block_reason(player_idx, skill).is_empty(): result.append(skill)
 	return result
 
 # 手牌是否含远程攻击牌（猎人埋伏按钮条件）
@@ -288,8 +331,9 @@ func skill_button_name(skill: String) -> String:
 func use_skill(player_idx: int, skill: String, params: Dictionary) -> Dictionary:
 	var p = _ms.players[player_idx]
 	# 技能必须属于该角色（下划线前缀为调试技能，放行）——防误调/调试卡 uid 冲突
-	if not skill.begins_with("_") and not skill in has_active_skills(player_idx):
-		return {success=false, msg="无此技能"}
+	if not skill.begins_with("_"):
+		var reason := skill_block_reason(player_idx, skill)
+		if not reason.is_empty(): return {success=false, msg=reason}
 	# 技能次数由角色数据表配置（协作者在 character_data.gd 直接调）：
 	#   skill_turn_limit: 每回合限次（默认 1）；skill_game_limit: 整局限次（默认 -1 无限）
 	var cd = Config.CHARACTER_DB[p.char_id]

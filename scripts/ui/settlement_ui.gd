@@ -43,6 +43,12 @@ const _TITLE_TIERS: Dictionary = MatchStateClass.TITLE_TIERS
 
 var _current_title: String = ""
 var _current_titles: Array = []
+var _result_summary: String = ""
+var _export_notice_id := 0
+
+func _viewer_index() -> int:
+	if LocalGame.game != null: return LocalGame.player_index
+	return Network.player_index if Network.player_index >= 0 else Network.last_game_player_index
 
 func _n():
 	if LocalGame.game != null: return LocalGame
@@ -50,6 +56,11 @@ func _n():
 
 func _ready():
 	Style.scale_node_fonts(self)  # 移动端字号适配（tscn 写死的字号）
+	detail_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	detail_label.offset_left = -600
+	detail_label.offset_right = 600
+	cond_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	back_btn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	back_btn.pressed.connect(func():
 		# 清理本地模式残留（自我/人机对局），再开网络局不串状态
 		LocalGame.disconnect_from_server()
@@ -74,20 +85,7 @@ func _ready():
 		export_btn.pressed.connect(func():
 			var result = LocalGame.game.game_result if LocalGame.game != null else Network.last_game_result
 			var path = _export_record(result)
-			# 保存原始获胜信息，导出提示 3 秒后恢复（防残留遮住获胜信息）
-			var orig = detail_label.text
-			if path != "":
-				# 导出平台（APK 等）：文件在应用数据目录（用户不可见），提示已复制到剪贴板可直接粘贴分享
-				if OS.has_feature("editor"):
-					detail_label.text = "对局数据已导出：%s" % path
-				else:
-					detail_label.text = "已导出并复制到剪贴板（粘贴到聊天框即可分享）"
-				detail_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			else:
-				detail_label.text = "导出失败"
-			await get_tree().create_timer(3.0).timeout
-			if is_instance_valid(detail_label):
-				detail_label.text = orig
+			_show_export_notice(path)
 		)
 		add_child(export_btn)
 	_n().game_ended.connect(_on_game_ended)
@@ -95,6 +93,14 @@ func _ready():
 	var cached = _n().last_game_result
 	if not cached.is_empty():
 		_on_game_ended(cached)
+
+func _show_export_notice(path: String):
+	_export_notice_id += 1
+	var notice_id = _export_notice_id
+	detail_label.text = "已导出并复制到剪贴板" if not path.is_empty() else "导出失败"
+	await get_tree().create_timer(3.0).timeout
+	if is_inside_tree() and notice_id == _export_notice_id:
+		detail_label.text = _result_summary
 
 # 点击徽章：条件常驻显示在称号行下方条件栏
 func _show_title_condition(cond: String):
@@ -193,6 +199,8 @@ func _hide_float_cond():
 		_float_popup.visible = false
 
 func _on_game_ended(result: Dictionary):
+	_export_notice_id += 1
+	_hide_float_cond()
 	var winner = result.get("winner", -1)
 	if winner == -1:
 		title_label.text = "对手断线"
@@ -209,7 +217,7 @@ func _on_game_ended(result: Dictionary):
 	if is_self_play:
 		title_label.text = "对局结束"
 		title_label.add_theme_color_override("font_color", Style.WIN_GOLD)
-	elif winner == _n().player_index:
+	elif winner == _viewer_index():
 		title_label.text = "胜利！"
 		title_label.add_theme_color_override("font_color", Style.WIN_GOLD)
 	else:
@@ -223,7 +231,7 @@ func _on_game_ended(result: Dictionary):
 		titles = [result.get("title", "")]  # 兼容旧版结算数据
 	var ptitles: Array = result.get("player_titles", [])
 	if not is_self_play:
-		var mi = _n().player_index
+		var mi = _viewer_index()
 		if mi >= 0 and mi < ptitles.size():
 			titles = ptitles[mi]
 	_clear_title_row()
@@ -242,6 +250,7 @@ func _on_game_ended(result: Dictionary):
 	var wname = names[winner] if winner < names.size() else "玩家 %d" % (winner + 1)
 	var turns = int(result.get("turn_number", 0))
 	detail_label.text = "%s 获胜 · 共 %d 回合" % [wname, turns] if turns > 0 else "%s 获胜" % wname
+	_result_summary = detail_label.text
 
 func _clear_title_row():
 	for c in title_row.get_children():
@@ -261,7 +270,7 @@ func _build_stat_cards(result: Dictionary, names: Array, winner: int):
 	if stats.is_empty(): return
 	var ptitles: Array = result.get("player_titles", [])
 	var eliminated: Array = result.get("eliminated", [])
-	var my_idx: int = _n().player_index
+	var my_idx: int = _viewer_index()
 	var is_self_play = (LocalGame.game != null) and not LocalGame.ai_mode
 	# 卡片数决定区域宽度：2人居中，多人拉宽
 	var n = stats.size()
@@ -295,6 +304,7 @@ func _build_stat_cards(result: Dictionary, names: Array, winner: int):
 		if is_me: tag += "（我）"
 		if is_out: tag += "（已淘汰）"
 		var name_l := Label.new()
+		name_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		name_l.text = "P%d %s%s" % [i + 1, nm, tag]
 		name_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		name_l.add_theme_font_size_override("font_size", Style.fs(28))
@@ -305,6 +315,7 @@ func _build_stat_cards(result: Dictionary, names: Array, winner: int):
 		var d: Dictionary = stats[i]
 		var mc = _max_card(d.get("cards_played", {}))
 		var stat_l := Label.new()
+		stat_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		stat_l.text = "造成伤害  %d\n受到伤害  %d\n  · 攻击  %d\n  · 陷阱  %d\n  · DoT  %d\n回复血量  %d\n移动步数  %d\n复活次数  %d\n打出最多  %s" % [
 			d.get("damage_dealt", 0), d.get("damage_taken", 0),
 			d.get("damage_from_attack", 0), d.get("damage_from_trap", 0), d.get("damage_from_dot", 0),
@@ -318,6 +329,7 @@ func _build_stat_cards(result: Dictionary, names: Array, winner: int):
 			var ep: Dictionary = endp[i]
 			var init_cd: Dictionary = Config.CHARACTER_DB.get(str(ep.get("char_id", "")), {})
 			var end_l := Label.new()
+			end_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			end_l.text = "结束时：HP %d/%d ｜ 近%d 远%d 魔%d" % [
 				int(ep.get("hp", 0)), int(ep.get("max_hp", 0)),
 				int(ep.get("near", 0)), int(ep.get("range", 0)), int(ep.get("magic", 0))]

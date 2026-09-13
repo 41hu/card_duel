@@ -8,6 +8,7 @@ extends Control
 const Style = preload("res://scripts/theme/style_const.gd")
 const DeckData = preload("res://scripts/data/deck_data.gd")
 const AIDeckBuilder = preload("res://scripts/data/ai_deck_builder.gd")
+const DragScroll = preload("res://scripts/ui/components/drag_scroll.gd")
 
 const GROUP_ORDER = ["attack", "tactics", "sustain", "equipment"]
 
@@ -191,7 +192,7 @@ func _build_layout():
 	hint.add_theme_font_size_override("font_size", Style.fs(22))
 	hint.add_theme_color_override("font_color", Style.MODE_DESC)
 	pick_root.add_child(hint)
-	var scroll := ScrollContainer.new()
+	var scroll := DragScroll.new()
 	scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	scroll.offset_top = 240
 	scroll.offset_bottom = -260
@@ -326,14 +327,14 @@ func _build_layout():
 	mid.offset_bottom = -100
 	mid.add_theme_constant_override("separation", Style.fs(10))
 	edit_root.add_child(mid)
-	var pool_scroll := ScrollContainer.new()
+	var pool_scroll := DragScroll.new()
 	pool_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mid.add_child(pool_scroll)
 	_edit_pool_box = VBoxContainer.new()
 	_edit_pool_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_edit_pool_box.add_theme_constant_override("separation", Style.fs(6))
 	pool_scroll.add_child(_edit_pool_box)
-	var sel_scroll := ScrollContainer.new()
+	var sel_scroll := DragScroll.new()
 	sel_scroll.custom_minimum_size = Vector2(Style.fs(400), 0)
 	sel_scroll.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	mid.add_child(sel_scroll)

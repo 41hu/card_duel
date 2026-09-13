@@ -85,5 +85,56 @@ func _ready():
 	add_child(reopened)
 	await settle()
 	expect(reopened._search.text.is_empty() and reopened.selected.is_empty() and reopened._list_position == 0, "Reopening the encyclopedia clears search and filtered navigation state")
+	# --- 手机端滑动修复回归：拖动滚动 vs 轻点选择 ---
+	var drag_wiki = load("res://scenes/wiki_scene.tscn").instantiate()
+	add_child(drag_wiki)
+	await settle()
+	var row := drag_wiki._rows.get_child(1) as Control
+	var start: Vector2 = row.global_position + row.size / 2.0
+	# 轻点（无位移）应打开条目
+	var tap := InputEventMouseButton.new()
+	tap.button_index = MOUSE_BUTTON_LEFT
+	tap.position = start
+	tap.pressed = true
+	get_viewport().push_input(tap, true)
+	tap = tap.duplicate()
+	tap.pressed = false
+	get_viewport().push_input(tap, true)
+	await settle()
+	expect(not drag_wiki.selected.is_empty(), "Light tap still opens an entry")
+	drag_wiki._go_back()
+	await settle()
+	# 拖动（起点在按钮上、位移超过阈值）应滚动且不打开条目
+	Input.warp_mouse(start)
+	await settle()
+	var touch := InputEventScreenTouch.new()
+	touch.index = 0
+	touch.position = start
+	touch.pressed = true
+	Input.parse_input_event(touch)
+	await settle()
+	Input.warp_mouse(start + Vector2(0, -60))
+	await settle()
+	Input.warp_mouse(start + Vector2(0, -140))
+	await settle()
+	var touch_up := InputEventScreenTouch.new()
+	touch_up.index = 0
+	touch_up.position = start + Vector2(0, -140)
+	touch_up.pressed = false
+	Input.parse_input_event(touch_up)
+	await settle()
+	expect(drag_wiki.selected.is_empty(), "Dragging the list does not open an entry")
+	expect(drag_wiki._list_scroll.scroll_vertical > 0, "Dragging scrolls the list")
+	# 拖动结束后条目应恢复可点
+	var tap2 := InputEventMouseButton.new()
+	tap2.button_index = MOUSE_BUTTON_LEFT
+	tap2.position = start
+	tap2.pressed = true
+	get_viewport().push_input(tap2, true)
+	tap2 = tap2.duplicate()
+	tap2.pressed = false
+	get_viewport().push_input(tap2, true)
+	await settle()
+	expect(not drag_wiki.selected.is_empty(), "Rows are clickable again after the drag ends")
 	print("WIKI: %d checks, %d failures" % [checks, failures])
 	get_tree().quit(0 if failures == 0 else 1)

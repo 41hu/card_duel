@@ -6,6 +6,7 @@ const CardWidget = preload("res://scripts/ui/components/card_widget.gd")
 const MapGeometry = preload("res://scripts/core/map_geometry.gd")
 const InfoPanel = preload("res://scripts/ui/components/info_panel.gd")
 const ItemSys = preload("res://scripts/core/item_system.gd")
+const DragScroll = preload("res://scripts/ui/components/drag_scroll.gd")
 
 @onready var phase_label = $PhaseLabel
 @onready var hand_area = $HandScroll/HandArea
@@ -122,7 +123,7 @@ func _ready():
 	board.cell_long_pressed.connect(_on_cell_long_pressed)  # 长按查看地格道具
 	board.cell_released.connect(_on_cell_released)  # 松手隐藏道具悬浮框
 	_create_self_panel()
-	_opp_scroll = ScrollContainer.new()
+	_opp_scroll = DragScroll.new()
 	_opp_scroll.name = "OpponentScroll"
 	_opp_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_opp_scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -500,7 +501,7 @@ func _popup_box(parent: Control, w: float, h: float) -> VBoxContainer:
 	var vp = get_viewport_rect().size
 	w = min(w, vp.x * 0.92)
 	h = min(h, vp.y * 0.92)
-	var sc = ScrollContainer.new()
+	var sc = DragScroll.new()
 	sc.name = "PopupScroll"
 	var panel := StyleBoxFlat.new()
 	panel.bg_color = Color(0.08, 0.1, 0.14, 0.98)

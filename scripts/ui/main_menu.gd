@@ -4,6 +4,7 @@ extends Control
 const Style = preload("res://scripts/theme/style_const.gd")
 const ModeData = preload("res://scripts/data/mode_data.gd")
 const ModeSelectScript = preload("res://scripts/ui/mode_select.gd")
+const DragScroll = preload("res://scripts/ui/components/drag_scroll.gd")
 
 @onready var main_panel = $MainPanel
 @onready var join_panel = $JoinPanel
@@ -305,7 +306,7 @@ func _show_ai_difficulty():
 	ai_char_btn.pressed.connect(func(): _show_ai_char_pick(ai_char_btn))
 	vb.add_child(ai_char_btn)
 	# 难度列表包滚动（内容多了放不下）
-	var scroll = ScrollContainer.new()
+	var scroll = DragScroll.new()
 	scroll.custom_minimum_size = Vector2(0, Style.fs(360))
 	vb.add_child(scroll)
 	var inner = VBoxContainer.new()
@@ -332,7 +333,7 @@ func _show_ai_difficulty():
 func _show_ai_char_pick(label_btn: Button):
 	var c = _make_popup("选择 AI 角色")
 	var vb = c.get_child(1)
-	var scroll = ScrollContainer.new()
+	var scroll = DragScroll.new()
 	scroll.custom_minimum_size = Vector2(0, Style.fs(380))
 	vb.add_child(scroll)
 	var box = VBoxContainer.new()

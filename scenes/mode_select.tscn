@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://bw0mode_select01"]
 
 [ext_resource type="Script" path="res://scripts/ui/mode_select.gd" id="1_ms"]
+[ext_resource type="Script" path="res://scripts/ui/components/drag_scroll.gd" id="2_msdrag"]
 
 [node name="ModeSelect" type="Control"]
 layout_mode = 3
@@ -68,6 +69,7 @@ offset_bottom = 880.0
 grow_horizontal = 2
 horizontal_scroll_mode = 0
 vertical_scroll_mode = 1
+script = ExtResource("2_msdrag")
 
 [node name="ConfigBox" type="VBoxContainer" parent="ConfigScroll"]
 layout_mode = 2

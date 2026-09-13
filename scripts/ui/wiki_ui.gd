@@ -1,5 +1,6 @@
 extends Control
 const Catalog = preload("res://scripts/ui/wiki_catalog.gd")
+const DragScroll = preload("res://scripts/ui/components/drag_scroll.gd")
 const INK = Color("24343b")
 const MUTED = Color("65767d")
 const ACCENT = Color("206c7b")
@@ -133,7 +134,7 @@ func _build():
 	_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_body.add_theme_constant_override("separation", 36)
 	main.add_child(_body)
-	_list_scroll = ScrollContainer.new()
+	_list_scroll = DragScroll.new()
 	_list_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_list_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_body.add_child(_list_scroll)
@@ -144,7 +145,7 @@ func _build():
 	_list_scroll.get_v_scroll_bar().value_changed.connect(func(value):
 		if not _restoring and _list_scroll.visible: _list_position = int(value)
 	)
-	_detail_scroll = ScrollContainer.new()
+	_detail_scroll = DragScroll.new()
 	_detail_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_detail_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_body.add_child(_detail_scroll)

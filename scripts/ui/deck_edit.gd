@@ -8,6 +8,7 @@ extends Control
 
 const Style = preload("res://scripts/theme/style_const.gd")
 const DeckData = preload("res://scripts/data/deck_data.gd")
+const DragScroll = preload("res://scripts/ui/components/drag_scroll.gd")
 
 const GROUP_ORDER = ["attack", "tactics", "sustain", "equipment"]
 
@@ -313,14 +314,14 @@ func _show_edit():
 	mid.offset_bottom = -120
 	mid.add_theme_constant_override("separation", Style.fs(10))
 	page.add_child(mid)
-	var pool_scroll := ScrollContainer.new()
+	var pool_scroll := DragScroll.new()
 	pool_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mid.add_child(pool_scroll)
 	var pool_box := VBoxContainer.new()
 	pool_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	pool_box.add_theme_constant_override("separation", Style.fs(6))
 	pool_scroll.add_child(pool_box)
-	var sel_scroll := ScrollContainer.new()
+	var sel_scroll := DragScroll.new()
 	sel_scroll.custom_minimum_size = Vector2(Style.fs(400), 0)
 	sel_scroll.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	mid.add_child(sel_scroll)

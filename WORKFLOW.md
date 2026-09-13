@@ -306,3 +306,85 @@ git push
 - 服务器监听 `tcpserver.listen(PORT)` 不要绑 `127.0.0.1`（外网连不上）
 - 改任何代码后考虑三件事：服务端需要改吗？本地模式要同步吗？改完发状态更新了吗？
 - `replace_all` 谨慎使用，容易误伤
+
+---
+
+## 十、AI 接手避坑手册（历次踩坑记录，新增坑持续追加）
+
+> 面向后续接手本项目的 AI：以下每条都是真实踩过的坑，按类别排列。改代码/测试/部署前先扫一遍，避免重复踩。
+
+### A. 文件编辑（Doubao 工作台 Edit 工具）
+
+1. **同一文件的多个 Edit 并行提交会报 `Native execution failed`**（编辑锁冲突）→ 同一文件的编辑必须**串行**；不同文件可以并行。
+2. **多行 old_string 的 Edit 在部分 .gd 文件（CRLF/编码差异）会失败**，改用**单行唯一锚点**；多处相同语句用 `replace_all: true` 一次替换（如 `var scroll = ScrollContainer.new()` 两处）。多行失败 ≠ 内容不对，换单行锚点即可。
+3. 编辑 `scripts/ui/`（主维护者领域）直接改，无需通知；**`scripts/version.gd` 只有主维护者可改**；改 `scripts/core/` 需通知部署服务器（服务端权威逻辑）。
+
+### B. 本地 Godot 测试（触摸/拖动模拟）
+
+4. **headless 模式无法模拟拖动**：`get_global_mouse_position()` 恒为 (0,0)，`Input.parse_input_event` / `Input.warp_mouse` 均不改变它 → 触摸拖动相关测试**必须渲染模式**（窗口需可见），headless 只能跑纯逻辑测试。
+5. **合成鼠标事件（InputEventMouseButton/Motion）的 GUI 路由不可靠**：按下事件会落到 ScrollContainer 而不进 Button（`_gui_active=true` 短路 process 兜底通道）；且 `parse_input_event` **不更新系统鼠标位置** → 必须用 `Input.warp_mouse()` 真实移动光标。
+6. **可靠的触摸拖动模拟序列**（已写入 `scripts/tests/wiki_ui_test.gd`，直接照抄）：
+   ```
+   Input.warp_mouse(start)
+   Input.parse_input_event(InputEventScreenTouch{pressed=true, index=0, position=start})
+   # 分两步 warp，每步间隔一帧让 _process 轮询累积位移：
+   Input.warp_mouse(start + Vector2(0,-60))   # 第一次只累积位移，不触发
+   Input.warp_mouse(start + Vector2(0,-140))  # 超过 DRAG_THRESHOLD=14 才真正滚动
+   Input.parse_input_event(InputEventScreenTouch{pressed=false})
+   ```
+   注意阈值机制：拖动守卫/滚动阈值需要位移分步累积，一次 warp 到目标位可能不触发。
+7. **测试命令模板**（Godot 可执行路径嵌套三层，勿写错）：
+   ```
+   & "D:\Godot_v4.7.1-stable_win64.exe\Godot_v4.7.1-stable_win64.exe\Godot_v4.7.1-stable_win64_console.exe" --path "D:\projects\card_duel" res://scenes/test_xxx.tscn
+   ```
+8. **多个 Godot 实例争用 McpInteractionServer 端口（9090）** → 测试**串行**执行，不要并行开两个实例。
+9. 改代码后验证前先清理残留 Godot 进程（旧进程缓存旧脚本），否则"修复没生效"是假象（见"七、测试环境注意事项"）。
+
+### C. Git / GitHub（国内网络）
+
+10. **GitHub 直连可能 `Recv failure: Connection was reset`** → 本机有本地代理 `127.0.0.1:7897`（clash 类；系统 ProxyEnable=0 但端口常开）。push 用：
+    ```
+    git -c http.proxy=http://127.0.0.1:7897 -c https.proxy=http://127.0.0.1:7897 push origin main
+    ```
+    （仅本次命令生效，不改全局配置。）
+11. **PowerShell 下 git push 的成功输出走 stderr**：`2>&1` 合并会误报 `NativeCommandError` / exit 1，但实际已成功 → 以 `To https://...` 和 `ref -> ref` 行判断；再用 `git ls-remote origin main` 对比本地 `git rev-parse HEAD` 确认。
+12. git push 超过 15 秒前台等待会自动转后台任务，用 TaskOutput 查结果。
+13. git 的 `LF will be replaced by CRLF` warning 是 autocrlf 提示，非错误，忽略即可。
+14. 提交时注意 untracked 杂项（`_*.txt` 测试输出、`findings.md`、`task_plan.md` 等）——**只 add 本次产物**，不要 `git add -A` 一把梭。
+
+### D. 服务器部署（阿里云 root@47.107.47.251）
+
+15. **`pkill -f Godot` 自杀坑（严重）**：SSH 远程执行 `pkill -f Godot` 时，承载命令的 bash（命令行里含 "Godot" 字样）会被一并杀掉 → 后续 `nohup ... &` 启动语句根本不执行，服务端静默挂掉。**WORKFLOW 原"服务端联机"命令和 `deploy.sh` 里都有这个坑，不要照抄**。安全写法：
+    ```bash
+    # 杀旧进程（排除自身 bash PID）
+    for p in $(pgrep -f "Godot_v4.7.1-stable_linux"); do [ "$p" != "$$" ] && kill "$p" 2>/dev/null; done
+    # 或精确匹配进程名（comm 截断 15 字符）：pkill -x Godot_v4.7.1-st
+    ```
+16. **SSH 后台启动服务端**：`nohup ... &` 在 SSH 会话异常断开（exit -1）时子进程可能被杀 → 用 `setsid nohup ... > server.log 2>&1 < /dev/null &` 完全脱离会话；启动后**单独开一条 SSH 验证**：`pgrep -x Godot_v4.7.1-st`（进程名精确匹配，避免匹配到验证命令自身）+ `tail server.log` + `ss -tln | grep 17890`。
+17. 服务器更新流程：`git pull` → 杀旧进程 → 启动 → 验证。服务器 git pull 直连 GitHub 可用（阿里云出口），无需代理。
+18. 判断服务端是否真在跑：看端口 `ss -tln | grep 17890` 或日志 `WebSocket 监听端口 17890`，`pgrep -f Godot` 可能匹配到自己的查询命令造成误判。
+
+### E. PowerShell 环境（Windows 本机）
+
+19. **`curl` 是 Invoke-WebRequest 别名**，不支持 `-x`/`-s` 等参数 → 用 `curl.exe`。
+20. ssh 远程命令含 `$` 变量时：PowerShell 里用**单引号**包整个远程命令（`ssh root@host '...'`），避免本地展开；需远程展开的 `$$`、`$p` 等保留在单引号内。
+21. 读含中文的 .gd/.md 用 `Get-Content -Encoding utf8`，否则乱码。
+
+### F. 手机端滚动交互（本项目 UI 核心坑）
+
+22. **"按钮列表 + 纵向滚动"在手机上拖不动/变选择条目**的根因：全宽 `Button`（默认 `MOUSE_FILTER_STOP`）吞掉触摸事件 → 拖动变点击。**统一修复方案**：滚动区换用 `res://scripts/ui/components/drag_scroll.gd`（`DragScroll.new()`，脚本内 preload），它会在拖动时递归禁用内容子树、松手恢复。
+23. 已接入 DragScroll 的滚动区：百科列表/详情（wiki_ui.gd）、AI 难度/角色弹窗（main_menu.gd）、卡组编辑/选择（deck_edit.gd、deck_pick.gd）、对战对手面板/响应/武器/目标弹窗（battle_ui.gd）、模式配置区（mode_select.tscn ConfigScroll）。**新写滚动区时**：内容是可点控件就 DragScroll，纯文本（如日志）ScrollContainer 即可。
+24. `mouse_filter = PASS` 只解决"拖动不中断"，**拖动松手仍可能误触按钮**；PASS 可保留叠加在 DragScroll 上（守卫激活时按钮被临时 IGNORE，轻点不受影响，行为兼容）。
+25. drag_scroll 内部互斥坑：`_process` 兜底会被按下落点（`_gui_active`）永久短路，导致"空白处按下、手指滑过按钮"时滚动中断——已用 `_last_gui_motion_frame`（近 2 帧确有 GUI 滚动才让位）修复，**不要再改回旧逻辑**。
+26. 横向滚动区（如模式卡片 CardsScroll）DragScroll 不适用（只支持纵向），横向列表沿用 `horizontal_scroll_mode=1` + 卡片按钮 PASS 方案。
+
+---
+
+### 推荐的服务端重启命令（替换 WORKFLOW「服务端联机」与 deploy.sh 中的旧写法）
+
+```bash
+cd ~/card_duel && git pull
+for p in $(pgrep -f "Godot_v4.7.1-stable_linux"); do [ "$p" != "$$" ] && kill "$p" 2>/dev/null; done
+sleep 1
+setsid nohup ~/godot/Godot_v4.7.1-stable_linux.x86_64 --headless --path ~/card_duel scenes/server.tscn > server.log 2>&1 < /dev/null &
+sleep 3 && tail -3 server.log && ss -tln | grep 17890

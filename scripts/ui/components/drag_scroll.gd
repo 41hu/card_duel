@@ -2,9 +2,14 @@
 # 背景：Godot 桌面端 ScrollContainer 默认只能拖滚动条，不能拖内容。
 # 双通道互斥：
 #   · _gui_input（事件通道，空白/滚动条区按下可拖；MCP 模拟输入可测）：
-#     用事件局部坐标差值计算位移（同一坐标系内相对位移 = 屏幕位移）
-#   · _process（轮询通道，Input 全局状态驱动）：拖动起点在子按钮上（按钮吞掉事件）时兜底，
-#     位移超过阈值才视为拖动（防误触点击）；_gui_active 时跳过，避免双重滚动。
+#     用事件局部坐标差值计算位移（同一坐标系内相对位移 = 屏幕位移）。
+#     注意：实际 GUI 链上容器（HBox/VBox）默认 MOUSE_FILTER_STOP，按下多半被内容
+#     控件消费，事件通道未必激活——真机滚动主要走 _process 轮询通道（见下）。
+#   · _process（轮询通道，Input 全局鼠标位置驱动）：拖动起点在子按钮/容器上时兜底，
+#     位移超过阈值才视为拖动（防误触点击）。
+# 互斥规则：_gui_active 且近期（8 帧内）持续收到 motion → 轮询通道完全退出并复位
+#   _drag_active/_last_pos（防止两通道叠加、防止接管瞬间用旧位置算 dy 造成滚动突跳）；
+#   gui 收到按下但 motion 断流超 8 帧（如被按钮吃掉）→ 轮询通道接管，滚动不中断。
 # 拖动激活后递归把内容子树中所有可交互控件临时设为不可点（MOUSE_FILTER_IGNORE），
 # 避免滚动过程松手落在某个按钮上误触发点击（拖完恢复）。_content 允许运行时才挂子节点
 # （纯代码构建的 UI），因此用惰性缓存而不是 _ready 时固定。
@@ -73,26 +78,36 @@ func _gui_input(ev: InputEvent):
 		if not ev.pressed:
 			_restore_content()
 	elif ev is InputEventMouseMotion and _gui_active:
+		_last_gui_motion_frame = Engine.get_process_frames()
 		var pos: Vector2 = ev.position
 		var dy: float = pos.y - _gui_last.y
 		_gui_last = pos
 		if _gui_accum >= DRAG_THRESHOLD:
 			_activate_drag_guard()
-			if _apply_scroll(dy):
-				_last_gui_motion_frame = Engine.get_process_frames()
+			_apply_scroll(dy)
 		else:
 			_gui_accum += absf(dy)
 
 func _process(_delta):
 	if not is_visible_in_tree():
 		return
-	# _gui_input 通道最近两帧确实滚动过则跳过，避免双重滚动；
-	# 若 motion 被内容按钮吃掉（_gui_input 收不到），则 _process 兜底接管，滚动不中断。
+	# 事件通道接管期间（gui 激活且近期持续收到 motion），轮询通道完全退出并复位内部状态：
+	# 1) 避免两通道并行滚动量叠加；2) 避免事件间隙后轮询接管时用旧 _last_pos
+	#    计算 dy 造成滚动突跳（真机手指停顿/事件节流时表现为"进度跳跃"）。
+	# 若 motion 被内容按钮吃掉（gui 收到按下但收不到 motion，断流超 8 帧），
+	# 则 _process 兜底接管，滚动不中断。
+	if _gui_active and Engine.get_process_frames() - _last_gui_motion_frame < 8:
+		if _drag_active:
+			_drag_active = false
+			_last_pos = Vector2.ZERO
+			_accum = 0.0
+		return
+	# _gui_input 通道最近两帧确实滚动过则跳过，避免双重滚动。
 	if Engine.get_process_frames() - _last_gui_motion_frame < 2:
 		return
 	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 		var mp := get_global_mouse_position()
-		if _drag_active or get_global_rect().grow(6).has_point(mp):
+		if get_global_rect().grow(6).has_point(mp):
 			if not _drag_active:
 				_drag_active = true
 				_last_pos = mp
@@ -105,6 +120,11 @@ func _process(_delta):
 					_apply_scroll(dy)
 				else:
 					_accum += absf(dy)
+		elif _drag_active:
+			# 拖出滚动区域：停止滚动并复位起点（避免松手/回程时进度跳变），
+			# 但保留 drag guard 直到鼠标松开，防止松手落在条目上误触发点击。
+			_drag_active = false
+			_last_pos = Vector2.ZERO
 	else:
 		if _drag_active:
 			_drag_active = false

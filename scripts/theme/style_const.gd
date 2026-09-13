@@ -53,6 +53,21 @@ static func indent(text: String) -> String:
 		parts[i] = "　　" + parts[i]
 	return "\n\n".join(parts)
 
+# 刘海屏/挖孔屏/状态栏安全区适配：返回内容安全矩形（viewport 坐标，UI 布局直接用）。
+# 无 inset（桌面/无遮挡）时返回全视口；Android 沉浸模式下窗口延伸到刘海/挖孔区域，
+# 通过 DisplayServer.get_display_safe_area() 得到系统安全区，逆映射到 viewport 坐标。
+# 用法: var safe = Style.safe_rect(get_viewport()); margin_top = 36 + int(safe.position.y)
+static func safe_rect(vp: Viewport) -> Rect2:
+	var view := vp.get_visible_rect()
+	var safe := DisplayServer.get_display_safe_area()
+	var win := DisplayServer.window_get_size()
+	if safe.size.x <= 0 or safe.size.y <= 0 or (win.x > 0 and safe == Rect2i(0, 0, win.x, win.y)):
+		return view
+	var inv := vp.get_final_transform().affine_inverse()
+	var tl := inv * Vector2(safe.position)
+	var br := inv * Vector2(safe.position + safe.size)
+	return Rect2(tl, br - tl)
+
 # ---- 主色调 ----
 const BG_DARK       = Color(0.06, 0.08, 0.12)
 const ATTACK_RED    = Color(1.0, 0.5, 0.4)

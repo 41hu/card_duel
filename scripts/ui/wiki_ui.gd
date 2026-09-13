@@ -7,6 +7,7 @@ const MUTED = Color("65767d")
 const ACCENT = Color("206c7b")
 const CATEGORIES = {"chars": "角色", "cards": "卡牌", "equipment": "装备", "status": "状态", "rules": "规则", "all": "全部"}
 static var memory: Dictionary = {}
+var _margin: MarginContainer
 var entries: Array = []
 var category := "chars"
 var selected := ""
@@ -80,13 +81,13 @@ func _build():
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
-	var margin = MarginContainer.new()
-	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	for edge in ["left", "right", "top", "bottom"]: margin.add_theme_constant_override("margin_" + edge, 36)
-	add_child(margin)
+	_margin = MarginContainer.new()
+	_margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	for edge in ["left", "right", "top", "bottom"]: _margin.add_theme_constant_override("margin_" + edge, 36)
+	add_child(_margin)
 	var main = VBoxContainer.new()
 	main.add_theme_constant_override("separation", 22)
-	margin.add_child(main)
+	_margin.add_child(main)
 	var header = HBoxContainer.new()
 	header.add_theme_constant_override("separation", 28)
 	main.add_child(header)
@@ -161,6 +162,13 @@ func _build():
 
 func _layout():
 	if _body == null: return
+	# 刘海屏/挖孔屏适配：内容边距 = 基础边距 + 安全区偏移（桌面无 inset 时不变）
+	var safe := Style.safe_rect(get_viewport())
+	var view := get_viewport_rect().size
+	_margin.add_theme_constant_override("margin_left", 36 + int(safe.position.x))
+	_margin.add_theme_constant_override("margin_right", 36 + int(maxf(view.x - safe.end.x, 0)))
+	_margin.add_theme_constant_override("margin_top", 36 + int(safe.position.y))
+	_margin.add_theme_constant_override("margin_bottom", 36 + int(maxf(view.y - safe.end.y, 0)))
 	var physical = DisplayServer.window_get_size()
 	narrow = physical.x < 1250 or get_viewport_rect().size.x < 1400
 	_list_scroll.custom_minimum_size.x = 0 if narrow else 450

@@ -1,6 +1,6 @@
-[gd_scene format=3 load_steps=2]
+[gd_scene load_steps=2 format=3]
 
-[ext_resource type="Script" path="res://scripts/ui/wiki_ui.gd" id="1_w"]
+[ext_resource type="Script" path="res://scripts/ui/wiki_ui.gd" id="1"]
 
 [node name="WikiScene" type="Control"]
 layout_mode = 3
@@ -9,91 +9,4 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-script = ExtResource("1_w")
-
-[node name="Bg" type="ColorRect" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-color = Color(0.08, 0.1, 0.15, 1)
-
-[node name="Title" type="Label" parent="."]
-layout_mode = 1
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = -250.0
-offset_top = 20.0
-offset_right = 250.0
-offset_bottom = 90.0
-grow_horizontal = 2
-theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
-theme_override_font_sizes/font_size = 52
-horizontal_alignment = 1
-text = "游戏百科"
-
-[node name="MainHBox" type="HBoxContainer" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_top = 100.0
-offset_bottom = -20.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_constants/separation = 24
-
-[node name="Sidebar" type="VBoxContainer" parent="MainHBox"]
-layout_mode = 2
-custom_minimum_size = Vector2(320, 0)
-theme_override_constants/separation = 16
-
-[node name="BackBtn" type="Button" parent="MainHBox/Sidebar"]
-layout_mode = 2
-custom_minimum_size = Vector2(0, 96)
-theme_override_font_sizes/font_size = 32
-text = "返回主界面"
-
-[node name="RulesBtn" type="Button" parent="MainHBox/Sidebar"]
-layout_mode = 2
-custom_minimum_size = Vector2(0, 96)
-theme_override_font_sizes/font_size = 32
-text = "基本规则"
-
-[node name="CardsBtn" type="Button" parent="MainHBox/Sidebar"]
-layout_mode = 2
-custom_minimum_size = Vector2(0, 96)
-theme_override_font_sizes/font_size = 32
-text = "卡牌"
-
-[node name="MechsBtn" type="Button" parent="MainHBox/Sidebar"]
-layout_mode = 2
-custom_minimum_size = Vector2(0, 96)
-theme_override_font_sizes/font_size = 32
-text = "特殊机制"
-
-[node name="CharsBtn" type="Button" parent="MainHBox/Sidebar"]
-layout_mode = 2
-custom_minimum_size = Vector2(0, 96)
-theme_override_font_sizes/font_size = 32
-text = "角色"
-
-[node name="Scroll" type="ScrollContainer" parent="MainHBox"]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
-
-[node name="Margin" type="MarginContainer" parent="MainHBox/Scroll"]
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_constants/margin_left = 48
-theme_override_constants/margin_right = 48
-theme_override_constants/margin_top = 28
-theme_override_constants/margin_bottom = 28
-
-[node name="Content" type="VBoxContainer" parent="MainHBox/Scroll/Margin"]
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_constants/separation = 28
+script = ExtResource("1")

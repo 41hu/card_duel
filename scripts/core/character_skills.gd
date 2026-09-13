@@ -439,7 +439,7 @@ func _spellblade_channel(player_idx: int, params: Dictionary) -> Dictionary:
 		return {success=false, msg="请选择魔法/吟唱卡"}
 	var as_type = "near" if card.type_id == "magic" else "heavy"
 	# 复用出牌流程：以 near/heavy 打出（对应攻击点消耗），ignore_distance 绕过贴脸限制
-	return _ms._do_play_card(player_idx, {"card_uid": uid, "extra": {"as_type": as_type, "ignore_distance": true}})
+	return _ms._do_play_card(player_idx, {"card_uid": uid, "extra": {"as_type": as_type, "ignore_distance": true, "target": int(params.get("target", -1))}})
 
 # 幻影（法师）：弃1张魔法/吟唱卡，获得1/2层幻影（50%概率闪避攻击，每段独立判定，持续1回合）
 func _mage_phantom(player_idx: int, params: Dictionary) -> Dictionary:
@@ -613,7 +613,10 @@ func get_attack_base_damage(player_idx: int, type_id: String, distance: int) -> 
 # ---- 角色道具类型（一张通用道具卡，角色决定放什么道具；默认陷阱） ----
 # 道具类型需在 item_system._item_types 注册（堆叠/触发/拆除规则都在注册表）
 func get_item_type(player_idx: int) -> String:
-	match _ms.players[player_idx].char_id:
+	return item_type_for_character(_ms.players[player_idx].char_id)
+
+static func item_type_for_character(char_id: String) -> String:
+	match char_id:
 		"hunter": return "snare"  # 猎人 → 捕兽夹
 		"miko": return "torii"    # 巫女 → 鸟居
 		"vine_ent": return "vine_seed"  # 蔓生树妖 → 蔓生种子

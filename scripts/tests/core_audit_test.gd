@@ -25,6 +25,8 @@ func _ready():
 	_test_local_restart()
 	_test_ffa_action_death()
 	_test_ffa_ground_destroy()
+	_test_vine_first_turn()
+	_test_channel_target()
 	print("CORE AUDIT: %d checks, %d failures" % [_checks, _fails])
 	get_tree().quit(0 if _fails == 0 else 1)
 
@@ -33,6 +35,48 @@ func _expect(ok: bool, label: String):
 	if not ok:
 		_fails += 1
 	print("[%s] %s" % ["PASS" if ok else "FAIL", label])
+
+func _test_channel_target():
+	var g = MatchState.new()
+	g.disable_timeout = true
+	g._setup_match(["spellblade", "mage", "hunter", "priest"], 0, [], true)
+	g._start_game()
+	for id in Config.WEAPON_DB:
+		if Config.WEAPON_DB[id].get("type", "") == "near":
+			g.players[0].weapon = {"id": id, "data": Config.WEAPON_DB[id]}
+			break
+	g.card_systems[0].hand = [{"uid": 800, "type_id": "magic"}]
+	var result = g.process_action(0, {"action": "use_skill", "skill": "spellblade_channel", "card_uid": 800, "target": 2})
+	_expect(result.success and g._pending_target == 2, "Channel preserves the chosen multiplayer target")
+
+func _test_vine_first_turn():
+	for multi in [false, true]:
+		for first in [0, 1]:
+			var g = MatchState.new()
+			g.disable_timeout = true
+			var chars = ["vine_ent", "mage", "hunter", "priest"] if multi else ["vine_ent", "mage"]
+			var decks: Array = []
+			for i in range(chars.size()): decks.append(DeckData.default_deck())
+			g._setup_match(chars, first, decks, true)
+			g._start_game()
+			while g.current_player != 0: g._advance_to_next_player()
+			var origin: Vector2i = g.players[0].position
+			var geo = g.movement.geometry
+			var label = "Vine first turn (multi=%s, first=%d): " % [multi, first]
+			_expect(g.item_system.get_seed_layers(origin) == 1, label + "one root seed without moving")
+			g.card_systems[0].hand = [{"uid": 80, "type_id": "near"}, {"uid": 81, "type_id": "item"}]
+			var snapshot = g.get_full_state()
+			_expect(snapshot.items.size() == 1 and geo.from_dict(snapshot.items[0].position) == origin, label + "snapshot includes root seed")
+			var direction = geo.direction_between(origin, g.players[1].position)
+			var target = origin + direction
+			_expect(g.item_system.can_spread_to(target).is_empty(), label + "adjacent cell permits spread")
+			_expect(not g.item_system.can_spread_to(origin + direction * 2).is_empty(), label + "spread cannot skip a cell")
+			var spread = g.process_action(0, {"action": "use_skill", "skill": "vine_spread", "card_uid": 80, "pos": geo.to_dict(target)})
+			_expect(spread.success and g.item_system.get_seed_layers(target) == 1, label + "spread action succeeds")
+			var item = g.process_action(0, {"action": "play_card", "card_uid": 81, "extra": {"trap_pos": geo.to_dict(origin)}})
+			_expect(item.success and g.item_system.get_seed_layers(origin) == 2, label + "item stacks under self")
+			g._ensure_vine_seed(0)
+			_expect(g.item_system.get_seed_layers(origin) == 2 and g.players[0].buffs.is_empty(), label + "root does not overstack or cripple self")
 
 func _game(multi: bool = false):
 	var g = MatchState.new()

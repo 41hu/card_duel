@@ -12,6 +12,11 @@ var cards: Array = []
 var selected_uid := -1
 var hovered_uid := -1
 var locked := false
+var skill_selection := false
+
+func set_skill_selection(value: bool):
+	if skill_selection == value: return
+	skill_selection = value
 var _offset := 0.0
 var _max_offset := 0.0
 var _centers: Array[float] = []

@@ -135,6 +135,7 @@ func _ready():
 	_opp_box.add_theme_constant_override("separation", 8)
 	_opp_scroll.add_child(_opp_box)
 	_build_popups()
+	_build_skill_focus()
 	_transport = _n()
 	BackHandler.scene_back = _handle_back
 	resized.connect(_apply_safe_area)
@@ -346,6 +347,7 @@ func _apply_safe_area():
 	status_label.offset_bottom = -328 - _safe_bottom
 	status_label.add_theme_font_size_override("font_size", 22)
 	_layout_self_panel.call_deferred()
+	_layout_skill_focus()
 
 func _layout_self_panel():
 	if not is_inside_tree() or _self_panel == null: return
@@ -394,6 +396,14 @@ func _on_status_clicked(text: String):
 	add_child(c)
 
 func _on_cancel_select():
+	var was_skill_pick := not _skill_pick.is_empty()
+	if not _skill_pick.is_empty(): _restore_material_cards()
+	_skill_pick = ""
+	_skill_params.clear()
+	_hide_skill_focus()
+	hand_area.set_skill_selection(false)
+	status_label.remove_theme_color_override("font_color")
+	if was_skill_pick: _refresh_skill_row(_find_self())
 	_pick_mode = ""
 	_staged_extra.clear()
 	_selected_cell = Vector2i(-999, -999)
@@ -410,6 +420,9 @@ func _on_cancel_select():
 	_status_msg_timer = 0.0
 	status_label.text = ""
 	_refresh_highlight()
+	if _is_my_turn and _game_state.get("waiting_for_discard", false):
+		for card in hand_area.cards: card.set_discard_mark(false)
+		_show_discard_focus(_find_self())
 
 func _build_popups():
 	_resp_popup = _make_resp_popup()
@@ -691,6 +704,7 @@ func _refresh_all(state: Dictionary):
 		_show_resp_popup(state.get("pending_attack_card", ""), int(state.get("pending_attack_damage", 0)))
 
 	var in_discard = state.get("waiting_for_discard", false)
+	for card in hand_area.cards: card.set_discard_phase(in_discard and _is_my_turn)
 	_refresh_skill_row(me)
 	if in_discard and _is_my_turn:
 		var need = me.get("hand", []).size() - me.get("hand_limit", 5)
@@ -702,7 +716,10 @@ func _refresh_all(state: Dictionary):
 		else:
 			status_label.text = "手牌未超上限，可主动多弃（选%d张）" % _discard_selected.size()
 		confirm_btn.visible = false
+		_show_discard_focus(me)
 	else:
+		if _discard_focus:
+			_hide_skill_focus()
 		_discard_selected.clear()
 		_end_confirm_at = 0  # 状态刷新（出牌等操作）取消结束确认态
 		end_turn_btn.text = "结束出牌"
@@ -718,6 +735,9 @@ func _refresh_all(state: Dictionary):
 func _on_card_clicked(card_uid: int, type_id: String):
 	if _submitting or hand_area.get_card(card_uid) == null: return
 	type_id = hand_area.get_card(card_uid).type_id
+	if not _skill_pick.is_empty():
+		_select_skill_material(card_uid, type_id)
+		return
 	if tutorial != null and not _is_response_target() and not tutorial.allow_card_click(card_uid, type_id):
 		status_label.text = "当前步骤请按引导操作"
 		return
@@ -857,6 +877,9 @@ func _response_description(type_id: String) -> String:
 	return "牵制：减免%d伤害，不消耗行动点" % reduction
 
 func _restore_card_controls():
+	if not _skill_pick.is_empty():
+		_refresh_skill_pick()
+		return
 	if _selected_uid == -1: return
 	var card = hand_area.get_card(_selected_uid)
 	if card == null: return
@@ -875,6 +898,16 @@ func _on_background_input(event: InputEvent):
 
 
 func _on_confirm_card():
+	if not _skill_pick.is_empty():
+		if _submitting or not _is_my_turn or not _skill_ready(): return
+		var skill := _skill_pick
+		var params := _skill_params.duplicate(true)
+		params["card_uid"] = _selected_uid
+		_submitting = true
+		hand_area.locked = true
+		_on_cancel_select()
+		_n().send_use_skill(skill, params)
+		return
 	if _selected_uid == -1:
 		return
 	if _submitting: return
@@ -1157,6 +1190,9 @@ func _hide_item_popup():
 		_item_popup.visible = false
 
 func _on_board_cell_clicked(cell_pos: Vector2i):
+	if not _skill_pick.is_empty():
+		_stage_skill_target(cell_pos)
+		return
 	if _selected_uid == -1: return
 	if _submitting: return
 	if _pick_mode in ["target", "move", "item"]:
@@ -1500,8 +1536,233 @@ func _on_server_disconnected():
 	if is_instance_valid(self):
 		get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
 
+const MATERIAL_SKILLS = {
+	"mage_discard": "魔法强化：弃1张手牌",
+	"mage_phantom": "幻影：弃1张魔法或吟唱卡",
+	"priest_chant": "真言：弃1张回复卡",
+	"spellblade_channel": "魔力引导：魔法/吟唱转近战",
+	"wardsmith_infuse": "注魔：消耗1张攻击卡",
+	"wardsmith_repair": "修复：消耗匹配强化卡",
+	"hunter_ambush": "埋伏：消耗远程/穿心",
+	"vine_spread": "蔓延：弃1张攻击卡",
+	"rogue_give": "济贫：送出1张手牌",
+}
+var _skill_pick := ""
+var _skill_params: Dictionary = {}
+var _skill_scrim: ColorRect
+var _skill_description: RichTextLabel
+var _skill_focus_layers: Dictionary = {}
+var _skill_log_visible := true
+var _discard_focus := false
+
+func _show_discard_focus(me: Dictionary):
+	if _skill_scrim == null: return
+	if not _skill_scrim.visible: _skill_log_visible = action_log.visible
+	_discard_focus = true
+	action_log.hide()
+	if _turn_notice != null: _turn_notice.hide()
+	_skill_scrim.show()
+	_skill_description.show()
+	_skill_description.bbcode_enabled = true
+	var count: int = me.get("hand", []).size()
+	var limit := int(me.get("hand_limit", 5))
+	var chosen := _discard_selected.size()
+	var remaining := maxi(0, count - limit - chosen)
+	var requirement := "还需选择 %d 张" % remaining if remaining > 0 else "已满足手牌上限"
+	if count <= limit and chosen == 0: requirement = "无需弃牌，可直接结束回合"
+	_skill_description.text = "[font_size=42][color=#c49aff]弃牌阶段[/color][/font_size]\n\n[color=#c49aff]%s[/color]\n已选 %d 张 · 弃后剩余 %d 张 · 手牌上限 %d 张" % [requirement, chosen, count - chosen, limit]
+	for control in _skill_focus_layers: control.z_index = int(_skill_focus_layers[control])
+	for control in [_self_panel, _opp_scroll, $HandScroll, end_turn_btn, status_label]: control.z_index = 5
+	status_label.add_theme_color_override("font_color", Color("c49aff"))
+	status_label.text = "弃牌阶段 · 已选%d张\n%s" % [chosen, requirement]
+	end_turn_btn.text = "确认弃牌(%d张)" % chosen if chosen > 0 else "不弃牌，结束回合"
+	if remaining > 0: end_turn_btn.text = "确认弃牌(%d张)" % chosen
+	end_turn_btn.add_theme_color_override("font_color", Color("c49aff"))
+	cancel_btn.hide()
+	_layout_skill_focus()
+
+func _build_skill_focus():
+	_skill_scrim = ColorRect.new()
+	_skill_scrim.name = "SkillFocusScrim"
+	_skill_scrim.color = Color(0.08, 0.08, 0.09, 0.82)
+	_skill_scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_skill_scrim.z_index = 3
+	_skill_scrim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_skill_scrim.hide()
+	add_child(_skill_scrim)
+	_skill_description = RichTextLabel.new()
+	_skill_description.name = "SkillFocusDescription"
+	_skill_description.z_index = 4
+	_skill_description.add_theme_font_size_override("normal_font_size", 26)
+	_skill_description.add_theme_color_override("default_color", Color("e0e5ed"))
+	_skill_description.hide()
+	add_child(_skill_description)
+	for control in [_self_panel, _opp_scroll, $HandScroll, skill_row, confirm_btn, cancel_btn, status_label, board, end_turn_btn]:
+		_skill_focus_layers[control] = control.z_index
+
+func _layout_skill_focus():
+	if _skill_description == null: return
+	var vp := get_viewport_rect().size
+	_skill_description.position = Vector2(_self_panel.offset_left, 80)
+	var width := 312.0 if _board_hex else maxf(312.0, vp.x - 690.0 - _safe_right)
+	var height := maxf(100.0, vp.y + _self_panel.offset_top - 110.0) if _board_hex else 300.0
+	_skill_description.size = Vector2(width, height)
+
+func _show_skill_focus():
+	if _skill_scrim == null: return
+	if not _skill_scrim.visible: _skill_log_visible = action_log.visible
+	action_log.hide()
+	if _turn_notice != null: _turn_notice.hide()
+	_skill_scrim.show()
+	_skill_description.show()
+	_skill_description.bbcode_enabled = false
+	var desc: String = Config.CHARACTER_DB.get(_find_self().get("char_id", ""), {}).get("skill_desc", "")
+	for skill in _find_self().get("active_skills", []):
+		if skill.id == _skill_pick and not str(skill.get("desc", "")).is_empty(): desc = skill.desc
+	_skill_description.text = MATERIAL_SKILLS[_skill_pick] + "\n\n" + desc
+	for control in _skill_focus_layers:
+		control.z_index = 5
+	end_turn_btn.z_index = int(_skill_focus_layers[end_turn_btn])
+	board.z_index = 5 if not _skill_targets().is_empty() else int(_skill_focus_layers[board])
+	_layout_skill_focus()
+
+func _hide_skill_focus():
+	if _skill_scrim == null: return
+	if _discard_focus:
+		_discard_focus = false
+		status_label.remove_theme_color_override("font_color")
+		end_turn_btn.remove_theme_color_override("font_color")
+	if _skill_scrim.visible: action_log.visible = _skill_log_visible
+	_skill_scrim.hide()
+	_skill_description.hide()
+	_skill_description.text = ""
+	for control in _skill_focus_layers:
+		control.z_index = int(_skill_focus_layers[control])
+
+func _begin_skill_pick(skill: String):
+	_skill_pick = skill
+	_refresh_skill_row(_find_self())
+	_refresh_skill_pick()
+
+func _material_allowed(type_id: String) -> bool:
+	match _skill_pick:
+		"mage_discard", "rogue_give": return true
+		"mage_phantom", "spellblade_channel": return type_id in ["magic", "chant"]
+		"priest_chant": return type_id in ["heal_3", "heal_5"]
+		"hunter_ambush": return type_id in ["range", "pierce"]
+		"wardsmith_repair":
+			return type_id == {"near_armor": "heavy", "range_armor": "pierce", "magic_armor": "chant"}.get(_find_self().get("armor", {}).get("id", ""), "")
+	return type_id in ["near", "heavy", "range", "pierce", "magic", "chant"]
+
+func _restore_material_cards():
+	if hand_area == null: return
+	for data in _find_self().get("hand", []):
+		var card = hand_area.get_card(int(data.uid))
+		if card == null: continue
+		card.set_skill_material(false)
+		card.set_skill_unavailable(false)
+		card.blocked_reason = str(data.get("blocked_reason", ""))
+		if not data.has("blocked_reason") and not data.get("ap_affordable", true): card.blocked_reason = "行动点不足"
+		card.set_unaffordable(not card.blocked_reason.is_empty())
+
+func _select_skill_material(uid: int, type_id: String):
+	if not _is_my_turn or not _material_allowed(type_id): return
+	if tutorial != null and not tutorial.allow_card_click(uid, type_id): return
+	_skill_params.clear()
+	_selected_cell = Vector2i(-999, -999)
+	_selected_uid = -1 if uid == _selected_uid else uid
+	_selected_type = type_id if _selected_uid != -1 else ""
+	hand_area.select(_selected_uid)
+	if _selected_uid != -1 and _skill_pick in ["rogue_give", "priest_chant", "spellblade_channel"]:
+		var targets := _skill_targets()
+		if targets.size() == 1:
+			_stage_skill_target(targets[0])
+	_refresh_skill_pick()
+
+func _skill_targets() -> Array:
+	var out: Array = []
+	if _selected_uid == -1: return out
+	var geo = MapGeometry.new()
+	geo.set_mode(MapGeometry.MODE_HEX if _board_hex else MapGeometry.MODE_LINEAR)
+	if _skill_pick in ["rogue_give", "priest_chant", "spellblade_channel"]:
+		for p in _game_state.get("players", []):
+			if p.index != _player_index and not p.get("eliminated", false):
+				out.append(geo.from_dict(p.position))
+	elif _skill_pick in ["vine_spread", "hunter_ambush"]:
+		for x in range(-MapGeometry.HEX_RADIUS if _board_hex else 0, MapGeometry.HEX_RADIUS + 1 if _board_hex else MapGeometry.WIDTH):
+			for y in range(-MapGeometry.HEX_RADIUS if _board_hex else 0, MapGeometry.HEX_RADIUS + 1 if _board_hex else 1):
+				var pos := Vector2i(x, y)
+				if not geo.is_valid(pos): continue
+				if _skill_pick == "vine_spread":
+					var occupied := false
+					var adjacent := false
+					for item in _game_state.get("items", []):
+						if item.get("item_type", "") != "vine_seed": continue
+						var seed: Vector2i = geo.from_dict(item.position)
+						if seed == pos: occupied = true
+						elif geo.is_adjacent(seed, pos): adjacent = true
+					if occupied or not adjacent: continue
+				else:
+					var occupied := false
+					for p in _game_state.players:
+						if not p.get("eliminated", false) and geo.from_dict(p.position) == pos: occupied = true
+					if occupied: continue
+					if tutorial != null:
+						var allowed = tutorial.allowed_trap_positions()
+						if not allowed.is_empty() and not pos in allowed: continue
+				out.append(pos)
+	return out
+
+func _stage_skill_target(pos: Vector2i):
+	if _submitting or not _is_my_turn or not pos in _skill_targets(): return
+	_selected_cell = pos
+	var geo = MapGeometry.new()
+	if _skill_pick in ["rogue_give", "priest_chant", "spellblade_channel"]:
+		for p in _game_state.players:
+			if geo.from_dict(p.position) == pos: _skill_params["target"] = int(p.index)
+	elif _skill_pick == "hunter_ambush" and _selected_type == "pierce" and _skill_params.has("pos") and not _skill_params.has("pos2"):
+		_skill_params["pos2"] = geo.to_dict(pos)
+	else:
+		_skill_params = {"pos": geo.to_dict(pos)}
+	_refresh_skill_pick()
+
+func _skill_ready() -> bool:
+	if _selected_uid == -1: return false
+	if _skill_pick in ["rogue_give", "priest_chant", "spellblade_channel"]: return _skill_params.has("target")
+	if _skill_pick == "vine_spread": return _skill_params.has("pos")
+	if _skill_pick == "hunter_ambush": return _skill_params.has("pos") and (_selected_type != "pierce" or _skill_params.has("pos2"))
+	return true
+
+func _refresh_skill_pick():
+	_show_skill_focus()
+	hand_area.set_skill_selection(true)
+	status_label.add_theme_color_override("font_color", CardWidget.SKILL_COLOR)
+	for card in hand_area.cards:
+		card.set_skill_material(_material_allowed(card.type_id))
+		card.set_skill_unavailable(not _material_allowed(card.type_id))
+		card.blocked_reason = "" if _material_allowed(card.type_id) else "不符合技能材料要求"
+		card.set_unaffordable(not card.blocked_reason.is_empty())
+	cancel_btn.show()
+	confirm_btn.show()
+	confirm_btn.text = "确认技能"
+	confirm_btn.disabled = not _skill_ready()
+	status_label.text = MATERIAL_SKILLS[_skill_pick] + ("\n已选0/1" if _selected_uid == -1 else "\n已选1/1")
+	if _selected_uid != -1:
+		status_label.text += " · " + Config.card_name(_selected_type)
+		if _skill_pick == "mage_phantom": status_label.text += " → %d层幻影" % (2 if _selected_type == "chant" else 1)
+		if _skill_pick == "priest_chant": status_label.text += " → %d伤害" % (5 if _selected_type == "heal_5" else 3)
+		if _skill_pick == "wardsmith_infuse": status_label.text += " → " + {"near": "近战防具", "heavy": "近战防具", "range": "远程防具", "pierce": "远程防具", "magic": "法术防具", "chant": "法术防具"}.get(_selected_type, "")
+		if _skill_params.has("target"): status_label.text += " → P%d" % (int(_skill_params.target) + 1)
+		elif _skill_pick in ["rogue_give", "priest_chant", "spellblade_channel"]: status_label.text += "\n请选择目标"
+		if _skill_pick in ["vine_spread", "hunter_ambush"] and not _skill_params.has("pos"): status_label.text += "\n请选择高亮地格"
+		if _skill_pick == "wardsmith_repair": status_label.text += "\n1攻击点，耐久+2"
+		if _skill_params.has("pos"): status_label.text += " · 位置(%d,%d)" % [_skill_params.pos.x, _skill_params.pos.y]
+		if _skill_pick == "hunter_ambush" and _selected_type == "pierce": status_label.text += " · 位置%d/2" % (2 if _skill_params.has("pos2") else (1 if _skill_params.has("pos") else 0))
+	board.set_targets(_skill_targets(), _selected_cell)
+
 func _exec_skill(sk_id: String):
 	if _submitting: return
+	if sk_id == _skill_pick: return
 	for skill in _find_self().get("active_skills", []):
 		if skill.id == sk_id:
 			var reason := _skill_disabled_reason(skill)
@@ -1512,99 +1773,10 @@ func _exec_skill(sk_id: String):
 	if tutorial != null and not tutorial.allow_skill(sk_id):
 		status_label.text = "当前步骤请按引导操作"
 		return
-	if sk_id == "mage_discard": _show_mage_pick()
+	if sk_id in MATERIAL_SKILLS: _begin_skill_pick(sk_id)
 	elif sk_id == "assassin_move": _popup_move(-1)
-	elif sk_id == "hunter_ambush": _show_hunter_pick()
-	elif sk_id == "wardsmith_infuse": _show_wardsmith_infuse()
-	elif sk_id == "wardsmith_repair": _show_wardsmith_repair()
-	elif sk_id == "spellblade_channel": _show_spellblade_pick()
-	elif sk_id == "priest_chant": _show_priest_chant_pick()
-	elif sk_id == "mage_phantom": _show_mage_phantom_pick()
-	elif sk_id == "vine_spread": _show_vine_spread_pick()
-	elif sk_id == "rogue_give":
-		_show_rogue_give_pick()
 	else: _n().send_use_skill(sk_id)
 
-# 济贫（盗贼）：先选一张自己手牌送出，再选目标（2人局直接送对手）
-func _show_rogue_give_pick():
-	var c = Control.new()
-	c.name = "RogueGivePick"
-	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
-	var vb = _popup_box(c, 620, 460)
-	vb.add_child(_lbl("济贫：选择一张要送出的手牌"))
-	var me = _find_self()
-	var has_any = false
-	var multi = _game_state.players.size() > 2
-	for card in me.get("hand", []):
-		has_any = true
-		var b = _mkbtn(Config.card_name(str(card.type_id)))
-		b.pressed.connect(func(uid = int(card.uid)):
-			c.queue_free()
-			if not multi:
-				_n().send_use_skill("rogue_give", {"card_uid": uid})
-				return
-			# 多人局：再选目标（任意存活玩家，含队友）
-			var t = Control.new()
-			t.name = "RogueGiveTarget"
-			t.z_index = 10; t.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-			var bg2 = ColorRect.new(); bg2.color = Style.POPUP_BG
-			bg2.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); t.add_child(bg2)
-			var vb2 = _popup_box(t, 560, 460)
-			vb2.add_child(_lbl("济贫：选择送给谁"))
-			for p in _game_state.players:
-				if p.index == _player_index or p.get("eliminated", false): continue
-				var pb = _mkbtn(Config.char_name(str(p.get("char_id", "?"))))
-				pb.pressed.connect(func(pid = p.index):
-					t.queue_free()
-					_n().send_use_skill("rogue_give", {"card_uid": uid, "target": pid})
-				)
-				vb2.add_child(pb)
-			var cl2 = _mkbtn("取消")
-			cl2.pressed.connect(func(): t.queue_free())
-			vb2.add_child(cl2)
-			add_child(t)
-		)
-		vb.add_child(b)
-	if not has_any:
-		vb.add_child(_lbl("没有手牌可送"))
-	var cl = _mkbtn("取消")
-	cl.pressed.connect(func(): c.queue_free())
-	vb.add_child(cl)
-	add_child(c)
-
-# 蔓延（蔓生树妖）：先选一张攻击卡弃置，再进入棋盘选格新种蔓生种子
-func _show_vine_spread_pick():
-	var c = Control.new()
-	c.name = "VineSpreadPick"
-	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
-	var vb = _popup_box(c, 620, 460)
-	vb.add_child(_lbl("蔓延：弃1张攻击卡，点击与种子相邻的空地新种（可种敌人脚下）"))
-	var me = _find_self()
-	var has_any = false
-	for card in me.get("hand", []):
-		if card.type_id in ["near", "range", "magic", "heavy", "pierce", "chant"]:
-			has_any = true
-			var b = _mkbtn(Config.card_name(str(card.type_id)))
-			b.pressed.connect(func(uid = int(card.uid)):
-				c.queue_free()
-				_selected_uid = uid
-				_selected_type = "vine_spread"
-				cancel_btn.visible = true
-				status_label.text = "点击要蔓延的地格（种子相邻空地）"
-			)
-			vb.add_child(b)
-	if not has_any:
-		vb.add_child(_lbl("没有攻击卡"))
-	var cl = _mkbtn("取消")
-	cl.pressed.connect(func(): c.queue_free())
-	vb.add_child(cl)
-	add_child(c)
-
-# ---- 鹰眼暴露：夺取/摧毁指定选择手牌 ----
 func _has_buff(p: Dictionary, buff_type: String) -> bool:
 	for b in p.get("buffs", []):
 		if b.get("type", "") == buff_type: return true
@@ -1704,201 +1876,6 @@ func _enter_root_pick(card_uid: int):
 	cancel_btn.visible = true
 	status_label.text = "点击要除根的蔓生种子所在格"
 
-# 铸甲师注魔：护甲满耐久时消耗一张攻击卡，把护甲换成该卡对应类型（每回合限一次）
-func _show_wardsmith_infuse():
-	var c = Control.new()
-	c.name = "WardsmithInfuse"
-	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
-	var vb = _popup_box(c, 640, 440)
-	var me = _find_self()
-	var armor_name = "护甲"
-	var armor = me.get("armor", {})
-	if not armor.is_empty() and Config.ARMOR_DB.has(armor.get("id", "")):
-		armor_name = Config.ARMOR_DB[armor.id].name
-	var arm_map = {"near": "近战防具", "heavy": "近战防具", "range": "远程防具", "pierce": "远程防具", "magic": "法术防具", "chant": "法术防具"}
-	vb.add_child(_lbl("注魔：护甲满耐久时，消耗一张攻击卡\n将「%s」更换为该卡对应类型（每回合限一次）" % armor_name))
-	var has_any = false
-	for card in me.get("hand", []):
-		if card.type_id in arm_map:
-			has_any = true
-			var b = _mkbtn("%s → %s" % [Config.card_name(card.type_id), arm_map[card.type_id]])
-			b.pressed.connect(func(uid=card.uid): c.queue_free(); _n().send_use_skill("wardsmith_infuse", {"card_uid": uid}))
-			vb.add_child(b)
-	if not has_any:
-		vb.add_child(_lbl("手牌没有可消耗的攻击卡"))
-	var close = _mkbtn("取消")
-	close.pressed.connect(func(): c.queue_free())
-	vb.add_child(close)
-	add_child(c)
-
-# 铸甲师修复：选一张与装备护甲匹配的重击/穿心/吟唱（耗2攻击点，修复1点耐久）
-func _show_wardsmith_repair():
-	var c = Control.new()
-	c.name = "WardsmithRepair"
-	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
-	var vb = _popup_box(c, 620, 420)
-	var me = _find_self()
-	var armor = me.get("armor", {})
-	var expect_type = ""
-	var armor_name = "未知护甲"
-	if not armor.is_empty():
-		var aid = armor.get("id", "")
-		if Config.ARMOR_DB.has(aid): armor_name = Config.ARMOR_DB[aid].name
-		match aid:
-			"near_armor": expect_type = "heavy"
-			"range_armor": expect_type = "pierce"
-			"magic_armor": expect_type = "chant"
-	vb.add_child(_lbl("修复：选择%s（耗1攻击点，耐久+2）" % armor_name))
-	var has_any = false
-	for card in me.get("hand", []):
-		if card.type_id == expect_type:
-			has_any = true
-			var b = _mkbtn(Config.card_name(card.type_id))
-			b.pressed.connect(func(uid=card.uid): c.queue_free(); _n().send_use_skill("wardsmith_repair", {"card_uid": uid}))
-			vb.add_child(b)
-	if not has_any:
-		vb.add_child(_lbl("没有匹配的强化攻击牌"))
-	var close = _mkbtn("取消")
-	close.pressed.connect(func(): c.queue_free())
-	vb.add_child(close)
-	add_child(c)
-
-# 猎人埋伏：第一步选一张远程攻击牌 → 进入选格放置
-func _show_hunter_pick():
-	var c = Control.new()
-	c.name = "HunterPick"
-	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
-	var vb = _popup_box(c, 560, 460)
-	vb.add_child(_lbl("埋伏：选择一张远程攻击牌"))
-	var me = _find_self()
-	var has_any = false
-	for card in me.get("hand", []):
-		if card.type_id in ["range", "pierce"]:
-			has_any = true
-			var b = _mkbtn(Config.card_name(card.type_id))
-			b.pressed.connect(func(uid=card.uid): c.queue_free(); _enter_hunter_pos(uid))
-			vb.add_child(b)
-	if not has_any:
-		vb.add_child(_lbl("没有远程攻击牌"))
-	var close = _mkbtn("取消")
-	close.pressed.connect(func(): c.queue_free())
-	vb.add_child(close)
-	add_child(c)
-
-# 魔剑士魔力引导：选一张魔法/吟唱卡（装备近战武器时按钮才亮）
-func _show_spellblade_pick():
-	var c = Control.new()
-	c.name = "SpellbladePick"
-	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
-	var vb = _popup_box(c, 620, 420)
-	vb.add_child(_lbl("魔力引导：选择魔法/吟唱（无视距离打出近战/重击）"))
-	var me = _find_self()
-	var has_any = false
-	for card in me.get("hand", []):
-		if card.type_id in ["magic", "chant"]:
-			has_any = true
-			var b = _mkbtn(Config.card_name(card.type_id))
-			b.pressed.connect(func(uid=card.uid): c.queue_free(); _n().send_use_skill("spellblade_channel", {"card_uid": uid}))
-			vb.add_child(b)
-	if not has_any:
-		vb.add_child(_lbl("没有魔法/吟唱卡"))
-	var close = _mkbtn("取消")
-	close.pressed.connect(func(): c.queue_free())
-	vb.add_child(close)
-	add_child(c)
-
-# 幻影（法师）：选一张魔法/吟唱卡弃置 → 获得 1/2 层幻影（50%概率闪避攻击）
-func _show_mage_phantom_pick():
-	var c = Control.new()
-	c.name = "MagePhantomPick"
-	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
-	var vb = _popup_box(c, 620, 420)
-	vb.add_child(_lbl("幻影：弃魔法/吟唱卡，获得 1/2 层幻影（50%概率闪避攻击，持续本回合）"))
-	var me = _find_self()
-	var has_any = false
-	for card in me.get("hand", []):
-		if card.type_id in ["magic", "chant"]:
-			has_any = true
-			var layers = 2 if card.type_id == "chant" else 1
-			var b = _mkbtn("%s（获得%d层幻影）" % [Config.card_name(card.type_id), layers])
-			b.pressed.connect(func(uid=card.uid):
-				c.queue_free()
-				_n().send_use_skill("mage_phantom", {"card_uid": uid}))
-			vb.add_child(b)
-	if not has_any:
-		vb.add_child(_lbl("没有魔法/吟唱卡"))
-	var close = _mkbtn("取消")
-	close.pressed.connect(func(): c.queue_free())
-	vb.add_child(close)
-	add_child(c)
-
-# 真言（牧师）：选一张回复卡弃置 → 对敌人造成等值法术伤害（多人局再选目标）
-func _show_priest_chant_pick():
-	var c = Control.new()
-	c.name = "PriestChantPick"
-	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
-	var vb = _popup_box(c, 620, 420)
-	vb.add_child(_lbl("真言：弃1张回复卡，对敌人造成等值法术伤害（无视护甲，只能魔法响应）"))
-	var me = _find_self()
-	var has_any = false
-	var multi = (_game_state.get("players", []).size() > 2)
-	for card in me.get("hand", []):
-		if card.type_id in ["heal_3", "heal_5"]:
-			has_any = true
-			var b = _mkbtn("%s（造成%d点伤害）" % [Config.card_name(card.type_id), 3 if card.type_id == "heal_3" else 5])
-			b.pressed.connect(func(uid=card.uid):
-				c.queue_free()
-				if multi:
-					# 多人局：选目标后发送
-					var t = Control.new()
-					t.name = "PriestChantTarget"
-					t.z_index = 10; t.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-					var bg2 = ColorRect.new(); bg2.color = Style.POPUP_BG
-					bg2.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); t.add_child(bg2)
-					var vb2 = _popup_box(t, 620, 420)
-					vb2.add_child(_lbl("真言：选择目标"))
-					for p in _game_state.get("players", []):
-						if p.index != _player_index:
-							var pb = _mkbtn(Config.char_name(str(p.char_id)))
-							pb.pressed.connect(func(tidx=p.index):
-								t.queue_free()
-								_n().send_use_skill("priest_chant", {"card_uid": uid, "target": tidx}))
-							vb2.add_child(pb)
-					var cl = _mkbtn("取消")
-					cl.pressed.connect(func(): t.queue_free())
-					vb2.add_child(cl)
-					add_child(t)
-				else:
-					_n().send_use_skill("priest_chant", {"card_uid": uid})
-			)
-			vb.add_child(b)
-	if not has_any:
-		vb.add_child(_lbl("没有回复卡"))
-	var close = _mkbtn("取消")
-	close.pressed.connect(func(): c.queue_free())
-	vb.add_child(close)
-	add_child(c)
-
-# 猎人埋伏：第二步进入棋盘选格（复用陷阱落点流程）
-func _enter_hunter_pos(card_uid: int):
-	_selected_uid = card_uid
-	_selected_type = "hunter_ambush"
-	_hunter_pos1 = {}
-	cancel_btn.visible = true
-	status_label.text = "选择捕兽夹放置位置"
-
 # 技能按钮行：每个主动技能一个按钮直接使用（多技能角色并排显示，3+ 技能自动加宽）
 func _skill_disabled_reason(skill: Dictionary) -> String:
 	if not _is_my_turn: return "尚未轮到你的出牌阶段"
@@ -1925,6 +1902,18 @@ func _refresh_skill_row(me: Dictionary):
 		b.custom_minimum_size = Vector2(150, 90)
 		b.tooltip_text = sk.get("desc", "")  # 悬停/长按显示技能完整描述（含限制如"不能推人"）
 		var reason := _skill_disabled_reason(sk)
+		if sk.id == _skill_pick:
+			b.text += "\n选择中"
+			b.disabled = true
+			var active_style := StyleBoxFlat.new()
+			active_style.bg_color = Color("192d48")
+			active_style.border_color = CardWidget.SKILL_COLOR
+			active_style.set_border_width_all(3)
+			active_style.set_corner_radius_all(6)
+			b.add_theme_stylebox_override("disabled", active_style)
+			b.add_theme_color_override("font_disabled_color", CardWidget.SKILL_COLOR)
+			skill_row.add_child(b)
+			continue
 		b.disabled = not reason.is_empty()
 		if b.disabled:
 			b.modulate = Color(0.55, 0.55, 0.55)
@@ -1937,20 +1926,6 @@ func _refresh_skill_row(me: Dictionary):
 		b.pressed.connect(func(sid = sk.id): _exec_skill(sid))
 		skill_row.add_child(b)
 
-func _show_mage_pick():
-	var c = Control.new()
-	c.z_index = 10; c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var bg = ColorRect.new(); bg.color = Style.POPUP_BG
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); c.add_child(bg)
-	var vb = _popup_box(c, 700, 460)
-	vb.add_child(_lbl("选择一张要弃的牌（魔法强化+2，可叠加，打出魔法攻击后清除）："))
-	var mh = _find_self().get("hand", [])
-	for card in mh:
-		var b = _mkbtn(Config.card_name(card.type_id))
-		b.pressed.connect(func(uid=card.uid): c.queue_free(); _n().send_use_skill("mage_discard", {"card_uid": uid}))
-		vb.add_child(b)
-	var cb = _mkbtn("取消"); cb.pressed.connect(func(): c.queue_free()); vb.add_child(cb)
-	add_child(c)
 
 func _on_hand_revealed(cards: Array, from_idx: int = -1):
 	var old = get_node_or_null("RevealedHandPopup")
@@ -2003,6 +1978,7 @@ func _show_fighter_popup():
 	add_child(c)
 
 func _on_end_turn():
+	if not _skill_pick.is_empty(): return
 	if _submitting: return
 	if not _is_my_turn:
 		return

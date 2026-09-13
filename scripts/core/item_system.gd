@@ -83,7 +83,7 @@ func can_spread_to(pos: Vector2i) -> String:
 	if seeds.is_empty():
 		return "场上没有蔓生种子（需先由生根/蔓延种下第一颗）"
 	for sp in seeds:
-		if match_ref.movement.geometry.distance(sp, pos) == 1:
+		if match_ref.movement.geometry.is_adjacent(sp, pos):
 			return ""
 	return "目标格与所有种子（%s）都不相邻" % str(seeds)
 

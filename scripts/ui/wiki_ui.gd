@@ -1,330 +1,330 @@
-# wiki_ui.gd — 游戏百科界面（左侧分类导航 + 右侧内容区）
-# 分类：基本规则 / 卡牌 / 特殊机制 / 角色；按钮常驻不消失，切换时清空内容并滚动回顶部
 extends Control
-
-const Style = preload("res://scripts/theme/style_const.gd")
-
-@onready var content = $MainHBox/Scroll/Margin/Content
-
-# 角色技能（[类型, 技能名, 效果]）：主动技在前、被动技在后，每个技能独立一行；属性由角色数据自动渲染
-const CHAR_SKILLS: Dictionary = {
-	"fighter": [["被动技", "战利", "近战或重击攻击命中目标后，可选择：抽 1 张牌，或回复 2 点 HP。每回合限一次。"]],
-	"sharpshooter": [["被动技", "先发", "每回合打出的第一张普通远程攻击卡不消耗攻击行动点（仅限\"远程\"卡，穿心不享受）。"]],
-	"mage": [
-		["主动技", "法术强化", "弃 1 张手牌，获得 2 点魔法强化——可无限叠加；打出魔法或吟唱攻击时，消耗全部强化层数，为本次攻击附加等量伤害。每回合限一次。"],
-		["主动技", "幻影", "手牌持有魔法/吟唱卡时可用（每回合限一次）：弃置一张魔法卡获得 1 层幻影、弃置一张吟唱卡获得 2 层幻影。幻影永久存在、可无限叠加。你被攻击时（每段攻击独立判定），闪避概率 = 当前幻影层数/(层数+1)：1 层 = 1/2、2 层 = 2/3、3 层 = 3/4……闪避成功则该段攻击完全无效（护甲不消耗）并消耗 1 层幻影；失败则正常结算（层数保留）。"],
-	],
-	"paladin": [
-		["被动技", "圣盾", "每回合第一次受到的伤害减少 2 点（最低为 0）。"],
-		["被动技", "反击", "使用响应卡（格挡/牵制/闪避）完全抵挡一次攻击伤害后，下次攻击伤害 +1；可叠加（多次完全抵挡后伤害 +N），反击强化持续 2 回合。"],
-	],
-	"assassin": [["主动技", "暗影步", "每回合可免费向任意方向移动 1 格，不消耗位移行动点（不能推人）。"]],
-	"priest": [
-		["被动技", "治愈术精通", "使用回复卡时，回复量额外 +2。"],
-		["被动技", "净化", "受到某类持续伤害（灼烧/中毒）后，清除自身该类持续伤害。"],
-		["主动技", "真言", "手牌持有回复卡时可用（每回合限一次）：选择并丢弃一张回复卡，对敌人造成与回复卡等值的法术伤害（回复+3→3 点、回复+5→5 点）。该攻击无视护甲，且只能被魔法卡（闪避）响应。"],
-	],
-	"berserker": [["被动技", "狂化", "受到直接攻击后，近战攻击伤害 +1，持续 3 回合，可叠加。"]],
-	"warlock": [
-		["被动技", "邪能", "功能行动点 +1（每回合 2 点）。"],
-		["被动技", "虚空造物", "若本回合未打出任何功能卡，回合结束额外抽 1 张牌。"],
-		["被动技", "枯萎", "自身受到的所有回血效果 −1（回复 +1 时实际回复 0，+2 回复 1）。"],
-	],
-	"gunslinger": [["被动技", "双发扳机", "远程/穿心攻击固定消耗 2 攻击行动点，并造成两段伤害——每段 =（对应面板 − 距离）÷ 2 向下取整（最低 0）；穿心每段 =（远程面板 + 3 − 距离）÷ 2。两段各自独立结算：敌人需打出两张响应卡才能完全抵挡；圣骑士的首伤减免只对第一段生效，武器命中特效每段触发。"]],
-	"hunter": [["主动技", "埋伏", "手牌持有远程攻击牌时可用。选择并丢弃一张「远程」攻击卡，不消耗攻击行动点，可放置 1 个捕兽夹；或选择并丢弃一张「穿心」攻击卡，同样不消耗攻击行动点，可放置 2 个捕兽夹。捕兽夹须放置于棋盘无单位空格，可重叠放置；首个到达该格的单位每个夹子受到 4 点伤害，触发后销毁。每回合限一次。"], ["被动技", "猎手本能", "猎人无视捕兽夹：踩上自己或其他猎人放置的捕兽夹时不受伤，夹子保留在原格继续生效。"]],
-	"tracker": [
-		["被动技", "校准", "远程或法术攻击命中（造成伤害）后，获得 1 层校准状态——每层使远程攻击伤害 +1，永久持续、可无限叠加。若远程或法术攻击未能造成伤害（被闪避、格挡/牵制减至 0、护甲免疫、无法打出等），全部校准清空。"],
-		["被动技", "追击", "近战攻击命中（造成伤害）后，获得 1 层追击状态（持续 2 回合，可叠加）。每层追击可抵消一次校准清空：远程/法术攻击未造成伤害时，消耗 1 层追击，本次校准保留。"],
-	],
-	"wardsmith": [
-		["主动技", "注魔", "装备的护甲满耐久时可用（每回合限一次）：选择消耗手牌一张攻击卡（近战/远程/魔法/重击/穿心/吟唱，不含冻结），将装备的护甲更换为该卡对应类型的护甲（近战/重击→近战防具、远程/穿心→远程防具、魔法/吟唱→法术防具），新护甲满耐久。"],
-		["主动技", "修复", "装备的护甲破损时可用：消耗 1 攻击行动点，并丢弃一张与护甲类型匹配的强化攻击卡（重击→近战防具、穿心→远程防具、吟唱→法术防具），修复 2 点护甲耐久。"],
-		["被动技", "精铸", "装备的护甲耐久上限 +1（为 4 耐久）；护甲被摧毁时不消失、保留 1 耐久（韧性，可再修复）。"],
-	],
-	"spellblade": [["主动技", "魔力引导", "装备近战武器时可用。选择并丢弃一张「魔法」攻击卡，消耗 1 攻击行动点，视作打出「近战」攻击，无视距离限制；或选择并丢弃一张「吟唱」攻击卡，消耗 2 攻击行动点，视作打出「重击」攻击，无视距离限制。可被格挡响应。"]],
-	"miko": [["被动技", "结界", "巫女的道具卡放置「鸟居」（同格仅 1 个，可被摧毁卡拆除）。巫女自己踩上：回复 2 点 HP，且近战/远程/魔法面板各永久 +1（可叠加）；敌方角色踩上：进入「神隐」——其下个回合被跳过。"]],
-	"armor_feeder": [["被动技", "活铠", "开局自带魔甲「活铠」（耐久 2，不碎裂，显示 0/2）。活铠无满耐久完全免疫：耐久 ≥1 时任何攻击命中一律伤害减半并消耗 1 耐久，耐久 0 时无减伤；强化攻击穿甲照常。活铠耐久低于 2 时，自己回合判定阶段最先扣 1 HP 并恢复 1 耐久（扣血可致死、触发复活）。打出手牌护甲卡时不装备，改为修复活铠（耐久回满；满耐久时打出无效果照常耗卡）。摧毁对活铠无效。"]],
-	"rogue": [
-		["被动技", "妙手", "你打出的「夺取」卡不消耗功能行动点。"],
-		["被动技", "劫富", "你的近战攻击命中并造成伤害，或你受到攻击（被造成伤害）后：若攻击来源手牌不少于你的手牌，随机夺取其 1 张手牌（每回合限一次），并进入「潜行」。"],
-		["被动技", "潜行", "潜行期间：远程/法术攻击无法瞄准你（打出即被拒、卡不消耗），近战攻击可命中你（命中后现形）；你打出任何手牌即现形；在你触发来源角色的下一次回合开始时自然消失。"],
-		["主动技", "济贫", "每回合限一次：从自己手牌选一张送给任意目标（4 人局可送队友）并公示——把对方喂胖，劫富条件就更容易满足。"],
-	],
-	"vine_ent": [
-		["被动技", "生根", "判定阶段开始时或位移后，所在格自动长出 1 层「蔓生种子」（脚下已有种子则不再叠加；树妖自身免疫其效果）。"],
-		["主动技", "蔓延", "每回合限一次：弃 1 张攻击卡，选择与任一蔓生种子相邻的无种子地格新种 1 层（可种在敌人脚下，被种敌人立即获得 1 层致残）。"],
-		["被动技", "缠绕", "树妖的道具卡只能给已有种子叠加层数（1→2 层封顶）；2 层种子上站立的单位，其判定阶段每回合受到 1 点真实伤害，且本回合攻击行动点 -1（2 层效果与 1 层致残效果并存）。"],
-		["被动技", "神经毒素", "到达种子所在格或被种脚下的单位获得 1 层「致残」（永久、可叠加）；带致残的单位每次位移（移动/被吸引/被威慑/被推等）受到 2 点真实伤害（无视护甲与防御减伤），并消去 1 层致残。"],
-		["被动技", "摧残", "你对带有致残的单位攻击伤害 +1。"],
-		["被动技", "除根（反制）", "其他角色（含蔓生树妖自身对他人种子）可以消耗 1 张「近战」或「重击」卡 + 1 攻击行动点，点击自己所在格或相邻格的地格道具进行除根，一次清除该格全部蔓生种子层数（1/2 层一起）；「摧毁」卡可选择任意地格的蔓生种子一次全清（无距离限制）。"],
-	],
-}
+const Catalog = preload("res://scripts/ui/wiki_catalog.gd")
+const INK = Color("24343b")
+const MUTED = Color("65767d")
+const ACCENT = Color("206c7b")
+const CATEGORIES = {"chars": "角色", "cards": "卡牌", "equipment": "装备", "status": "状态", "rules": "规则", "all": "全部"}
+static var memory: Dictionary = {}
+var entries: Array = []
+var category := "chars"
+var selected := ""
+var narrow := false
+var history: Array = []
+var _search: LineEdit
+var _tabs: HBoxContainer
+var _body: HBoxContainer
+var _list_scroll: ScrollContainer
+var _rows: VBoxContainer
+var _detail_scroll: ScrollContainer
+var _detail: VBoxContainer
+var _back: Button
+var _home: Button
+var _count: Label
+var _list_position := 0
+var _restoring := false
 
 func _ready():
-	Style.scale_node_fonts(self)  # 移动端字号适配（tscn 写死的字号）
-	$MainHBox/Sidebar/BackBtn.pressed.connect(func():
-		get_tree().change_scene_to_file("res://scenes/main_menu.tscn"))
-	$MainHBox/Sidebar/RulesBtn.pressed.connect(func(): _show_category("rules"))
-	$MainHBox/Sidebar/CardsBtn.pressed.connect(func(): _show_category("cards"))
-	$MainHBox/Sidebar/MechsBtn.pressed.connect(func(): _show_category("mechs"))
-	$MainHBox/Sidebar/CharsBtn.pressed.connect(func(): _show_category("chars"))
-	_show_category("rules")  # 默认显示基本规则
+	entries = Catalog.new().build()
+	_build()
+	category = memory.get("category", "chars")
+	_render_list()
+	if not selected.is_empty(): _render_detail()
+	resized.connect(_layout)
+	_layout()
+	_restore_scroll.call_deferred()
+	BackHandler.scene_back = _go_back
 
-# 切换分类：清空内容 → 渲染该分类全部章节 → 滚动回顶部
-func _show_category(cat: String):
-	for c in content.get_children():
-		content.remove_child(c)
-		c.queue_free()
-	match cat:
-		"rules": _fill_rules()
-		"cards": _fill_cards()
-		"mechs": _fill_mechs()
-		"chars": _fill_chars()
-	# 触摸滚动修复：内容控件（PanelContainer 等）默认 mouse_filter=STOP 会拦截触摸，
-	# 导致手机端点住内容无法拖动滚动——统一设为 PASS 让触摸穿透给 ScrollContainer
-	for c in content.find_children("*", "Control", true, false):
-		c.mouse_filter = Control.MOUSE_FILTER_PASS
-	$MainHBox/Scroll.scroll_vertical = 0
+func _exit_tree():
+	memory = {"category": category}
+	if BackHandler.scene_back == _go_back: BackHandler.scene_back = Callable()
 
-# 添加一节内容（标题 + 正文）
-func _add_section(title_text: String, body: String):
-	var t = Label.new()
-	t.text = title_text
-	t.add_theme_font_size_override("font_size", Style.fs(42))
-	t.add_theme_color_override("font_color", Style.WIN_GOLD)
-	content.add_child(t)
-	var b = Label.new()
-	b.text = body
-	b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	b.add_theme_font_size_override("font_size", Style.fs(30))
-	b.add_theme_constant_override("line_spacing", 10)
-	b.add_theme_color_override("font_color", Color(0.92, 0.92, 0.92))
-	content.add_child(b)
-	content.add_child(_sep())
+func _label(text: String, font_size: int, color: Color = INK) -> Label:
+	var l = Label.new()
+	l.text = text
+	l.add_theme_font_size_override("font_size", font_size)
+	l.add_theme_color_override("font_color", color)
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return l
 
-func _sep() -> HSeparator:
-	var s = HSeparator.new()
-	s.add_theme_constant_override("separation", 24)
-	return s
+func _button(text: String, action: Callable) -> Button:
+	var b = Button.new()
+	b.text = text
+	b.custom_minimum_size.y = 72
+	b.add_theme_font_size_override("font_size", 30)
+	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]: b.add_theme_color_override(state, INK)
+	var normal = StyleBoxFlat.new()
+	normal.bg_color = Color.WHITE
+	normal.content_margin_left = 20
+	normal.content_margin_right = 20
+	normal.content_margin_top = 10
+	normal.content_margin_bottom = 10
+	b.add_theme_stylebox_override("normal", normal)
+	var hover = normal.duplicate()
+	hover.bg_color = Color("e2eff0")
+	b.add_theme_stylebox_override("hover", hover)
+	b.add_theme_stylebox_override("pressed", hover)
+	var focus = StyleBoxFlat.new()
+	focus.bg_color = Color.TRANSPARENT
+	focus.border_color = ACCENT
+	focus.set_border_width_all(2)
+	b.add_theme_stylebox_override("focus", focus)
+	b.pressed.connect(action)
+	return b
 
-# 分组小标题（如"基础攻击""强化攻击"）
-func _add_group_label(text: String):
-	var t = Label.new()
-	t.text = text
-	t.add_theme_font_size_override("font_size", Style.fs(36))
-	t.add_theme_color_override("font_color", Color(1, 0.85, 0.3, 1))
-	content.add_child(t)
+func _build():
+	var bg = ColorRect.new()
+	bg.color = Color("eef2f2")
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(bg)
+	var margin = MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	for edge in ["left", "right", "top", "bottom"]: margin.add_theme_constant_override("margin_" + edge, 36)
+	add_child(margin)
+	var main = VBoxContainer.new()
+	main.add_theme_constant_override("separation", 22)
+	margin.add_child(main)
+	var header = HBoxContainer.new()
+	header.add_theme_constant_override("separation", 28)
+	main.add_child(header)
+	_back = _button("‹ 返回", _go_back)
+	header.add_child(_back)
+	_home = _button("主界面", _go_home)
+	header.add_child(_home)
+	var title = _label("游戏百科", 40)
+	title.autowrap_mode = TextServer.AUTOWRAP_OFF
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(title)
+	_count = _label("", 26, MUTED)
+	_count.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_count.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	header.add_child(_count)
+	_tabs = HBoxContainer.new()
+	_tabs.add_theme_constant_override("separation", 8)
+	main.add_child(_tabs)
+	for key in CATEGORIES:
+		var b = _button(CATEGORIES[key], func(): _select_category(key))
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.set_meta("category", key)
+		_tabs.add_child(b)
+	_search = LineEdit.new()
+	_search.custom_minimum_size.y = 74
+	_search.placeholder_text = "搜索名称、技能或效果"
+	_search.clear_button_enabled = true
+	_search.add_theme_font_size_override("font_size", 30)
+	_search.add_theme_color_override("font_color", INK)
+	_search.add_theme_color_override("font_placeholder_color", MUTED)
+	var search_style = StyleBoxFlat.new()
+	search_style.bg_color = Color.WHITE
+	search_style.set_content_margin_all(18)
+	_search.add_theme_stylebox_override("normal", search_style)
+	_search.add_theme_stylebox_override("focus", search_style)
+	_search.text_changed.connect(func(_text):
+		selected = ""
+		history.clear()
+		_list_position = 0
+		_render_list()
+		_layout()
+	)
+	main.add_child(_search)
+	_body = HBoxContainer.new()
+	_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_body.add_theme_constant_override("separation", 36)
+	main.add_child(_body)
+	_list_scroll = ScrollContainer.new()
+	_list_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_list_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_body.add_child(_list_scroll)
+	_rows = VBoxContainer.new()
+	_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_rows.add_theme_constant_override("separation", 8)
+	_list_scroll.add_child(_rows)
+	_list_scroll.get_v_scroll_bar().value_changed.connect(func(value):
+		if not _restoring and _list_scroll.visible: _list_position = int(value)
+	)
+	_detail_scroll = ScrollContainer.new()
+	_detail_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_detail_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_body.add_child(_detail_scroll)
+	var pad = MarginContainer.new()
+	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for edge in ["left", "right"]: pad.add_theme_constant_override("margin_" + edge, 20)
+	_detail_scroll.add_child(pad)
+	_detail = VBoxContainer.new()
+	_detail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_detail.add_theme_constant_override("separation", 26)
+	pad.add_child(_detail)
 
-# 单张卡牌块（名称行 + 描述行数组），独立面板与间距，避免内容冗杂
-func _add_card_block(name_text: String, lines: Array):
-	var p = PanelContainer.new()
-	p.add_theme_constant_override("margin_left", 22)
-	p.add_theme_constant_override("margin_right", 22)
-	p.add_theme_constant_override("margin_top", 14)
-	p.add_theme_constant_override("margin_bottom", 14)
-	var vb = VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 8)
-	p.add_child(vb)
-	var n = Label.new()
-	n.text = name_text
-	n.add_theme_font_size_override("font_size", Style.fs(32))
-	n.add_theme_color_override("font_color", Style.SELECTED_CYAN)
-	vb.add_child(n)
-	for line in lines:
-		var l = Label.new()
-		l.text = line
-		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		l.add_theme_font_size_override("font_size", Style.fs(26))
-		l.add_theme_constant_override("line_spacing", 6)
-		l.add_theme_color_override("font_color", Color(0.92, 0.92, 0.92))
-		vb.add_child(l)
-	content.add_child(p)
+func _layout():
+	if _body == null: return
+	var physical = DisplayServer.window_get_size()
+	narrow = physical.x < 1250 or get_viewport_rect().size.x < 1400
+	_list_scroll.custom_minimum_size.x = 0 if narrow else 450
+	_list_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL if narrow else Control.SIZE_FILL
+	_list_scroll.visible = not narrow or selected.is_empty()
+	_detail_scroll.visible = not selected.is_empty()
+	if not narrow and selected.is_empty():
+		_detail_scroll.show()
+		_clear(_detail)
+		_detail.add_child(_label("选择一个条目", 34, MUTED))
+	_back.text = "‹ 条目列表" if not selected.is_empty() else "‹ 返回"
+	_tabs.visible = not (narrow and not selected.is_empty())
+	_search.visible = _tabs.visible
 
-# ==================== 基本规则 ====================
-func _fill_rules():
-	_add_section("游戏玩法",
-		"《卡牌对决》是一款回合制战术卡牌对战游戏。双人局在一条 11 格横线棋盘上，双方各操控一名角色，通过出牌、移动与响应博弈，率先将对方 HP 清空、并使其无法复活的一方获胜；多人混战支持 4 名角色在六边形棋盘上混战，最后存活者胜。未来将制作更复杂的棋盘地图，向 CCG+SRPG+DBG 形式前进。")
-	_add_section("棋盘与位置",
-		"棋盘为 11 格横线，两名角色初始分别站在靠近己方一侧的位置（先手侧第 4 格，后手侧第 7 格）。\n距离为两名角色所在格之间的格数差；两名角色位于相邻两格时即\"贴脸\"（距离为 0）。\n角色可在格子上移动；贴脸时向对方方向移动，可推着对方一起移动。")
-	_add_section("游戏模式",
-		"· 自我对战：本地轮流操控两名角色对战，适合熟悉规则与测试\n· 人机对战：与电脑对战，可选简单 / 普通 / 困难 / 地狱（内测）四档难度\n· 多人对战：联机对战，创建房间（填写服务器地址 + 房间号）或加入他人房间；可自定义卡组\n· 4 人混战：本地或联机 4 名角色六边形棋盘混战，最后存活者胜（支持断线淘汰继续）\n· 自定义卡组：在卡组管理中预设每角色 3 套卡组（40 张，四池配额），开局配置环节选用；联机时配置完即锁定")
-	_add_section("开局流程（BP 禁选）",
-		"开局先随机决定禁选顺序，随后：\n1. 先手方（P1）禁用 1 名角色（双方都不可选）\n2. 后手方（P2）禁用 1 名角色\n3. P1 选择自己的角色\n4. P2 选择自己的角色\n5. 再随机确定本局先手，进入战斗")
-	_add_section("牌堆与手牌",
-		"经典模式双方共用一副 78 张的共享牌堆；自定义卡组模式每名玩家使用自己的 40 张构筑（攻击 17 / 战术 14 / 回复数值 6 / 装备 5，四池配额）。\n每名玩家开局拥有 4 张初始卡牌，每回合摸牌阶段自动摸取 2 张。\n手牌上限 = 角色距己侧板边格数差 + 1；弃牌阶段玩家需要弃牌至不多于手牌上限。\n牌堆抽空时，弃牌堆自动洗回牌堆，可循环使用。")
-	_add_section("回合与行动点",
-		"每回合 4 个阶段：\n1. 判定阶段：结算持续伤害效果（灼烧、中毒等），并检查死亡与冻结状态\n2. 摸牌阶段：自动摸取 2 张牌\n3. 出牌阶段：自由打出卡牌（受行动点限制）——攻击、移动、功能卡等\n4. 弃牌阶段：手牌超上限时强制弃牌，也可主动弃牌\n\n行动点（每回合刷新，三种独立）：\n· 攻击 2 点：打出攻击类卡牌（部分强化攻击消耗 2 点）\n· 位移 1 点：移动\n· 功能 1 点：打出功能类卡牌（部分角色有额外加成）")
-	_add_section("胜利条件与复活",
-		"胜利：将敌人 HP 攻击至 0 或以下，且敌人无法通过复活回复 HP 值为正数。\n复活判定：HP 归零时，自动丢弃所有手牌 → 从牌堆摸取 4 张 → 自动使用其中所有回复卡：\n· HP 值能回复至正数 → 复活成功，继续战斗（可多次复活）\n· 否则 → 永久淘汰，本局失败")
+func _clear(node: Node):
+	for child in node.get_children():
+		node.remove_child(child)
+		child.queue_free()
 
-# ==================== 卡牌 ====================
-func _fill_cards():
-	_add_section("攻击卡与伤害计算",
-		"攻击卡分为三大基础类型与三种强化类型。每张攻击卡的伤害公式统一为\"命中造成伤害 =\"，实际数值再依次经过武器加成、Buff 加成、防具减伤、响应效果修正（见下方\"特殊规则\"）。")
-	_add_group_label("基础攻击（各 8 张，共 24 张；消耗 1 攻击点）")
-	_add_card_block("近战（×8）", [
-		"使用条件：必须与对手贴脸（距离为 0）才能打出",
-		"命中造成伤害 = 近战面板",
-		"可交互：可被对方的格挡响应（伤害减半）；本卡也可用作格挡响应卡，抵挡近战/重击攻击",
-	])
-	_add_card_block("远程（×8）", [
-		"使用条件：无距离限制（距离越近伤害越高）",
-		"命中造成伤害 = 远程面板 − 距离（最低 0）",
-		"可交互：可被对方的牵制（远程卡）或闪避（魔法卡）响应；本卡可用作牵制响应卡，牵制远程/穿心/魔法/吟唱攻击",
-	])
-	_add_card_block("魔法（×8）", [
-		"使用条件：无视距离",
-		"命中造成伤害 = 魔法面板",
-		"可交互：可被对方的牵制（远程卡）或闪避（魔法卡）响应；本卡可用作闪避响应卡，可闪避任意攻击",
-	])
-	_add_group_label("强化攻击（各 3 张，共 9 张；消耗 2 攻击点）")
-	_add_card_block("重击（×3）：强化近战攻击", [
-		"使用条件：必须与对手贴脸（距离为 0）才能打出",
-		"命中造成伤害 = 近战面板 + 3",
-		"穿甲：命中防具时防具额外损失 2 点耐久（免疫/减半均触发，被闪避或减伤至 0 不触发）",
-		"可交互：可被对方的格挡响应（伤害减半）",
-	])
-	_add_card_block("穿心（×3）：强化远程攻击", [
-		"使用条件：若\"远程面板 − 距离 ≤ 0\"（距离过远）则无法打出（卡不消耗）",
-		"命中造成伤害 = 远程面板 − 距离 + 3",
-		"穿甲：命中防具时防具额外损失 2 点耐久（免疫/减半均触发，被闪避或减伤至 0 不触发）",
-		"可交互：可被对方的牵制（远程卡）或闪避（魔法卡）响应",
-	])
-	_add_card_block("吟唱（×3）：强化魔法攻击", [
-		"使用条件：无视距离",
-		"命中造成伤害 = 魔法面板 + 3",
-		"穿甲：命中防具时防具额外损失 2 点耐久（免疫/减半均触发，被闪避或减伤至 0 不触发）",
-		"可交互：可被对方的牵制（远程卡）或闪避（魔法卡）响应",
-	])
-	_add_section("特殊规则",
-		"快枪手双发：快枪手的远程/穿心攻击固定消耗 2 攻击点，且打出后分为两段伤害——每段 =（对应面板 − 距离）÷ 2 向下取整（最低 0），穿心每段 =（远程面板 + 3 − 距离）÷ 2。两段各自独立结算，各需一次响应。\n\n伤害修正顺序：命中造成伤害（基础值）→ 武器加成（武器类型须与攻击类型匹配）→ Buff 加成 → 防具减伤 → 响应效果 → 最终伤害（最低 0）。\n\n防具：3 耐久，首次命中完全免疫，之后减半（向下取整）；伤害最低 0。强化攻击（重击/穿心/吟唱）命中防具时额外损失 2 点耐久（不叠加正常消耗；满耐久 3 的防具需两次强化攻击命中才会碎裂）。（铸甲师被动可使防具耐久上限 +1，为 4 耐久。）")
-	_add_section("响应系统",
-		"当对方发动攻击时，你可以从手牌打出一张卡进行响应（一次攻击限一次）——猜对手的牌，是博弈的核心乐趣：\n\n· 格挡：用近战卡响应近战/重击 → 伤害减半（向下取整）\n· 牵制：用远程卡响应远程/穿心/魔法/吟唱 → 减免\"你的远程面板 − 距离\"点伤害（最低 0），连弩武器可额外 −2\n· 闪避：用魔法卡响应任意攻击 → 完全抵消伤害\n· 不响应 / 无牌可应：承受全额伤害\n\n注意：快枪手的双发攻击两段各需一次响应（各打一张卡）。\n响应有时间限制（20 秒），超时自动视为不响应。")
-	_add_section("移动卡", "移动卡消耗 1 位移行动点，用于调整角色位置：")
-	_add_card_block("移动（×7）", [
-		"使用条件：目标格为空；或目标格有敌人且其身后为空（可推人）",
-		"效果：向任意方向移动 1 格",
-		"可交互：贴脸时向对方方向移动，可推着对方一起移动（对方被推到的格子若有陷阱会触发）；若本回合被限制移动（如霜咬命中），移动卡无法打出且不消耗；通过移动牌位移至贴脸时，触发突刺武器额外 +3",
-	])
-	_add_section("功能卡（消耗 1 功能行动点，共 11 张）", "")
-	_add_card_block("冻结（×2）", [
-		"效果：命中目标后，目标跳过下个出牌阶段（判定与摸牌阶段正常进行）",
-		"可交互：可被魔法卡闪避响应（被闪避则本次冻结不生效）；冷却规则：同一玩家被冻结后隔一个完整回合才能再次被冻结（t1 被冻 → t2 不能冻 → t3 可冻），冷却期间打出冻结卡无效且不消耗；被冻结的角色复活时清除冻结状态",
-	])
-	_add_card_block("摧毁（×3）", [
-		"效果：打出后三选一：① 盲丢手牌：随机丢弃对方 1 张手牌；② 摧毁装备：指定摧毁对方一件已装备的武器或防具（武器回到幻化池可再次生成，防具直接消失不回池；饲甲人的活铠免疫摧毁，此时摧毁卡不消耗；铸甲师精铸韧性：护甲被摧毁不消失、耐久降至 1）；③ 拆除道具：点击棋盘指定格子，同格所有可摧毁道具类型同时按各自规则拆除（默认类拆 1 个；可堆叠类如捕兽夹一次清空同格全部；免疫类跳过不影响其他类型）",
-		"可交互：选择摧毁装备时，若对方未装备对应类型 → 卡不消耗；选择拆除道具时，若该格无道具 → 卡不消耗",
-	])
-	_add_card_block("夺取（×2）", [
-		"效果：随机抽取对方 1 张手牌，加入自己手牌",
-		"可交互：对方手牌为空时夺取失败（\"夺取空\"，卡仍消耗）",
-	])
-	_add_card_block("吸引（×2）", [
-		"效果：强制将目标拉近 1 格",
-		"可交互：目标在板边或目标格被占时无法吸引（卡不消耗）；目标被拉到的格子若有陷阱会触发；吸引后若双方贴脸，自己后退 1 格腾位",
-	])
-	_add_card_block("威慑（×2）", [
-		"效果：强制将目标推远 1 格",
-		"可交互：目标在板边时无法威慑（卡不消耗）；目标被推到的格子若有陷阱会触发",
-	])
-	_add_section("免费卡（不消耗行动点，共 27 张）", "")
-	_add_card_block("回复+3（×3）/ 回复+5（×2）", [
-		"效果：回复 3 / 5 点 HP（回复量不超过 HP 上限，多余回复无效）",
-		"可交互：牧师使用回复卡时回复量额外 +2；邪术师自身受回血效果 −1（回复 +1 时实际回复 0）；复活判定中会自动使用抽到的回复卡",
-	])
-	_add_card_block("天赐（×4）", [
-		"效果：免费打出，抽 2 张牌",
-		"可交互：每回合限用 1 张；复活判定中抽到天赐可自动打出并额外抽 2 张（仅一次）",
-	])
-	_add_card_block("数值强化（近战+1 / 远程+1 / 魔法+1，各 ×2）", [
-		"效果：打出后对应面板永久 +1",
-		"可交互：弃牌堆重洗后可再次抽到，可循环叠加；永久强化会提升所有对应类型攻击的\"命中造成伤害\"",
-	])
-	_add_card_block("道具（×3）", [
-		"使用条件：放置目标格必须为空（无单位）",
-		"效果：打出后选择棋盘一个空格放置**地格道具**——角色专属：默认角色放陷阱（首个到达该格的单位受 3 点伤害，触发即销毁）、猎人放捕兽夹（-3HP 可无限堆叠）、巫女放鸟居（自己踩回血成长/敌人踩神隐）",
-		"可交互：同格可放 1 个陷阱/鸟居，捕兽夹可无限堆叠；自己踩到也触发；被吸引/威慑/推人移动到该格同样触发；摧毁卡可拆除（默认一次拆 1 个；捕兽夹一张清空同格全部）",
-	])
-	_add_card_block("武器牌（近战/远程/法术武器牌，各 ×2）", [
-		"效果：打出后从你的自定义武器幻化池中随机幻化一把该类型武器，确认后装备或丢弃",
-		"可交互：武器只能装备一件，装备新武器时旧武器回到幻化池；被摧毁/丢弃的武器回到幻化池可再次生成；场上所有角色无法装备同一把武器（他人正在装备的武器不会幻化出来）；该类型武器均已被装备时，武器牌无效且不消耗",
-		"自定义武器池：卡组编辑界面的「武器池编辑」可自定义每类型 4 把武器（未配置时默认为每类前 4 把；点击或拖动金框/白框切换）",
-		"武器一览（18 把，\"命中\" = 打出对应攻击类别的攻击卡且对目标造成伤害）：",
-		"近战武器：",
-		"· 斩铁：近战值+2",
-		"· 霜咬：近战类攻击命中目标后，该目标下回合无法移动",
-		"· 嗜血：近战类攻击命中目标且造成≥3点伤害时，回复2点HP",
-		"· 突刺：近战值+1；通过移动牌位移至贴脸时，额外+3",
-		"· 重锤：近战攻击命中后对方护甲额外−1耐久；伤害归0时（闪避/格挡）不触发",
-		"· 尖刺链枷：近战攻击命中赋予1层致残、重击命中赋予2层致残（致残：位移时受2点真伤，永久可叠加，位移掉落1层）",
-		"远程武器：",
-		"· 长弓：远程值+1且距离衰减−1",
-		"· 连弩：使用远程类攻击响应牵制时，额外扣除2点",
-		"· 鹰眼：远程类攻击命中目标后，查看对方所有手牌，并赋予「暴露」（持续1回合）；暴露期间任何角色对其使用「夺取」或「摧毁-盲丢」时，可指定选择其一张手牌（未暴露则随机）",
-		"· 毒牙：远程类攻击命中目标后，附加2层中毒（每回合−1HP，可叠加）",
-		"· 风神弓：穿心命中并造成伤害后，可控制对方移动1格（方向自由；对方无法移动时无效）",
-		"· 失修的铳：每发远程攻击（远程/穿心）掷骰：1=哑火（伤害0）2=伤害−1 3/4=正常 5=伤害+2 6=伤害+3（曾经强大但已老化，时灵时不灵）",
-		"法术武器：",
-		"· 贤者之书：魔法值+2",
-		"· 灼烧：魔法类攻击命中目标后，附加灼烧（每回合−2HP，持续2回合，再次命中刷新）",
-		"· 时滞：魔法类攻击命中目标后，对方下回合攻击行动点−1",
-		"· 共鸣：魔法类攻击被完全抵挡时，额外造成2点伤害",
-		"· 虚空魔典：魔法类攻击命中目标后，附加凋零2回合（目标回复量−1，再次命中刷新）",
-		"· 放逐书页：魔法类攻击命中目标后，从对方牌堆随机取 1 张牌移入弃牌堆并公示（本轮牌组循环内对方抽不到该卡）",
-	])
-	_add_card_block("防具牌（近战/远程/法术防具，各 ×1）", [
-		"效果：打出立即装备对应防具",
-		"可交互：防具只能装备一件，装备新防具时旧防具直接消失；被摧毁后直接消失（不回池）；防具耐久规则：每次被对应类型攻击命中消耗 1 点耐久（满耐久首击完全免疫 → 之后减半 → 耗尽碎裂；被闪避或 0 伤害攻击不消耗；强化攻击命中额外 −2 耐久且不叠加正常消耗；铸甲师被动使耐久上限 +1 为 4，且被摧毁时保留 1 耐久不消失）。饲甲人例外：无法装备防具卡，打出改为修复活铠（耐久回满；活铠满耐久时打出无效果）；活铠免疫摧毁",
-	])
+func _select_category(key: String):
+	category = key
+	selected = ""
+	history.clear()
+	_list_position = 0
+	_render_list()
+	_layout()
+	_restore_scroll.call_deferred()
 
-# ==================== 特殊机制 ====================
-func _fill_mechs():
-	_add_section("移动推人",
-		"贴脸时向对方方向移动，可推着对方一起移动（对方被推到的格子若放有陷阱会触发）。")
-	_add_section("状态与 BUFF",
-		"部分技能/武器会给角色附加状态效果，分持续回合型与永久型：\n\n· 狂化（狂战士被动）：受直接攻击后近战值+1，持续 3 回合，可叠加\n· 法师强化（法师技能）：弃 1 张手牌获得魔法强化+2，可叠加；打出魔法类攻击时消耗全部层数加伤\n· 校准（寻踪者被动）：远程/法术攻击命中叠 1 层，每层远程伤害+1，永久持续；若攻击未造成伤害则全部清空\n· 攻击行动点削减（时滞武器）：对方下回合攻击行动点 −1")
-	_add_section("持续伤害（DoT）",
-		"· 灼烧：每回合 −2HP，持续 2 回合，再次命中刷新时长\n· 中毒：每回合 −1HP，层数可叠加")
+func _render_list():
+	_restoring = true
+	_clear(_rows)
+	var query := _search.text.strip_edges().to_lower()
+	var found := 0
+	for e in entries:
+		if category != "all" and e.category != category: continue
+		if not query.is_empty() and not query in (e.name + " " + e.summary + " " + e.body).to_lower(): continue
+		found += 1
+		var row = _button("", func(): _open_entry(e.id))
+		row.custom_minimum_size.y = 116
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var layout = HBoxContainer.new()
+		layout.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		layout.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		layout.offset_left = 22
+		layout.offset_right = -22
+		layout.offset_top = 16
+		layout.offset_bottom = -16
+		layout.add_theme_constant_override("separation", 20)
+		row.add_child(layout)
+		if e.has("portrait") or not e.icon.is_empty():
+			layout.add_child(_image_slot(e.get("portrait", e.icon), 56, e.name.left(1)))
+		var copy = VBoxContainer.new()
+		copy.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		copy.add_theme_constant_override("separation", 8)
+		layout.add_child(copy)
+		copy.add_child(_label(e.name, 32, ACCENT if e.id == selected else INK))
+		var summary = _label(e.summary, 25, MUTED)
+		summary.max_lines_visible = 1
+		summary.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		copy.add_child(summary)
+		layout.add_child(_label("›", 32, MUTED))
+		_rows.add_child(row)
+	if found == 0: _rows.add_child(_label("没有找到相关条目", 30, MUTED))
+	_count.text = "%d 个条目" % found
+	for tab in _tabs.get_children(): tab.add_theme_color_override("font_color", ACCENT if tab.get_meta("category") == category else MUTED)
+	_restore_scroll.call_deferred()
 
-# ==================== 角色 ====================
-func _fill_chars():
-	var t = Label.new()
-	t.text = "角色一览（15 名）"
-	t.add_theme_font_size_override("font_size", Style.fs(42))
-	t.add_theme_color_override("font_color", Style.WIN_GOLD)
-	content.add_child(t)
-	for char_id in Config.CHARACTER_IDS:
-		var cd = Config.CHARACTER_DB[char_id]
-		var p = PanelContainer.new()
-		p.add_theme_constant_override("margin_left", 24)
-		p.add_theme_constant_override("margin_right", 24)
-		p.add_theme_constant_override("margin_top", 18)
-		p.add_theme_constant_override("margin_bottom", 18)
-		var vb = VBoxContainer.new()
-		vb.add_theme_constant_override("separation", 10)
-		p.add_child(vb)
-		var head = Label.new()
-		head.text = "%s　HP%d｜近战%d｜远程%d｜魔法%d" % [cd.name, cd.hp, cd.near, cd.range, cd.magic]
-		head.add_theme_font_size_override("font_size", Style.fs(34))
-		head.add_theme_color_override("font_color", Style.SELECTED_CYAN)
-		vb.add_child(head)
-		var skills = CHAR_SKILLS.get(char_id, [])
-		if skills.is_empty():
-			var d = Label.new()
-			d.text = "技能：%s" % cd.skill_desc
-			d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			d.add_theme_font_size_override("font_size", Style.fs(28))
-			d.add_theme_constant_override("line_spacing", 8)
-			d.add_theme_color_override("font_color", Color(0.92, 0.92, 0.92))
-			vb.add_child(d)
+func _restore_scroll():
+	_list_scroll.scroll_vertical = _list_position
+	_restoring = false
+
+func _open_entry(id: String):
+	if not selected.is_empty(): history.append({"id": selected, "scroll": _detail_scroll.scroll_vertical})
+	selected = id
+	_render_detail()
+	_layout()
+
+func _render_detail(scroll: int = 0):
+	_clear(_detail)
+	for e in entries:
+		if e.id != selected: continue
+		_detail.add_child(_label(CATEGORIES[e.category], 24, ACCENT))
+		var heading = HBoxContainer.new()
+		heading.add_theme_constant_override("separation", 24)
+		if e.has("portrait"): heading.add_child(_image_slot(e.portrait, 96, e.name.left(1)))
+		var title = _label(e.name, 44)
+		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		heading.add_child(title)
+		_detail.add_child(heading)
+		_detail.add_child(_label(e.summary, 28, MUTED))
+		_detail.add_child(HSeparator.new())
+		if not e.get("sections", []).is_empty():
+			for section in e.sections: _add_detail_section(section)
 		else:
-			for sk in skills:
-				var l = Label.new()
-				l.text = "%s %s：%s" % [sk[0], sk[1], sk[2]]
-				l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-				l.add_theme_font_size_override("font_size", Style.fs(28))
-				l.add_theme_constant_override("line_spacing", 8)
-				l.add_theme_color_override("font_color", Color(0.92, 0.92, 0.92))
-				vb.add_child(l)
-		content.add_child(p)
-	content.add_child(_sep())
+			for paragraph in e.body.split("\n\n", false):
+				var p = _label(paragraph, 30)
+				p.add_theme_constant_override("line_spacing", 10)
+				_detail.add_child(p)
+		var related: Array = []
+		for other in entries:
+			if other.id != e.id and other.name.length() >= 2 and other.name in e.body: related.append(other)
+		if not related.is_empty():
+			_detail.add_child(HSeparator.new())
+			_detail.add_child(_label("相关条目", 28, MUTED))
+			for other in related:
+				var link = _button(other.name + "  ›", func(): _open_entry(other.id))
+				link.alignment = HORIZONTAL_ALIGNMENT_LEFT
+				_detail.add_child(link)
+		break
+	_detail_scroll.set_deferred("scroll_vertical", scroll)
+
+func _image_slot(path: String, extent: int, fallback: String) -> Control:
+	var slot = Control.new()
+	slot.custom_minimum_size = Vector2(extent, extent)
+	slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if ResourceLoader.exists(path):
+		var image = TextureRect.new()
+		image.texture = load(path)
+		image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		image.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		image.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		slot.add_child(image)
+	else:
+		var initial = _label(fallback, 30, ACCENT)
+		initial.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		initial.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		initial.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		slot.add_child(initial)
+	return slot
+
+func _add_detail_section(section: Dictionary):
+	var margin = MarginContainer.new()
+	margin.add_theme_constant_override("margin_top", 18)
+	margin.add_theme_constant_override("margin_bottom", 12)
+	margin.mouse_filter = Control.MOUSE_FILTER_PASS
+	var block = VBoxContainer.new()
+	block.add_theme_constant_override("separation", 12)
+	block.mouse_filter = Control.MOUSE_FILTER_PASS
+	margin.add_child(block)
+	var heading = HBoxContainer.new()
+	heading.add_theme_constant_override("separation", 18)
+	heading.add_child(_image_slot(section.icon, 56, "技" if section.kind == "skill" else "物"))
+	var title = _label(section.title, 32, ACCENT)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	heading.add_child(title)
+	block.add_child(heading)
+	var body = _label(section.body, 30)
+	body.add_theme_constant_override("line_spacing", 10)
+	block.add_child(body)
+	_detail.add_child(margin)
+
+func _go_home():
+	get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
+
+func _go_back() -> bool:
+	if not history.is_empty():
+		var previous = history.pop_back()
+		selected = previous.id
+		_render_detail(previous.scroll)
+		_layout()
+	elif not selected.is_empty():
+		selected = ""
+		_layout()
+		_restore_scroll.call_deferred()
+	else:
+		get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
+	return true

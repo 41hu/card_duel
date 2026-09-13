@@ -17,6 +17,7 @@ class Transport extends Node:
 	var sent: Array = []
 	func send_play_card(uid: int, extra: Dictionary = {}): sent.append({"uid": uid, "extra": extra.duplicate(true)})
 	func send_response(respond: bool, uid: int = -1): sent.append({"response": respond, "uid": uid})
+	func send_use_skill(skill: String, params: Dictionary = {}): sent.append({"skill": skill, "params": params.duplicate(true)})
 
 class ProbeBattle extends "res://scripts/ui/battle_ui.gd":
 	var fake: Node
@@ -231,12 +232,30 @@ func _run():
 	var discarded = state.duplicate(true)
 	discarded.waiting_for_discard = true
 	b._on_state_updated(discarded)
+	_expect(b._discard_focus and b._skill_scrim.visible and b._skill_description.text.contains("弃牌阶段"), "Discard phase enters its own focus view")
+	_expect(hand.get_card(100)._overlay.discard_phase and not hand.get_card(100)._skill_material, "Discard candidates have purple borders without skill material highlighting")
+	await _settle()
+	var sway_card = hand.get_card(100)
+	var slot: Vector2 = sway_card.position
+	var angle: float = sway_card._face.rotation
+	await get_tree().create_timer(0.16).timeout
+	_expect(absf(sway_card._face.rotation - angle) > 0.0001 and sway_card.position == slot, "Discard cards gently sway without moving their hit slots")
+	hand._hover(100)
+	await _settle()
+	_expect(is_zero_approx(sway_card._discard_sway), "Hovered discard card stops swaying for inspection")
+	hand.clear_focus()
 	b._on_card_clicked(100, "near")
+	_expect(is_zero_approx(sway_card._discard_sway), "Selected discard card stays steady")
 	b._on_card_clicked(101, "move")
 	_expect(b._discard_selected.size() == 2 and hand.get_card(100)._is_discarded, "Discard selection remains multiselect")
 	_expect(hand.get_card(100)._overlay.discarded and hand.get_card(100)._overlay.visible, "Discard selection uses a visible overlay instead of only an outer red frame")
+	_expect(b._skill_description.text.contains("已选 2 张") and b.end_turn_btn.z_index > b._skill_scrim.z_index, "Discard focus tracks the selected count and keeps confirmation visible")
 	await _snapshot("discard")
+	b._on_cancel_select()
+	_expect(b._discard_focus and b._discard_selected.is_empty() and not hand.get_card(100)._overlay.discarded, "Clearing discard selection preserves the phase focus without stale card marks")
 	b._on_state_updated(state)
+	_expect(not b._discard_focus and not b._skill_scrim.visible and not hand.get_card(100)._overlay.discard_phase, "Leaving discard removes the focus view and purple candidate borders")
+	_expect(not sway_card.is_processing() and is_zero_approx(sway_card._discard_sway), "Leaving discard stops the sway and removes its rotation offset")
 	var many = state.duplicate(true)
 	for i in range(6, 30): many.players[0].hand.append({"uid": 100 + i, "type_id": "magic"})
 	b._on_state_updated(many)
@@ -331,6 +350,104 @@ func _run():
 	await _test_local()
 	_test_ap_affordability()
 	await _test_skill_availability()
+	await _test_skill_materials()
+
+func _test_skill_materials():
+	LocalGame.start_local_game("vine_ent", "mage", 0, [DeckData.default_deck(), DeckData.default_deck()], true)
+	var state: Dictionary = LocalGame.game.get_full_state().duplicate(true)
+	LocalGame.disconnect_from_server()
+	state.players[0].active_skills = []
+	state.players[0].armor = {"id": "near_armor"}
+	state.players[0].hand = []
+	var types = ["near", "magic", "chant", "heal_3", "item", "pierce", "heavy", "range"]
+	for i in range(types.size()): state.players[0].hand.append({"uid": 500 + i, "type_id": types[i], "blocked_reason": "距离过远"})
+	var fake = Transport.new()
+	add_child(fake)
+	var b = BattleScene.instantiate()
+	b.set_script(ProbeBattle)
+	b.fake = fake
+	add_child(b)
+	# Supply a real armor descriptor for the equipment view.
+	state.players[0].armor = {"id": "near_armor", "data": Config.ARMOR_DB.near_armor, "durability": 4, "max_durability": 4}
+	b._on_state_updated(state)
+	await _settle()
+	var cases = {"mage_discard": 504, "mage_phantom": 502, "wardsmith_infuse": 500, "wardsmith_repair": 506, "rogue_give": 504, "priest_chant": 503, "spellblade_channel": 501, "vine_spread": 500, "hunter_ambush": 505}
+	for skill in cases:
+		state.players[0].active_skills = [{"id": skill, "name": skill, "available": true}]
+		b._on_state_updated(state.duplicate(true))
+		var count: int = b.get_child_count()
+		fake.sent.clear()
+		b._exec_skill(skill)
+		_expect(b._skill_pick == skill and b.get_child_count() == count, skill + " starts in the hand without a popup")
+		_expect(b._skill_scrim.visible and b._skill_description.text.contains(Config.CHARACTER_DB.vine_ent.skill_desc), skill + " shows the full description on the focus backdrop")
+		_expect(b.confirm_btn.disabled, skill + " cannot confirm without a material")
+		b._on_card_clicked(cases[skill], "")
+		var material_uid: int = b._selected_uid
+		b._exec_skill(skill)
+		_expect(b._selected_uid == material_uid, skill + " repeated activation preserves the selected material")
+		_expect(b.skill_row.get_child(0).disabled and b.skill_row.get_child(0).text.contains("选择中"), skill + " active button is clearly selected and disabled")
+		_expect(b.hand_area.skill_selection and b.hand_area.get_card(material_uid)._skill_material, skill + " hand and material show skill highlights")
+		_expect(fake.sent.is_empty() and not b.hand_area.get_card(cases[skill])._unaffordable, skill + " selects blocked attack cards as material without spending")
+		if skill == "vine_spread":
+			_expect(not Vector2i(3, 0) in b._skill_targets() and Vector2i(4, 0) in b._skill_targets(), "Spread highlights only unseeded adjacent cells")
+			b._on_board_cell_clicked(Vector2i(4, 0))
+		elif skill == "hunter_ambush":
+			b._on_board_cell_clicked(Vector2i(4, 0))
+			_expect(b.confirm_btn.disabled, "Pierce ambush requires two positions")
+			b._on_board_cell_clicked(Vector2i(4, 0))
+		_expect(not b.confirm_btn.disabled and fake.sent.is_empty(), skill + " waits for final confirmation")
+		if skill == "vine_spread":
+			await _settle()
+			var eligible = b.hand_area.get_card(501)
+			var ineligible = b.hand_area.get_card(504)
+			var pulse: float = eligible._overlay.pulse_strength
+			await get_tree().create_timer(0.45).timeout
+			_expect(eligible._overlay.visible and eligible._overlay.is_processing() and absf(eligible._overlay.pulse_strength - pulse) > 0.01, "Unselected skill materials breathe at their own card edges")
+			_expect(not ineligible._overlay.is_processing() and eligible._face.modulate == Color.WHITE, "Ineligible cards do not pulse and artwork brightness remains stable")
+			await _snapshot("skill_material")
+		b._on_confirm_card()
+		b._on_confirm_card()
+		_expect(fake.sent.size() == 1 and fake.sent[0].skill == skill and fake.sent[0].params.card_uid == cases[skill], skill + " submits one skill request with the material UID")
+		b._on_state_updated(state.duplicate(true))
+	b._exec_skill("mage_phantom")
+	b._on_card_clicked(500, "near")
+	_expect(b._selected_uid == -1 and b.hand_area.get_card(500)._unaffordable, "Ineligible material stays dim and cannot be selected")
+	b._on_card_clicked(501, "magic")
+	b._on_card_clicked(501, "magic")
+	_expect(b._selected_uid == -1 and b._skill_pick == "mage_phantom", "Clicking the material again deselects without leaving the skill")
+	b._on_cancel_select()
+	_expect(b.hand_area.get_card(501)._unaffordable and b._skill_pick.is_empty(), "Cancel restores ordinary card blocking")
+	_expect(not b.hand_area.skill_selection and not b.hand_area.get_card(501)._skill_material, "Cancel removes all skill highlights")
+	_expect(not b.hand_area.get_card(501)._overlay.is_processing(), "Cancel stops the material breathing animation")
+	_expect(not b._skill_scrim.visible and b._skill_description.text.is_empty() and b.board.z_index == 0, "Cancel clears focus backdrop, description and raised layers")
+	b._exec_skill("vine_spread")
+	b._on_card_clicked(500, "near")
+	b._on_state_updated(state.duplicate(true))
+	_expect(b._skill_pick == "vine_spread" and b.confirm_btn.disabled, "Timer-only snapshots preserve incomplete skill selection")
+	state.current_player = 1
+	b._on_state_updated(state)
+	_expect(b._skill_pick.is_empty() and not b.confirm_btn.visible, "Turn change clears skill materials and controls")
+	var multi = preload("res://scripts/core/match_state.gd").new()
+	multi.disable_timeout = true
+	multi._setup_match(["rogue", "mage", "hunter", "priest"], 0, [], true)
+	multi._start_game()
+	multi.card_systems[0].hand = [{"uid": 900, "type_id": "heal_3"}]
+	var multi_state: Dictionary = multi.get_full_state()
+	multi_state.players[0].active_skills = []
+	b._on_state_updated(multi_state)
+	for skill in ["rogue_give", "priest_chant", "spellblade_channel"]:
+		multi_state.players[0].hand[0].type_id = "magic" if skill == "spellblade_channel" else "heal_3"
+		b._on_state_updated(multi_state.duplicate(true))
+		b._exec_skill(skill)
+		b._on_card_clicked(900, "")
+		_expect(b._skill_targets().size() == 3 and b.confirm_btn.disabled, skill + " requires an explicit multiplayer target")
+		var target: Vector2i = multi.players[2].position
+		b._on_board_cell_clicked(target)
+		_expect(b._skill_params.get("target", -1) == 2 and b.board._selected_target == target, skill + " highlights the chosen multiplayer target")
+		b._on_cancel_select()
+	b.queue_free()
+	fake.queue_free()
+	await _settle()
 
 func _test_skill_availability():
 	LocalGame.start_local_game("mage", "rogue", 0, [DeckData.default_deck(), DeckData.default_deck()], true)
@@ -482,6 +599,23 @@ func _test_ap_affordability():
 	LocalGame.disconnect_from_server()
 
 func _test_local():
+	LocalGame.start_local_game("vine_ent", "mage", 0, [DeckData.default_deck(), DeckData.default_deck()], true)
+	var vine = LocalGame.game
+	vine.card_systems[0].hand = [{"uid": 8000, "type_id": "item"}]
+	var vine_battle = BattleScene.instantiate()
+	add_child(vine_battle)
+	vine_battle._on_state_updated(vine.get_full_state())
+	await _settle()
+	var root_pos: Vector2i = vine.players[0].position
+	vine_battle._on_card_clicked(8000, "item")
+	_expect(root_pos in vine_battle._card_targets(), "First-turn item UI permits the seed under the unmoved tree")
+	vine_battle._on_board_cell_clicked(root_pos)
+	_expect(not vine_battle.confirm_btn.disabled, "Clicking the tree's own cell enables item confirmation")
+	vine_battle._on_confirm_card()
+	_expect(vine.item_system.get_seed_layers(root_pos) == 2 and not vine.card_systems[0].has_card(8000), "First-turn item confirmation stacks the root seed through the local UI")
+	vine_battle.queue_free()
+	await _settle()
+	LocalGame.disconnect_from_server()
 	LocalGame.start_local_game("mage", "rogue", 0, [DeckData.default_deck(), DeckData.default_deck()], true)
 	var game = LocalGame.game
 	game.card_systems[0].hand = [{"uid": -2000, "type_id": "move"}, {"uid": -2001, "type_id": "magic"}, {"uid": -2002, "type_id": "move"}]

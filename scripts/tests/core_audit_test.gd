@@ -77,6 +77,11 @@ func _test_vine_first_turn():
 			_expect(item.success and g.item_system.get_seed_layers(origin) == 2, label + "item stacks under self")
 			g._ensure_vine_seed(0)
 			_expect(g.item_system.get_seed_layers(origin) == 2 and g.players[0].buffs.is_empty(), label + "root does not overstack or cripple self")
+			# 位移后生根：树妖移动一格 → 新位置 1 层、旧位置种子保留（持续存在）
+			var dir_m = geo.direction_between(g.players[0].position, g.players[1].position)
+			g.movement.move_player(0, dir_m, false)
+			_expect(g.item_system.get_seed_layers(g.players[0].position) == 1, label + "root seed regrows after moving")
+			_expect(g.item_system.get_seed_layers(origin) == 2, label + "old seed persists after moving")
 
 func _game(multi: bool = false):
 	var g = MatchState.new()

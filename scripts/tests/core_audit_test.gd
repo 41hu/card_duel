@@ -218,6 +218,17 @@ func _test_server_actions():
 	g.card_systems[0].hand = [{"uid": 80, "type_id": "near"}]
 	s._handle_message(0, JSON.stringify({"t": "vine_remove", "card_uid": 80, "pos": g.movement.geometry.to_dict(g.players[0].position)}))
 	_expect(g.items.is_empty(), "Normal vine_remove packet reaches the correct action")
+	# 除根范围（意图=相邻）：相邻格（distance=0）可除根；隔一格（distance=1）拒绝
+	g.players[0].ap_attack = 3
+	g.items = [{"item_type": "vine_seed", "position": g.players[0].position + Vector2i(1, 0), "owner": 1, "layers": 1}]
+	g.card_systems[0].hand = [{"uid": 81, "type_id": "heavy"}]
+	s._handle_message(0, JSON.stringify({"t": "vine_remove", "card_uid": 81, "pos": g.movement.geometry.to_dict(g.players[0].position + Vector2i(1, 0))}))
+	_expect(g.items.is_empty(), "Adjacent tile seed can be uprooted")
+	g.players[0].ap_attack = 3
+	g.items = [{"item_type": "vine_seed", "position": g.players[0].position + Vector2i(2, 0), "owner": 1, "layers": 1}]
+	g.card_systems[0].hand = [{"uid": 82, "type_id": "near"}]
+	s._handle_message(0, JSON.stringify({"t": "vine_remove", "card_uid": 82, "pos": g.movement.geometry.to_dict(g.players[0].position + Vector2i(2, 0))}))
+	_expect(g.items.size() == 1 and g.card_systems[0].has_card(82), "Seed two tiles away cannot be uprooted")
 	s._handle_message(0, JSON.stringify({"t": "vine_remove", "action": "use_skill", "skill": "_debug_end", "win": true}))
 	_expect(g.phase != Config.Phase.GAME_OVER, "An action override cannot invoke debug skills online")
 	s.free()

@@ -1245,7 +1245,7 @@ func decide_action(player_idx: int) -> Dictionary:
 	if root_uid >= 0:
 		var g3 = match_ref.movement.geometry
 		for it in match_ref.items:
-			if it.item_type == "vine_seed" and g3.distance(p.position, it.position) <= 1:
+			if it.item_type == "vine_seed" and g3.distance(p.position, it.position) <= 0:
 				var s3 = 6
 				if s3 > best_score:
 					best_score = s3

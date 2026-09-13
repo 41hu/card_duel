@@ -422,7 +422,7 @@ func _advance_if_eliminated(player_idx: int):
 		_advance_to_next_player()
 
 # 除根（反制蔓生种子）：消耗 1 张近战/重击卡 + 1 攻击行动点，
-# 破坏所在格或相邻格的 1 层蔓生种子（不攻击角色、不触发响应）
+# 清除所在格或相邻格（distance≤0）的蔓生种子，1/2 层一次全清（不攻击角色、不触发响应）
 func _handle_vine_remove(player_idx: int, data: Dictionary) -> Dictionary:
 	var uid = int(data.get("card_uid", -1))
 	var cs = card_systems[player_idx]
@@ -435,7 +435,7 @@ func _handle_vine_remove(player_idx: int, data: Dictionary) -> Dictionary:
 	var pos = movement.geometry.from_dict(data.get("pos", {}))
 	var geo = movement.geometry
 	if not geo.is_valid(pos): return {success=false, msg="无效位置"}
-	if geo.distance(players[player_idx].position, pos) > 1:
+	if geo.distance(players[player_idx].position, pos) > 0:
 		return {success=false, msg="只能除根所在格或相邻格的种子"}
 	var has_seed = false
 	for it in items:
@@ -553,7 +553,7 @@ func can_remove_vine_seed(player_idx: int, type_id: String) -> bool:
 	if int(players[player_idx].get("ap_attack", 0)) < vine_remove_cost(player_idx, type_id): return false
 	var geo = movement.geometry
 	for item in items:
-		if item.item_type == "vine_seed" and geo.is_valid(item.position) and geo.distance(players[player_idx].position, item.position) <= 1:
+		if item.item_type == "vine_seed" and geo.is_valid(item.position) and geo.distance(players[player_idx].position, item.position) <= 0:
 			return true
 	return false
 

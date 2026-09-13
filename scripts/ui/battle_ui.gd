@@ -1827,7 +1827,7 @@ func _has_removable_seed() -> bool:
 	var my_pos = geo.from_dict(me.get("position", {}))
 	for it in _game_state.get("items", []):
 		if it.get("item_type", "") != "vine_seed": continue
-		if geo.distance(my_pos, geo.from_dict(it.get("position", {}))) <= 1:
+		if geo.distance(my_pos, geo.from_dict(it.get("position", {}))) <= 0:
 			return true
 	return false
 

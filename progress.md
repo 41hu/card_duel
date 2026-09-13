@@ -78,3 +78,11 @@
 - Note: tests must run in rendered mode (Input.warp_mouse drives the pointer;
   headless keeps the pointer at (0,0)). Physical-device touch verification is
   still recommended before release.
+
+## 2026-09-13 (续) — 除根范围收窄为相邻格
+- 用户确认意图：近战/重击只能除根「所在格/相邻格」（distance≤0）的蔓生种子。
+- 修改 4 处 `distance <= 1` → `distance <= 0`：match_state._handle_vine_remove /
+  can_remove_vine_seed、battle_ui._has_removable_seed、ai_player 除根判定；
+  修正 match_state 除根注释（「1层」→「1/2层一次全清」）。
+- 新增 2 个边界用例（core_audit_test）：相邻格可除根、隔一格拒绝（种子保留、
+  卡不消耗）。CORE AUDIT 57/57、hand_interaction 224/224 全过。

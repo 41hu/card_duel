@@ -41,6 +41,18 @@ static func wj(text: String) -> String:
 		prev_latin = latin
 	return out
 
+# 中文段落首行缩进：对每个 \n\n 分隔的段落首行前加 2 个全角空格（U+3000，宽度=一个汉字）。
+# 换行产生的后续行从最左开始（TextServer 断行会 trim 行首空白，仅首行保留缩进）。
+# 用于正文/描述渲染，让段落边界清晰可辨。
+# 用法: label.text = Style.indent("判定阶段开始时或位移后…\n\n蔓延：…")
+static func indent(text: String) -> String:
+	if text.is_empty():
+		return text
+	var parts := text.split("\n\n", false)
+	for i in range(parts.size()):
+		parts[i] = "　　" + parts[i]
+	return "\n\n".join(parts)
+
 # ---- 主色调 ----
 const BG_DARK       = Color(0.06, 0.08, 0.12)
 const ATTACK_RED    = Color(1.0, 0.5, 0.4)

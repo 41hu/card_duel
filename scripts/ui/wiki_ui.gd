@@ -257,7 +257,7 @@ func _render_detail(scroll: int = 0):
 			for section in e.sections: _add_detail_section(section)
 		else:
 			for paragraph in e.body.split("\n\n", false):
-				var p = _label(paragraph, 30)
+				var p = _label(Style.indent(paragraph), 30)
 				p.add_theme_constant_override("line_spacing", 10)
 				_detail.add_child(p)
 		var related: Array = []
@@ -309,14 +309,10 @@ func _add_detail_section(section: Dictionary):
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	heading.add_child(title)
 	block.add_child(heading)
-	var body = _label(section.body, 30)
+	# 技能/装备描述首行缩进（段首空两格），段落边界清晰可辨
+	var body = _label(Style.indent(section.body), 30)
 	body.add_theme_constant_override("line_spacing", 10)
-	# 技能/装备描述整体左缩进，与标题形成层级，便于区分相邻段落
-	var body_margin = MarginContainer.new()
-	body_margin.add_theme_constant_override("margin_left", 36)
-	body_margin.mouse_filter = Control.MOUSE_FILTER_PASS
-	body_margin.add_child(body)
-	block.add_child(body_margin)
+	block.add_child(body)
 	_detail.add_child(margin)
 
 func _go_home():

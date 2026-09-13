@@ -557,7 +557,7 @@ func _show_role_skill_popup(cd: Dictionary):
 	t.add_theme_color_override("font_color", Style.SELECTED_CYAN)
 	vb.add_child(t)
 	var d := Label.new()
-	d.text = "技能：%s" % cd.get("skill_desc", "无")
+	d.text = "技能：%s" % Style.wj(cd.get("skill_desc", "无"))
 	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	d.add_theme_font_size_override("font_size", Style.fs(24))
 	d.add_theme_color_override("font_color", Color(0.92, 0.92, 0.92))

@@ -1620,7 +1620,7 @@ func _show_skill_focus():
 	var desc: String = Config.CHARACTER_DB.get(_find_self().get("char_id", ""), {}).get("skill_desc", "")
 	for skill in _find_self().get("active_skills", []):
 		if skill.id == _skill_pick and not str(skill.get("desc", "")).is_empty(): desc = skill.desc
-	_skill_description.text = MATERIAL_SKILLS[_skill_pick] + "\n\n" + desc
+	_skill_description.text = Style.wj(MATERIAL_SKILLS[_skill_pick]) + "\n\n" + Style.wj(desc)
 	for control in _skill_focus_layers:
 		control.z_index = 5
 	end_turn_btn.z_index = int(_skill_focus_layers[end_turn_btn])

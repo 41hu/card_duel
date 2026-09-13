@@ -412,7 +412,7 @@ func _refresh_preview():
 	_portrait.texture = _art_for(_preview_id)
 	_portrait.visible = _portrait.texture != null
 	_preview_stats.text = "生命 %d\n近战 %d · 远程 %d · 法术 %d" % [cd.hp, cd.near, cd.range, cd.magic] if not cd.is_empty() else ""
-	_preview_desc.text = str(cd.get("skill_desc", ""))
+	_preview_desc.text = Style.wj(str(cd.get("skill_desc", "")))
 	_confirm.text = "等待确认" if _submitted else "确认%s%s" % [verb, " · " + str(cd.name) if not cd.is_empty() else ""]
 	_confirm.disabled = _submitted or not _my_turn() or not _preview_id in _bp_state.get("available_chars", []) or _bp_state.get("phase") == "done"
 

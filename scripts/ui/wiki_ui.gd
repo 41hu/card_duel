@@ -1,4 +1,5 @@
 extends Control
+const Style = preload("res://scripts/theme/style_const.gd")
 const Catalog = preload("res://scripts/ui/wiki_catalog.gd")
 const DragScroll = preload("res://scripts/ui/components/drag_scroll.gd")
 const INK = Color("24343b")
@@ -41,31 +42,12 @@ func _exit_tree():
 
 func _label(text: String, font_size: int, color: Color = INK) -> Label:
 	var l = Label.new()
-	l.text = _wj(text)
+	l.text = Style.wj(text)
 	l.add_theme_font_size_override("font_size", font_size)
 	l.add_theme_color_override("font_color", color)
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return l
-
-# 中英混排断行修复：在"数字/拉丁字符 ↔ CJK 字符"交界插入 U+2060（WORD JOINER，UAX#14 WJ 类：禁止两侧断行）。
-# 原因：AUTOWRAP_WORD_SMART 把数字/字母单词视为独立词，行尾放不下时会把数字整体甩到下一行，
-# 造成"技能描述一遇数字就换行"的观感（如"长出1|层"）。插入 WJ 后数字与相邻中文粘合，断点移到自然位置。
-# 注意：零宽字符，不影响排版宽度、搜索匹配与数据层断言。
-static func _wj(text: String) -> String:
-	if text.is_empty():
-		return text
-	var out := ""
-	var prev_latin := false
-	for ch in text:
-		var code := ch.unicode_at(0)
-		var latin := (code >= 0x30 and code <= 0x39) or (code >= 0x41 and code <= 0x5A) \
-			or (code >= 0x61 and code <= 0x7A) or code == 0x2D or code == 0x25 or code == 0x2E or code == 0x2B
-		if latin != prev_latin and not out.is_empty():
-			out += "\u2060"
-		out += ch
-		prev_latin = latin
-	return out
 
 func _button(text: String, action: Callable) -> Button:
 	var b = Button.new()
@@ -329,7 +311,12 @@ func _add_detail_section(section: Dictionary):
 	block.add_child(heading)
 	var body = _label(section.body, 30)
 	body.add_theme_constant_override("line_spacing", 10)
-	block.add_child(body)
+	# 技能/装备描述整体左缩进，与标题形成层级，便于区分相邻段落
+	var body_margin = MarginContainer.new()
+	body_margin.add_theme_constant_override("margin_left", 36)
+	body_margin.mouse_filter = Control.MOUSE_FILTER_PASS
+	body_margin.add_child(body)
+	block.add_child(body_margin)
 	_detail.add_child(margin)
 
 func _go_home():

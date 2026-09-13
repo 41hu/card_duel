@@ -386,9 +386,9 @@ func _show_pick_page_text(editing: bool):
 func _show_char_skills():
 	var me_cd: Dictionary = Config.CHARACTER_DB.get(_current_char_id(), {})
 	var opp_cd: Dictionary = Config.CHARACTER_DB.get(_opponent_char_id(), {})
-	_flash_status("%s：%s\n%s：%s" % [
+	_flash_status(Style.wj("%s：%s\n%s：%s" % [
 		me_cd.get("name", "?"), me_cd.get("skill_desc", ""),
-		opp_cd.get("name", "?"), opp_cd.get("skill_desc", "")])
+		opp_cd.get("name", "?"), opp_cd.get("skill_desc", "")]))
 
 func _quit_to_menu():
 	if _is_online():

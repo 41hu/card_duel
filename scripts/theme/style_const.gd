@@ -21,6 +21,26 @@ static func scale_node_fonts(root: Node):
 		if c.has_theme_font_size_override("font_size"):
 			c.add_theme_font_size_override("font_size", fs(c.get_theme_font_size("font_size")))
 
+# 中英混排断行修复：在"数字/拉丁字符 ↔ CJK 字符"交界插入 U+2060（WORD JOINER，UAX#14 WJ 类：禁止两侧断行）。
+# 原因：AUTOWRAP_WORD_SMART 把数字/字母单词视为独立词，行尾放不下时会把数字整体甩到下一行，
+# 造成"技能描述一遇数字就换行"的观感（如"长出1|层"）。插入 WJ 后数字与相邻中文粘合，断点移到自然位置。
+# 注意：零宽字符，不影响排版宽度、搜索匹配与数据层断言。渲染含数字/字母的显示文本前调用。
+# 用法: d.text = Style.wj("每回合限1次：弃1张攻击卡…")
+static func wj(text: String) -> String:
+	if text.is_empty():
+		return text
+	var out := ""
+	var prev_latin := false
+	for ch in text:
+		var code := ch.unicode_at(0)
+		var latin := (code >= 0x30 and code <= 0x39) or (code >= 0x41 and code <= 0x5A) \
+			or (code >= 0x61 and code <= 0x7A) or code == 0x2D or code == 0x25 or code == 0x2E or code == 0x2B
+		if latin != prev_latin and not out.is_empty():
+			out += "\u2060"
+		out += ch
+		prev_latin = latin
+	return out
+
 # ---- 主色调 ----
 const BG_DARK       = Color(0.06, 0.08, 0.12)
 const ATTACK_RED    = Color(1.0, 0.5, 0.4)

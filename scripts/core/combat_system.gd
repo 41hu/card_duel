@@ -21,7 +21,7 @@ func _init(match):
 func calculate_attack(attacker_idx: int, defender_idx: int, card_type_id: String, ignore_distance: bool = false) -> Dictionary:
 	var attacker = match_ref.get_player(attacker_idx)
 	var defender = match_ref.get_player(defender_idx)
-	var distance = match_ref.movement.get_distance(defender_idx)
+	var distance = match_ref.movement.geometry.distance(attacker.position, defender.position)
 	var base_damage = 0
 	var damage_type = Config.get_damage_type(card_type_id)
 	var formula = ""
@@ -111,7 +111,8 @@ func _apply_weapon_damage_bonus(attacker, base_damage: int, damage_type: int) ->
 	if attacker.weapon.is_empty():
 		return base_damage
 	# 武器类型必须匹配伤害类型
-	if not Config.weapon_matches_damage_type(attacker.weapon.data.type, damage_type):
+	var weapon_data: Dictionary = attacker.weapon.get("data", Config.WEAPON_DB.get(attacker.weapon.id, {}))
+	if not Config.weapon_matches_damage_type(weapon_data.get("type", ""), damage_type):
 		return base_damage
 	var dmg = base_damage
 	match attacker.weapon.id:

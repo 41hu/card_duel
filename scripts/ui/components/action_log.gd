@@ -3,15 +3,22 @@ extends ScrollContainer
 
 const Style = preload("res://scripts/theme/style_const.gd")
 @onready var _vbox: VBoxContainer = $VBox
+var _shown_logs: Array = []
+var _shown_player := -2
 
 func _ready():
 	_vbox.size_flags_vertical = 0
+	get_v_scroll_bar().changed.connect(_queue_scroll_bottom)
+	visibility_changed.connect(_queue_scroll_bottom)
 
 func show_logs(action_log: Array, max_count: int = 200, my_index: int = -1):
+	var r = action_log.slice(max(0, action_log.size() - maxi(1, max_count)))
+	if r == _shown_logs and my_index == _shown_player: return
+	_shown_logs = r.duplicate(true)
+	_shown_player = my_index
 	for c in _vbox.get_children():
+		_vbox.remove_child(c)
 		c.queue_free()
-	# ScrollContainer 可滚动查看；上限 200 条平衡性能（每次状态刷新会重建全部日志 Label）
-	var r = action_log.slice(max(0, action_log.size() - 200))
 	for e in r:
 		var lb = Label.new()
 		lb.text = "[T%d] %s: %s" % [e.get("turn", 0), e.get("player_name", "?"), e.get("msg", "")]
@@ -23,16 +30,14 @@ func show_logs(action_log: Array, max_count: int = 200, my_index: int = -1):
 		else:
 			lb.add_theme_color_override("font_color", Style.LOG_TEXT)
 		_vbox.add_child(lb)
-	# 强制 VBox 按内容撑高（节点可能已离开场景树（切场景时），await 前必须检查）
-	if not is_inside_tree():
-		return
-	_vbox.size = Vector2(size.x, 0)
-	await get_tree().process_frame
-	if not is_inside_tree():
-		return
-	_vbox.size = Vector2(size.x, _vbox.get_minimum_size().y)
+	_queue_scroll_bottom()
+
+func _queue_scroll_bottom():
+	# 排版改变滚动范围时再次定位，包含专注界面关闭后的首次排版。
+	if not is_inside_tree() or not is_visible_in_tree(): return
 	call_deferred("_scroll_bottom")
 
 func _scroll_bottom():
+	if not is_inside_tree() or not is_visible_in_tree(): return
 	var bar = get_v_scroll_bar()
 	if bar: bar.value = bar.max_value

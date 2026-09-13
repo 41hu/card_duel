@@ -60,8 +60,8 @@ func _ready():
 	get_window().focus_exited.connect(cancel_gesture)
 
 func sync_hand(hand: Array, me: Dictionary, responding: Array, discarded: Array, ignore_ap: bool = false):
-	var owner := int(me.get("index", -1))
-	var owner_changed := owner != _owner_index
+	var player_index := int(me.get("index", -1))
+	var owner_changed := player_index != _owner_index
 	if owner_changed:
 		for child in get_children():
 			if child is Card and not child in cards:
@@ -69,7 +69,7 @@ func sync_hand(hand: Array, me: Dictionary, responding: Array, discarded: Array,
 				child.queue_free()
 		_seeded = false
 		_known_uids.clear()
-		_owner_index = owner
+		_owner_index = player_index
 		_offset = 0
 	var old := {}
 	for card in cards: old[card.card_uid] = card

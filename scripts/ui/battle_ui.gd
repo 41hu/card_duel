@@ -32,6 +32,9 @@ var _turn_notice: Label
 var _turn_notice_tween: Tween
 
 func _turn_owner_text() -> String:
+	if _game_state.get("response_pending", false):
+		var target := int(_game_state.get("pending_target", -1))
+		return "等待你响应" if target == _player_index else "等待P%d响应" % (target + 1)
 	var current := int(_game_state.get("current_player", -1))
 	for player in _game_state.get("players", []):
 		if int(player.index) == current:
@@ -424,6 +427,8 @@ func _on_cancel_select():
 	if _is_my_turn and _game_state.get("waiting_for_discard", false):
 		for card in hand_area.cards: card.set_discard_mark(false)
 		_show_discard_focus(_find_self())
+	elif _is_response_target():
+		_show_response_focus(str(_game_state.get("pending_attack_card", "")), int(_game_state.get("pending_attack_damage", 0)))
 
 func _build_popups():
 	_resp_popup = _make_resp_popup()
@@ -446,21 +451,14 @@ func _show_resp_popup(atk_card: String, dmg: int = 0):
 	for child in root.get_children():
 		root.remove_child(child)
 		child.queue_free()
-	var panel := PanelContainer.new()
-	panel.position = Vector2(610, 130)
-	panel.size = Vector2(maxf(500, size.x - 1250), 180)
-	root.add_child(panel)
-	var content := VBoxContainer.new()
-	panel.add_child(content)
-	var attack_name := "真言" if atk_card == "priest_chant" else Config.card_name(atk_card)
-	var segment := ""
-	if int(_game_state.get("pending_attack_segments", 1)) > 1:
-		segment = " 第%d/%d段" % [_game_state.get("pending_attack_segment", 1), _game_state.pending_attack_segments]
-	content.add_child(_lbl("响应：%s%s%s" % [attack_name, segment, " 伤害%d" % dmg if dmg > 0 else ""]))
+	_show_response_focus(atk_card, dmg)
 	if tutorial == null or not tutorial.force_response():
 		var skip = _mkbtn("不响应")
+		skip.name = "SkipResponse"
+		skip.position = end_turn_btn.position
+		skip.size = end_turn_btn.size
 		skip.pressed.connect(func(): _submit_response(false))
-		content.add_child(skip)
+		root.add_child(skip)
 	root.visible = true
 func _make_wpn_popup() -> Control:
 	var c = Control.new()
@@ -610,6 +608,7 @@ func _update_timer_label():
 		return
 	var tp = ["判定", "摸牌", "出牌", "弃牌"]
 	var tn = tp[_game_state.get("turn_phase", 0)] if _game_state.get("turn_phase", 0) < tp.size() else "?"
+	if _game_state.get("response_pending", false): tn = "响应"
 	var who = _turn_owner_text()
 	phase_label.text = "T%d | %s | %s | %ds" % [_game_state.turn_number, tn, who, _timer_left]
 
@@ -673,6 +672,7 @@ func _refresh_all(state: Dictionary):
 			_last_hp[p.index] = p.hp
 	var tp = ["判定", "摸牌", "出牌", "弃牌"]
 	var tn = tp[state.get("turn_phase", 0)] if state.get("turn_phase", 0) < tp.size() else "?"
+	if state.get("response_pending", false): tn = "响应"
 	var who = _turn_owner_text()
 	# 从服务端同步计时器
 	var timer = state.get("action_time_left", -1)
@@ -699,7 +699,8 @@ func _refresh_all(state: Dictionary):
 	hand_area.sync_hand(me.get("hand", []), me, responding, _discard_selected,
 		_is_response_target() or (state.get("waiting_for_discard", false) and _is_my_turn))
 	hand_area.select(_selected_uid)
-	action_log.show_logs(state.get("action_log", []), 8, _player_index)
+	for card in hand_area.cards: card.set_response_mode(_is_response_target())
+	action_log.show_logs(state.get("action_log", []), 200, _player_index)
 
 	if _is_response_target():
 		_show_resp_popup(state.get("pending_attack_card", ""), int(state.get("pending_attack_damage", 0)))
@@ -719,7 +720,7 @@ func _refresh_all(state: Dictionary):
 		confirm_btn.visible = false
 		_show_discard_focus(me)
 	else:
-		if _discard_focus:
+		if _discard_focus or (_response_focus and not _is_response_target()):
 			_hide_skill_focus()
 		_discard_selected.clear()
 		_end_confirm_at = 0  # 状态刷新（出牌等操作）取消结束确认态
@@ -814,10 +815,10 @@ func _card_targets() -> Array:
 					var allowed = tutorial.allowed_trap_positions()
 					if not allowed.is_empty() and not pos in allowed: continue
 				if me.get("char_id", "") == "vine_ent":
-					var seed := false
+					var has_seed := false
 					for item in _game_state.get("items", []):
-						if item.get("item_type", "") == "vine_seed" and geo.from_dict(item.position) == pos: seed = true
-					if not seed: continue
+						if item.get("item_type", "") == "vine_seed" and geo.from_dict(item.position) == pos: has_seed = true
+					if not has_seed: continue
 				result.append(pos)
 	else:
 		for p in _game_state.players:
@@ -1316,9 +1317,9 @@ func _popup_move(card_uid: int):
 			var dir: Vector2i = cell[1]
 			var placeholder: bool = cell[2]
 			if text == "取消":
-				var cb = _mkbtn("取消")
-				cb.pressed.connect(func(): c.queue_free())
-				grid.add_child(cb)
+				var grid_cancel = _mkbtn("取消")
+				grid_cancel.pressed.connect(func(): c.queue_free())
+				grid.add_child(grid_cancel)
 				continue
 			if placeholder:
 				var d = _mkbtn(text)
@@ -1555,6 +1556,28 @@ var _skill_description: RichTextLabel
 var _skill_focus_layers: Dictionary = {}
 var _skill_log_visible := true
 var _discard_focus := false
+var _response_focus := false
+
+func _show_response_focus(atk_card: String, dmg: int):
+	if _skill_scrim == null: return
+	if not _skill_scrim.visible: _skill_log_visible = action_log.visible
+	_response_focus = true
+	action_log.hide()
+	if _turn_notice != null: _turn_notice.hide()
+	_skill_scrim.show()
+	_skill_description.show()
+	_skill_description.bbcode_enabled = true
+	var attack_name := "真言" if atk_card == "priest_chant" else Config.card_name(atk_card)
+	var segment := ""
+	if int(_game_state.get("pending_attack_segments", 1)) > 1:
+		segment = " · 第%d/%d段" % [_game_state.get("pending_attack_segment", 1), _game_state.pending_attack_segments]
+	var effect := "预计伤害 %d" % dmg
+	if atk_card == "freeze": effect = "跳过下个出牌阶段 · 不造成伤害"
+	_skill_description.text = "[font_size=42][color=#63d9ee]响应阶段[/color][/font_size]\n\n%s%s\n%s" % [attack_name, segment, effect]
+	for control in _skill_focus_layers: control.z_index = int(_skill_focus_layers[control])
+	for control in [_self_panel, _opp_scroll, $HandScroll, confirm_btn, cancel_btn, status_label]: control.z_index = 5
+	phase_label.z_index = 5
+	_layout_skill_focus()
 
 func _show_discard_focus(me: Dictionary):
 	if _skill_scrim == null: return
@@ -1598,7 +1621,7 @@ func _build_skill_focus():
 	_skill_description.add_theme_color_override("default_color", Color("e0e5ed"))
 	_skill_description.hide()
 	add_child(_skill_description)
-	for control in [_self_panel, _opp_scroll, $HandScroll, skill_row, confirm_btn, cancel_btn, status_label, board, end_turn_btn]:
+	for control in [_self_panel, _opp_scroll, $HandScroll, skill_row, confirm_btn, cancel_btn, status_label, board, end_turn_btn, phase_label]:
 		_skill_focus_layers[control] = control.z_index
 
 func _layout_skill_focus():
@@ -1608,6 +1631,11 @@ func _layout_skill_focus():
 	var width := 312.0 if _board_hex else maxf(312.0, vp.x - 690.0 - _safe_right)
 	var height := maxf(100.0, vp.y + _self_panel.offset_top - 110.0) if _board_hex else 300.0
 	_skill_description.size = Vector2(width, height)
+	if _response_focus and _resp_popup != null:
+		var skip = _resp_popup.get_node_or_null("SkipResponse")
+		if skip != null:
+			skip.position = end_turn_btn.position
+			skip.size = end_turn_btn.size
 
 func _show_skill_focus():
 	if _skill_scrim == null: return
@@ -1629,6 +1657,7 @@ func _show_skill_focus():
 
 func _hide_skill_focus():
 	if _skill_scrim == null: return
+	_response_focus = false
 	if _discard_focus:
 		_discard_focus = false
 		status_label.remove_theme_color_override("font_color")
@@ -1699,9 +1728,9 @@ func _skill_targets() -> Array:
 					var adjacent := false
 					for item in _game_state.get("items", []):
 						if item.get("item_type", "") != "vine_seed": continue
-						var seed: Vector2i = geo.from_dict(item.position)
-						if seed == pos: occupied = true
-						elif geo.is_adjacent(seed, pos): adjacent = true
+						var seed_pos: Vector2i = geo.from_dict(item.position)
+						if seed_pos == pos: occupied = true
+						elif geo.is_adjacent(seed_pos, pos): adjacent = true
 					if occupied or not adjacent: continue
 				else:
 					var occupied := false

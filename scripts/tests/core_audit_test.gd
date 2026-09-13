@@ -27,6 +27,7 @@ func _ready():
 	_test_ffa_ground_destroy()
 	_test_vine_first_turn()
 	_test_channel_target()
+	_test_response_clocks()
 	print("CORE AUDIT: %d checks, %d failures" % [_checks, _fails])
 	get_tree().quit(0 if _fails == 0 else 1)
 
@@ -35,6 +36,84 @@ func _expect(ok: bool, label: String):
 	if not ok:
 		_fails += 1
 	print("[%s] %s" % ["PASS" if ok else "FAIL", label])
+
+func _test_response_clocks():
+	for kind in ["near", "freeze", "priest_chant"]:
+		for timeout in [false, true]:
+			var g = _game()
+			g.disable_timeout = false
+			g.players[1].position = g.players[0].position
+			g.card_systems[0].hand = [{"uid": 880, "type_id": kind}]
+			g._action_deadline = Time.get_ticks_msec() + 50000
+			if kind == "priest_chant":
+				g._begin_priest_chant(0, {"type_id": "heal_3"}, 1)
+			else:
+				g.process_action(0, {"action": "play_card", "card_uid": 880})
+			var label: String = "%s (timeout=%s): " % [kind, timeout]
+			_expect(g.response_pending and g._action_deadline == 0 and g.get_full_state().action_time_left == 20, label + "response gets 20s and pauses action clock")
+			g.process_response(0, false)
+			_expect(g.response_pending and g._action_deadline == 0, label + "wrong player cannot resume the clock")
+			g._response_deadline = Time.get_ticks_msec() + 5000
+			_expect(g.get_full_state().action_time_left == 5, label + "snapshot shows response time")
+			if timeout:
+				g._response_deadline = Time.get_ticks_msec() - 1
+				g.check_timers()
+			else:
+				g.skip_response(1)
+			var left: int = g._action_deadline - Time.get_ticks_msec()
+			_expect(not g.response_pending and left > 49000 and left <= 50000, label + "original 50s resumes, not 5s or 60s")
+			if kind == "freeze":
+				_expect(g.attacker_last_damage == 0 and g.players[1].frozen, label + "zero-damage freeze still applies")
+			g._action_deadline = Time.get_ticks_msec() - 1
+			g.check_timers()
+			_expect(g.waiting_for_discard, label + "resumed action clock still expires normally")
+	var g = _game()
+	g.disable_timeout = false
+	g.players[1].position = g.players[0].position
+	g.card_systems[0].hand = [{"uid": 881, "type_id": "near"}]
+	g._action_deadline = Time.get_ticks_msec() + 50000
+	g.process_action(0, {"action": "play_card", "card_uid": 881})
+	g.pending_attack_segments = 2
+	g._response_deadline = Time.get_ticks_msec() - 1
+	g.check_timers()
+	_expect(g.response_pending and g.pending_attack_segment == 2 and g._action_deadline == 0, "Multi-hit timeout starts a fresh response, not an action turn")
+	_expect(g.get_full_state().action_time_left == 20 and g._paused_action_ms > 49000, "Multi-hit response preserves the same action budget")
+	g.skip_response(1)
+	_expect(g.get_full_state().action_time_left >= 49, "Final hit resumes original budget")
+	g = _game(true)
+	g.disable_timeout = false
+	g._action_deadline = Time.get_ticks_msec() + 50000
+	g.card_systems[0].hand = [{"uid": 884, "type_id": "freeze"}]
+	g.process_action(0, {"action": "play_card", "card_uid": 884, "extra": {"target": 2}})
+	g.skip_response(1)
+	_expect(g.response_pending and g._action_deadline == 0, "FFA bystander cannot end another player's response")
+	g.skip_response(2)
+	_expect(g.players[2].frozen and g.get_full_state().action_time_left >= 49, "FFA target response restores the attacker's budget")
+	g = _game()
+	g.disable_timeout = false
+	g.players[1].hp = 1
+	g.players[1].position = g.players[0].position
+	g.card_systems[1].deck = [{"uid": 890, "type_id": "heal_5"}, {"uid": 891, "type_id": "heal_5"}, {"uid": 892, "type_id": "heal_5"}, {"uid": 893, "type_id": "heal_5"}]
+	g.card_systems[0].hand = [{"uid": 889, "type_id": "near"}]
+	g._action_deadline = Time.get_ticks_msec() + 50000
+	g.process_action(0, {"action": "play_card", "card_uid": 889})
+	g.skip_response(1)
+	_expect(g.stats[1].resurrected == 1 and g.get_full_state().action_time_left >= 49, "Defender resurrection does not reset the action budget")
+	for unlimited in [0, 1]:
+		g = _game()
+		g.disable_timeout = false
+		g.no_timeout_for = unlimited
+		g._action_deadline = Time.get_ticks_msec() + 50000
+		g.card_systems[0].hand = [{"uid": 882, "type_id": "freeze"}]
+		g.card_systems[1].hand = [{"uid": 883, "type_id": "magic"}]
+		g.process_action(0, {"action": "play_card", "card_uid": 882})
+		if unlimited == 1:
+			g._response_deadline = Time.get_ticks_msec() - 1
+			g.check_timers()
+			_expect(g.response_pending and g.get_full_state().action_time_left == -1, "Untimed defender never auto-skips")
+		g.process_response(1, true, 883)
+		_expect(not g.players[1].frozen and g.attacker_last_damage == 0, "Magic dodges zero-damage freeze")
+		_expect(g.get_full_state().action_time_left == -1 if unlimited == 0 else g.get_full_state().action_time_left >= 49, "Mixed timed/untimed players retain their own clock policy")
 
 func _test_channel_target():
 	var g = MatchState.new()

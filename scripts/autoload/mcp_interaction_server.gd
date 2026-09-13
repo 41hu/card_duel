@@ -2566,22 +2566,22 @@ func _cmd_ui_theme(params: Dictionary) -> void:
 
 	# Color overrides
 	var colors: Dictionary = overrides.get("colors", {})
-	for name in colors:
-		var c: Dictionary = colors[name]
-		ctrl.add_theme_color_override(name, Color(float(c.get("r", 0)), float(c.get("g", 0)), float(c.get("b", 0)), float(c.get("a", 1))))
-		applied.append("color:" + name)
+	for color_name in colors:
+		var c: Dictionary = colors[color_name]
+		ctrl.add_theme_color_override(color_name, Color(float(c.get("r", 0)), float(c.get("g", 0)), float(c.get("b", 0)), float(c.get("a", 1))))
+		applied.append("color:" + color_name)
 
 	# Constant overrides
 	var constants: Dictionary = overrides.get("constants", {})
-	for name in constants:
-		ctrl.add_theme_constant_override(name, int(constants[name]))
-		applied.append("constant:" + name)
+	for constant_name in constants:
+		ctrl.add_theme_constant_override(constant_name, int(constants[constant_name]))
+		applied.append("constant:" + constant_name)
 
 	# Font size overrides
 	var font_sizes: Dictionary = overrides.get("fontSizes", overrides.get("font_sizes", {}))
-	for name in font_sizes:
-		ctrl.add_theme_font_size_override(name, int(font_sizes[name]))
-		applied.append("font_size:" + name)
+	for font_name in font_sizes:
+		ctrl.add_theme_font_size_override(font_name, int(font_sizes[font_name]))
+		applied.append("font_size:" + font_name)
 
 	_send_response({"success": true, "node_path": node_path, "applied": applied})
 
@@ -2940,7 +2940,7 @@ func _cmd_input_state(params: Dictionary) -> void:
 			_send_response({"success": true, "action": "warp_mouse", "position": {"x": pos.x, "y": pos.y}})
 		"set_mouse_mode":
 			var mode_str: String = params.get("mouse_mode", "visible")
-			var mode_val: int = Input.MOUSE_MODE_VISIBLE
+			var mode_val: Input.MouseMode = Input.MOUSE_MODE_VISIBLE
 			match mode_str:
 				"hidden": mode_val = Input.MOUSE_MODE_HIDDEN
 				"captured": mode_val = Input.MOUSE_MODE_CAPTURED
@@ -3096,7 +3096,7 @@ func _cmd_process_mode(params: Dictionary) -> void:
 		_send_response({"error": "Node not found: %s" % node_path})
 		return
 	var mode_str: String = params.get("mode", "inherit")
-	var mode_val: int = Node.PROCESS_MODE_INHERIT
+	var mode_val: Node.ProcessMode = Node.PROCESS_MODE_INHERIT
 	match mode_str:
 		"pausable": mode_val = Node.PROCESS_MODE_PAUSABLE
 		"when_paused": mode_val = Node.PROCESS_MODE_WHEN_PAUSED

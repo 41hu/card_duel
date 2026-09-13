@@ -120,11 +120,11 @@ func _my_best_damage(player_idx: int) -> int:
 func _opp_best_damage(player_idx: int) -> int:
 	var opp = 1 - player_idx
 	if difficulty >= DIFF_HELL:
-		var best = 0
+		var best_in_hand = 0
 		for c in match_ref.card_systems[opp].hand:
 			if c.get("type_id", "") in ["near", "heavy", "range", "pierce", "magic", "chant"]:
-				best = max(best, _real_damage(opp, c.type_id))
-		return best
+				best_in_hand = max(best_in_hand, _real_damage(opp, c.type_id))
+		return best_in_hand
 	var role = _current_role(opp)
 	var best = 0
 	for t in _role_types(role):
@@ -181,7 +181,7 @@ func _count_in_discard(player_idx: int, type_id: String) -> int:
 # 从日志解析响应历史（每回合刷新一次）：
 # 1. 对手用过的响应类型（hard 读牌正式接入——remember_response 无调用点，改从日志解析）
 # 2. 我方攻击被响应打断的统计（拟人化：连续被挡后换招/骗响应）
-func _scan_response_log(player_idx: int):
+func _scan_response_log(_player_idx: int):
 	_opp_used_responses.clear()
 	_blocked_attack_counts.clear()
 	var resp_names := {"近战": "near", "远程": "range", "魔法": "magic"}
@@ -1481,7 +1481,7 @@ func _hunter_ambush_playbook(player_idx: int, opp_idx: int, p, hand: Array, dist
 	return {"score": s, "action": action}
 
 # 猎人夹子区 combo：夹子 ≥2 的格成型后，用吸引/威慑把对手主动送进夹子区（B2 进攻性）
-func _hunter_combo(player_idx: int, opp_idx: int, p, hand: Array, distance: int, stance: Dictionary) -> Dictionary:
+func _hunter_combo(_player_idx: int, opp_idx: int, p, hand: Array, distance: int, _stance: Dictionary) -> Dictionary:
 	var geo = match_ref.movement.geometry
 	var opp = match_ref.get_player(opp_idx)
 	var attract_uid = -1

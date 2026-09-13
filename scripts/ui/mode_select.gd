@@ -338,10 +338,10 @@ func _row_label(text: String) -> Label:
 	l.custom_minimum_size = Vector2(Style.fs(200), 0)
 	return l
 
-func _lbl(text: String, color: Color, size: int) -> Label:
+func _lbl(text: String, color: Color, font_size: int) -> Label:
 	var l := Label.new()
 	l.text = text
-	l.add_theme_font_size_override("font_size", size)
+	l.add_theme_font_size_override("font_size", font_size)
 	l.add_theme_color_override("font_color", color)
 	return l
 
@@ -429,10 +429,10 @@ func _do_create_room():
 	# 已连接（如输错房间号重试场景）：跳过连接流程直接创建，避免 await 信号挂起
 	if Network.get_connected():
 		status_label.text = "已连接，创建房间..."
-		var pname = _name_input.text.strip_edges()
-		if pname == "":
-			pname = "Player1"
-		Network.create_room(pname, _selected_mode, _player_count, _final_config())
+		var connected_name = _name_input.text.strip_edges()
+		if connected_name == "":
+			connected_name = "Player1"
+		Network.create_room(connected_name, _selected_mode, _player_count, _final_config())
 		return
 	status_label.text = "正在连接..."
 	_pending_connect = true

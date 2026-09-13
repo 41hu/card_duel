@@ -75,6 +75,8 @@ var _reveal_from: int = -1
 var _pending_formula: String = ""
 
 var _action_deadline: int = 0
+var _response_deadline: int = 0
+var _paused_action_ms: int = -1
 var _discard_deadline: int = 0
 const RESPONSE_TIME = 20  # 响应窗口超时秒数（超时默认不响应）
 
@@ -118,14 +120,14 @@ func _init():
 	char_skills = preload("res://scripts/core/character_skills.gd").new(self)
 	card_effects = preload("res://scripts/core/card_effects.gd").new(self)
 
-func init_match(p1_char_id: String, p2_char_id: String, bp_first: int = -1, custom_decks: Array = [], independent_decks: bool = false, weapon_pools: Array = []):
-	_setup_match([p1_char_id, p2_char_id], bp_first, custom_decks, independent_decks, weapon_pools)
+func init_match(p1_char_id: String, p2_char_id: String, bp_first: int = -1, custom_decks: Array = [], use_independent_decks: bool = false, initial_weapon_pools: Array = []):
+	_setup_match([p1_char_id, p2_char_id], bp_first, custom_decks, use_independent_decks, initial_weapon_pools)
 
 # 多人（4 人）混战开局：不走 BP 直接开战；默认独立牌堆（每角色各一副）
-func init_match_multi(char_ids: Array, custom_decks: Array = [], independent_decks: bool = true, weapon_pools: Array = []):
-	_setup_match(char_ids, randi() % char_ids.size(), custom_decks, independent_decks, weapon_pools)
+func init_match_multi(char_ids: Array, custom_decks: Array = [], use_independent_decks: bool = true, initial_weapon_pools: Array = []):
+	_setup_match(char_ids, randi() % char_ids.size(), custom_decks, use_independent_decks, initial_weapon_pools)
 
-func _setup_match(char_ids: Array, bp_first: int, custom_decks: Array, independent_decks: bool, wp_in: Array = []):
+func _setup_match(char_ids: Array, bp_first: int, custom_decks: Array, use_independent_decks: bool, wp_in: Array = []):
 	var n = char_ids.size()
 	# 地图模式：2 人局线性、多人局六边形。以后新增布局只改 map_geometry.gd
 	# （见该文件头注释"以后修改地图布局"），此处按人数切换即可
@@ -136,7 +138,7 @@ func _setup_match(char_ids: Array, bp_first: int, custom_decks: Array, independe
 		players.append(_create_player(i, char_ids[i], cd))
 	# 默认共享牌堆（人机/联机原行为）；independent_decks=true（PVE/多人）每名玩家各自一副，
 	# custom_decks[idx] = 自定义 type_id 列表（PVE 构筑）
-	self.independent_decks = independent_decks
+	self.independent_decks = use_independent_decks
 	# 自定义房间规则：不勾「共享牌堆」→ 强制各自独立牌堆（即使调用方未传 independent）
 	if not game_config.is_empty() and not bool(game_config.get("shared_deck", true)):
 		self.independent_decks = true
@@ -171,6 +173,8 @@ func _setup_match(char_ids: Array, bp_first: int, custom_decks: Array, independe
 	for i in range(n):
 		stats.append({"damage_dealt": 0, "damage_taken": 0, "damage_from_attack": 0, "damage_from_trap": 0, "damage_from_dot": 0, "heal_total": 0, "moves": 0, "responses": 0, "resurrected": 0, "cards_played": {}, "card_total": 0, "blocked_dmg": 0, "weapons_used": {}, "max_hit": 0})
 	_action_deadline = 0
+	_response_deadline = 0
+	_paused_action_ms = -1
 	_discard_deadline = 0
 	_moved_to_adjacent_this_turn = false
 	_cheat_uid_counter = -1000
@@ -474,6 +478,11 @@ func _do_play_card(player_idx: int, data: Dictionary) -> Dictionary:
 		card.type_id = extra.as_type
 	var type_id = card.type_id
 	var player = players[player_idx]
+	if type_id in ["range", "pierce"]:
+		var target := get_opponent(player_idx, int(card.get("target", -1)))
+		if target < 0: return {success=false, msg="请选择目标"}
+		var reason := attack_target_block_reason(player_idx, target, type_id)
+		if not reason.is_empty(): return {success=false, msg=reason}
 	# 潜行（盗贼）：打出任何手牌即现形（出手后命中的劫富可重新进入潜行）
 	if _rogue_is_stealthed(player_idx):
 		for i in range(player.buffs.size() - 1, -1, -1):
@@ -526,6 +535,18 @@ func attack_target_block_reason(player_idx: int, target_idx: int, type_id: Strin
 		var player = players[player_idx]
 		if player.weapon.get("id", "") == "longbow": distance = maxi(0, distance - 1)
 		if player.range_power <= distance: return "距离过远，穿心无法打出"
+	if type_id in ["range", "pierce"]:
+		var calc: Dictionary = combat.calculate_attack(player_idx, target_idx, type_id)
+		# 命中防具仍有消耗耐久的作用，不把防具免疫当作射程不足。
+		if calc.get("armor_hit", false): return ""
+		var damage := int(calc.damage)
+		var player: Dictionary = players[player_idx]
+		if player.char_id == "paladin":
+			for buff in player.buffs:
+				if buff.type == "paladin_counter": damage += int(buff.value)
+		# 掷骰发生在出牌后；预判只排除最佳结果也无法造成伤害的情况。
+		if player.weapon.get("id", "") == "rusted_gun": damage += 3
+		if damage <= 0: return "无法造成远程伤害，请靠近目标或提高伤害"
 	return ""
 
 func card_block_reason(player_idx: int, type_id: String) -> String:
@@ -640,6 +661,19 @@ func _use_card(player_idx: int, card: Dictionary):
 	s["cards_played"][tid] = s["cards_played"].get(tid, 0) + 1
 	s["card_total"] += 1
 
+# 所有响应入口共享暂停/恢复逻辑，段间结算也不会重置出牌预算。
+func _start_response_timer():
+	var now := Time.get_ticks_msec()
+	_paused_action_ms = maxi(0, _action_deadline - now) if _action_deadline > 0 else -1
+	_action_deadline = 0
+	_response_deadline = now + RESPONSE_TIME * 1000
+
+func _resume_action_timer():
+	_response_deadline = 0
+	if _paused_action_ms >= 0:
+		_action_deadline = Time.get_ticks_msec() + maxi(1, _paused_action_ms)
+	_paused_action_ms = -1
+
 # 真言（牧师）：回复卡等值法术伤害，无视护甲，只能魔法响应（闪避），无卡消耗
 func _begin_priest_chant(player_idx: int, card: Dictionary, target_idx: int) -> Dictionary:
 	var opp = get_opponent(player_idx, target_idx)
@@ -669,7 +703,7 @@ func _begin_priest_chant(player_idx: int, card: Dictionary, target_idx: int) -> 
 		_target_name(opp), dmg])
 	phase = Config.Phase.RESPONSE_WINDOW
 	response_pending = true
-	_action_deadline = Time.get_ticks_msec() + RESPONSE_TIME * 1000
+	_start_response_timer()
 	response_needed.emit(opp, {attacker=player_idx, card="priest_chant", damage=dmg,
 		distance=movement.get_distance(opp), segment=1, segments=1})
 	return {success=true, phase="response", damage=dmg}
@@ -681,13 +715,14 @@ func _handle_respondable_card(player_idx: int, card: Dictionary, kind: String) -
 	pending_attack_card = kind
 	pending_attack_uid = card.uid
 	_response_attacker = player_idx
-	attacker_last_damage = 1
+	attacker_last_damage = 0
 	# 冻结为单段攻击：显式重置段号，防止沿用上一攻击（如快枪手双发）残留的段数
 	# 导致响应弹窗误显示"第2/2段"（battle_ui 从 get_full_state 读取段号）
 	pending_attack_segments = 1
 	pending_attack_segment = 1
 	phase = Config.Phase.RESPONSE_WINDOW
 	response_pending = true
+	_start_response_timer()
 	response_needed.emit(opp, {attacker=player_idx, card=kind, damage=0, distance=0, target=opp, segment=1, segments=1})
 	return {success=true, phase="response"}
 
@@ -791,7 +826,7 @@ func _begin_attack_segment(player_idx: int) -> Dictionary:
 		add_log(player_idx, "%s打出%s" % [Config.char_name(players[player_idx].char_id), Config.card_name(type_id)])
 		phase = Config.Phase.RESPONSE_WINDOW
 		response_pending = true
-		_action_deadline = Time.get_ticks_msec() + RESPONSE_TIME * 1000
+		_start_response_timer()
 		response_needed.emit(opp, {attacker=player_idx, card=type_id, damage=0, distance=distance, segment=pending_attack_segment, segments=pending_attack_segments})
 		return {success=true, phase="response", damage=0}
 	if attacker_last_damage <= 0:
@@ -820,7 +855,7 @@ func _begin_attack_segment(player_idx: int) -> Dictionary:
 	add_log(player_idx, "%s打出%s" % [Config.char_name(players[player_idx].char_id), Config.card_name(type_id)])
 	phase = Config.Phase.RESPONSE_WINDOW
 	response_pending = true
-	_action_deadline = Time.get_ticks_msec() + RESPONSE_TIME * 1000  # 响应窗口独立计时
+	_start_response_timer()
 	response_needed.emit(opp, {attacker=player_idx, card=type_id, damage=calc.damage, distance=distance, segment=pending_attack_segment, segments=pending_attack_segments})
 	return {success=true, phase="response", damage=calc.damage}
 
@@ -830,6 +865,7 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 	if _response_attacker < 0 or defender_idx != _pending_target:
 		return
 	var attacker_idx = _response_attacker
+	_resume_action_timer()
 	response_pending = false
 	phase = Config.Phase.PLAYER_TURN
 	var final_damage = attacker_last_damage
@@ -858,7 +894,7 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 	if pending_attack_card == "freeze":
 		# 冻结为单段攻击：结算后直接消耗卡结束
 		_use_card(attacker_idx, {uid=pending_attack_uid, type_id=pending_attack_card})
-		if final_damage == 0:
+		if _resp_effect == "dodge":
 			add_log(attacker_idx, "冻结被闪避")
 		else:
 			status.freeze_player(defender_idx)
@@ -973,9 +1009,6 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 	if pending_attack_uid >= 0 or card_systems[attacker_idx].has_card(pending_attack_uid):
 		_use_card(attacker_idx, {uid=pending_attack_uid, type_id=pending_attack_card})
 	turn_phase = Config.TurnPhase.ACTION
-	# 响应方不限时清掉 deadline 后，攻击方（若限时）恢复出牌计时
-	if _action_deadline == 0 and _timeout_enabled(attacker_idx):
-		_action_deadline = Time.get_ticks_msec() + ACTION_TIME * 1000
 	# 鹰眼等查看手牌由 get_full_state 统一带出并重置（防止提前 return 路径残留）
 	state_changed.emit(get_full_state())
 
@@ -1308,7 +1341,7 @@ func _handle_death(player_idx: int):
 		_check_permanent_death(player_idx)
 		return
 	phase = Config.Phase.RESURRECTING
-	_action_deadline = 0
+	# 复活同步结算，保留当前出牌预算，不重置攻击者的计时。
 	_discard_deadline = 0
 	card_systems[player_idx].discard_all()
 	# 地狱难度 AI（人机 P1）：不污染牌库——不抽 4 张（会大幅扰动共享牌堆/记牌），
@@ -1499,6 +1532,7 @@ func _calc_titles(player_idx: int, is_winner: bool, winner_idx: int = -1) -> Arr
 	return titles
 
 func check_timers():
+	if phase == Config.Phase.GAME_OVER: return
 	var now = Time.get_ticks_msec()
 	if phase == Config.Phase.BP_PHASE:
 		if not bp_timer_active(): return  # 本地模式 BP 不限时（AI 自动操作不依赖计时）
@@ -1508,17 +1542,13 @@ func check_timers():
 			# 超时自动操作后广播，让客户端 UI 刷新并推进流程
 			bp_state_changed.emit(bp.get_bp_state())
 		return
+	if response_pending:
+		if _response_deadline > 0 and now >= _response_deadline and _timeout_enabled(_pending_target):
+			skip_response(_pending_target)
+		return
 	if _action_deadline > 0 and now >= _action_deadline:
-		# 超时对象：响应窗口是被攻击方（_pending_target），出牌阶段是当前玩家
-		var timed_player = (_pending_target if response_pending else current_player)
 		_action_deadline = 0
-		if _timeout_enabled(timed_player):
-			if response_pending:
-				# 响应窗口超时：默认不响应，结算后攻击者继续出牌（避免软锁）
-				skip_response(_pending_target)
-				if phase == Config.Phase.PLAYER_TURN and turn_phase == Config.TurnPhase.ACTION:
-					_action_deadline = Time.get_ticks_msec() + ACTION_TIME * 1000
-				return
+		if _timeout_enabled(current_player):
 			add_log(current_player, "回合超时")
 			if waiting_for_weapon_choice >= 0:
 				confirm_weapon(waiting_for_weapon_choice, false)  # 武器选择超时默认放弃
@@ -1600,10 +1630,11 @@ func _skill_list(player_idx: int) -> Array:
 func get_full_state(full: bool = false) -> Dictionary:
 	var now = Time.get_ticks_msec()
 	var atl = -1
-	if _action_deadline > 0:
+	var active_deadline := _response_deadline if response_pending else _action_deadline
+	if active_deadline > 0:
 		var timed_player = (_pending_target if response_pending else current_player)
 		if _timeout_enabled(timed_player):
-			atl = max(0, int((_action_deadline - now) / 1000.0))
+			atl = max(0, ceili((active_deadline - now) / 1000.0))
 	var dtl = -1
 	if _discard_deadline > 0 and _timeout_enabled(current_player):
 		dtl = max(0, int((_discard_deadline - now) / 1000.0))

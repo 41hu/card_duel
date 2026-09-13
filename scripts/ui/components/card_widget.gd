@@ -1,7 +1,5 @@
 extends Control
 
-signal pressed(card_uid: int)
-
 const CARD_SIZE := Vector2(180, 264)
 const INK := Color("253238")
 const PAPER := Color("f2f5f3")
@@ -15,6 +13,7 @@ class SelectionOverlay extends Control:
 	var selected := false
 	var discarded := false
 	var skill_material := false
+	var response_candidate := false
 	var discard_phase := false
 	var pulse_strength := 0.0
 
@@ -29,17 +28,17 @@ class SelectionOverlay extends Control:
 	func set_state(is_selected: bool, is_discarded: bool):
 		selected = is_selected
 		discarded = is_discarded
-		visible = selected or discarded or skill_material or discard_phase
+		visible = selected or discarded or skill_material or response_candidate or discard_phase
 		queue_redraw()
 
 	func _draw():
-		if not selected and not discarded and not skill_material and not discard_phase:
+		if not selected and not discarded and not skill_material and not response_candidate and not discard_phase:
 			return
 		var rect := Rect2(Vector2.ZERO, size)
 		if discard_phase and not discarded:
 			draw_rect(rect.grow(-2), Color(0.74, 0.56, 1.0, 0.65), false, 3.0)
-		if skill_material:
-			var blue := Color("489dff")
+		if skill_material or response_candidate:
+			var blue := Color("489dff") if skill_material else Color("63d9ee")
 			draw_rect(rect.grow(-6), Color(blue, 0.08 + pulse_strength * 0.22), false, 12.0)
 			draw_rect(rect.grow(-2), Color(blue, 0.45 + pulse_strength * 0.55), false, 4.0)
 		if discarded:
@@ -68,6 +67,7 @@ var _selected := false
 var _respondable := false
 var _skill_material := false
 var _skill_unavailable := false
+var _response_unavailable := false
 var _gray_material: ShaderMaterial
 var _is_discarded := false
 var _unaffordable := false
@@ -203,6 +203,13 @@ func set_respondable(value: bool):
 	_respondable = value
 	_apply_style()
 
+func set_response_mode(active: bool):
+	_overlay.response_candidate = active and _respondable
+	_overlay.set_process(_skill_material or _overlay.response_candidate)
+	_response_unavailable = active and not _respondable
+	_update_gray_material()
+	_apply_style()
+
 func set_selected(value: bool):
 	_selected = value
 	_apply_style()
@@ -211,7 +218,7 @@ func set_skill_material(value: bool):
 	if _skill_material == value: return
 	_skill_material = value
 	_overlay.skill_material = value
-	_overlay.set_process(value)
+	_overlay.set_process(value or _overlay.response_candidate)
 	if not value: _overlay.pulse_strength = 0.0
 	_overlay.queue_redraw()
 	_apply_style()
@@ -231,10 +238,14 @@ func set_discard_phase(value: bool):
 func set_skill_unavailable(value: bool):
 	if _skill_unavailable == value: return
 	_skill_unavailable = value
-	if value and _gray_material == null:
+	_update_gray_material()
+
+func _update_gray_material():
+	var unavailable := _skill_unavailable or _response_unavailable
+	if unavailable and _gray_material == null:
 		_gray_material = ShaderMaterial.new()
 		_gray_material.shader = GRAYSCALE
-	_set_gray_material(_face, _gray_material if value else null)
+	_set_gray_material(_face, _gray_material if unavailable else null)
 
 func _set_gray_material(node: Node, gray: ShaderMaterial):
 	if node is CanvasItem: node.material = gray

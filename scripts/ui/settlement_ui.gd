@@ -380,7 +380,6 @@ func _build_stat_cards(result: Dictionary, names: Array, winner: int):
 # 导出对局记录：生成 v2 文本（battle_records/ 目录）+ 同路径 JSON 回放，返回文本路径
 # v2 = 按回合行动流水 + 行动时上下文 + AI 决策轨迹 + 卡组构成（见 record_formatter.gd）
 func _export_record(result: Dictionary) -> String:
-	var names: Array = result.get("names", ["P1", "P2"])
 	var meta := {}
 	if LocalGame.game != null:
 		meta["mode"] = "人机对战" if LocalGame.ai_mode else "自我对战"

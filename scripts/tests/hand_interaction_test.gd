@@ -218,6 +218,11 @@ func _run():
 	responding.pending_attack_card = "near"
 	responding.phase = Config.Phase.RESPONSE_WINDOW
 	b._on_state_updated(responding)
+	_expect(b._response_focus and b._skill_scrim.visible and b._skill_description.text.contains("响应阶段"), "Response uses the shared focus backdrop")
+	_expect(hand.get_card(100)._overlay.response_candidate and hand.get_card(100)._overlay.is_processing(), "Eligible responses pulse at the transformed card edge")
+	_expect(hand.get_card(101)._response_unavailable and hand.get_card(101)._face.material != null, "Invalid response cards are gray but inspectable")
+	b._on_cancel_select()
+	_expect(b._response_focus and b._skill_scrim.visible, "Cancel selection keeps response focus active")
 	b.tutorial = ResponseTutorial.new()
 	b._on_card_clicked(101, "move")
 	_expect(not b.confirm_btn.visible, "Nonresponse cards remain inspectable but cannot respond")
@@ -229,6 +234,33 @@ func _run():
 	b._on_confirm_card()
 	_expect(fake.sent.size() == 1 and fake.sent[0].response, "Response is submitted only on confirmation")
 	b._on_state_updated(state)
+	_expect(not b._response_focus and not b._skill_scrim.visible and not hand.get_card(101)._response_unavailable, "Response completion clears the scrim and gray card residue")
+	var freezing = responding.duplicate(true)
+	freezing.pending_attack_card = "freeze"
+	freezing.pending_attack_damage = 1
+	b._on_state_updated(freezing)
+	_expect(b._skill_description.text.contains("不造成伤害") and not b._skill_description.text.contains("伤害 1"), "Freeze displays its effect even with a legacy damage sentinel")
+	_expect(hand.get_card(102)._overlay.response_candidate and not hand.get_card(100)._overlay.response_candidate, "Only magic is highlighted against freeze")
+	await _settle()
+	await _snapshot("freeze_response")
+	b._on_state_updated(state)
+	var history: Array = []
+	for i in range(70): history.append({"turn": i, "player": 0, "player_name": "Test", "msg": "History entry %d" % i})
+	b.action_log.show_logs(history, 200, 0)
+	await _settle()
+	var bar = b.action_log.get_v_scroll_bar()
+	_expect(bar.max_value > bar.page and absf(bar.value - (bar.max_value - bar.page)) < 2, "History follows the latest entry after layout")
+	bar.value = 0
+	b.action_log.show_logs(history, 200, 0)
+	await _settle()
+	_expect(bar.value == 0, "Identical snapshots preserve manual history browsing")
+	b.action_log.hide()
+	history.append({"turn": 71, "player": 1, "player_name": "Test", "msg": "Latest message while focused"})
+	b.action_log.show_logs(history, 200, 0)
+	await _settle()
+	b.action_log.show()
+	await _settle()
+	_expect(absf(bar.value - (bar.max_value - bar.page)) < 2, "History reveals newest messages when focus closes")
 	var discarded = state.duplicate(true)
 	discarded.waiting_for_discard = true
 	b._on_state_updated(discarded)
@@ -563,8 +595,21 @@ func _test_ap_affordability():
 	game.players[1].position = Vector2i(4, 0)
 	game.players[1].buffs.clear()
 	_expect(not game.card_block_reason(0, "pierce").is_empty(), "Pierce is blocked at range equal to distance")
-	_expect(game.card_block_reason(0, "range").is_empty(), "Zero base damage does not forbid ordinary ranged attacks")
+	_expect(game.card_block_reason(0, "range").contains("无法造成远程伤害"), "Zero-damage ranged attacks are blocked")
+	var ranged_fan = load("res://scripts/ui/components/hand_fan.gd").new()
+	add_child(ranged_fan)
+	var ranged_state: Dictionary = game.get_full_state()
+	ranged_fan.sync_hand(ranged_state.players[0].hand, ranged_state.players[0], [], [])
+	_expect(ranged_fan.get_card(-9000)._unaffordable, "Zero-damage range card dims from the authoritative snapshot")
+	var old_ap: int = player.ap_attack
+	var rejected: Dictionary = game._do_play_card(0, {"card_uid": -9000})
+	_expect(not rejected.success and game.card_systems[0].has_card(-9000) and player.ap_attack == old_ap, "Rejected zero-damage ranged attack keeps the card and AP")
 	player.weapon = {"id": "longbow"}
+	_expect(game.card_block_reason(0, "range").is_empty(), "Longbow bonus keeps a zero-base ranged attack playable")
+	ranged_state = game.get_full_state()
+	ranged_fan.sync_hand(ranged_state.players[0].hand, ranged_state.players[0], [], [])
+	_expect(not ranged_fan.get_card(-9000)._unaffordable, "Reused ranged card brightens when damage becomes possible")
+	ranged_fan.queue_free()
 	_expect(game.card_block_reason(0, "pierce").is_empty(), "Longbow range adjustment makes pierce playable")
 	game.players[1].buffs.append({"type": "rogue_stealth"})
 	_expect(game.card_block_reason(0, "range").contains("潜行"), "Stealth gives a specific ranged rejection reason")
@@ -572,6 +617,14 @@ func _test_ap_affordability():
 	player.weapon = {}
 	player.char_id = "gunslinger"
 	_expect(game.card_block_reason(0, "pierce").is_empty(), "Character damage override preserves its distance exception")
+	_expect(not game.card_block_reason(0, "range").is_empty(), "Gunslinger zero-damage ranged formula also dims")
+	player.weapon = {"id": "rusted_gun"}
+	_expect(game.card_block_reason(0, "range").is_empty(), "Potential random weapon damage is not prematurely blocked")
+	player.weapon = {}
+	player.char_id = "paladin"
+	player.buffs.append({"type": "paladin_counter", "value": 1})
+	_expect(game.card_block_reason(0, "range").is_empty(), "Counter bonus can make a distant ranged attack playable")
+	player.buffs.clear()
 	game.rapid_mode = false
 	player.char_id = "mage"
 	player.ap_attack = 2

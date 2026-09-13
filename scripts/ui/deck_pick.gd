@@ -94,7 +94,7 @@ func _process(_delta: float):
 		return
 	var seconds := maxi(0, ceili((deadline - Time.get_ticks_msec()) / 1000.0))
 	var waiting := wait_root.visible
-	_deadline_label.text = "%s · %02d:%02d · %s" % ["等待对手" if waiting else "调整卡组", seconds / 60, seconds % 60, "你的卡组已确认" if waiting else "超时未确认将使用默认卡组"]
+	_deadline_label.text = "%s · %02d:%02d · %s" % ["等待对手" if waiting else "调整卡组", floori(seconds / 60.0), seconds % 60, "你的卡组已确认" if waiting else "超时未确认将使用默认卡组"]
 	if seconds == 0: _deadline_label.text = "等待服务器开始对局 · " + ("你的卡组已确认" if waiting else "配置时间已结束")
 	_deadline_label.add_theme_color_override("font_color", Style.ERROR_RED if seconds <= 15 else Style.MODE_TITLE)
 

@@ -1,4 +1,4 @@
-# card_system.gd — 卡牌系统（牌堆管理、手牌、弃牌堆、抽牌、洗牌）
+﻿# card_system.gd — 卡牌系统（牌堆管理、手牌、弃牌堆、抽牌、洗牌）
 # 双模式：
 #   · 共享模式（默认，人机/联机）：传入共享 deck/discard 引用，双方同一副牌
 #   · 独立模式（PVE 构筑）：各自一副牌堆/弃牌堆（duplicate + 独立洗牌）
@@ -90,13 +90,22 @@ func random_discard(count: int) -> Array:
 func discard_specific(card_uid: int) -> Dictionary:
 	return discard_card(card_uid)
 
-# 随机从手牌中获取一张（夺取）
-func random_take() -> Dictionary:
+# 随机从手牌中获取一张（夺取）；exclude_uid 排除指定卡（如正在结算中的攻击牌，
+# 避免盗贼受击劫富时偷走对方刚打出的攻击牌）
+func random_take(exclude_uid: int = -1) -> Dictionary:
 	if hand.is_empty():
 		return {}
-	var idx = randi() % hand.size()
-	var card = hand[idx]
-	hand.remove_at(idx)
+	var candidates: Array = []
+	for card in hand:
+		if card.uid != exclude_uid:
+			candidates.append(card)
+	if candidates.is_empty():
+		return {}
+	var card = candidates[randi() % candidates.size()]
+	for i in range(hand.size()):
+		if hand[i].uid == card.uid:
+			hand.remove_at(i)
+			break
 	return card
 
 # 放逐（放逐书页）：从牌堆随机取一张移入弃牌堆并返回（牌堆空返回空字典）
@@ -192,3 +201,4 @@ func from_dict(data: Dictionary):
 	discard.clear()
 	hand = data.get("hand", []).duplicate()
 	# deck_size and discard_size are tracked but actual content is server-only
+

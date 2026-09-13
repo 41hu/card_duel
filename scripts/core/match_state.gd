@@ -1,4 +1,4 @@
-# ============================================================
+﻿# ============================================================
 # match_state.gd — 对局状态机（服务端权威，唯一真实数据源）
 # ============================================================
 extends RefCounted
@@ -891,9 +891,9 @@ func process_response(defender_idx: int, respond: bool, card_uid: int = -1):
 		# 劫富（盗贼）：最终实际伤害>0 时——盗贼受击（来源=攻击者）或盗贼近战命中（来源=目标）触发
 		if final_damage > 0:
 			if players[defender_idx].char_id == "rogue":
-				_rogue_rob(defender_idx, attacker_idx, attacker_idx)
+				_rogue_rob(defender_idx, attacker_idx, attacker_idx, pending_attack_uid)
 			elif players[attacker_idx].char_id == "rogue" and pending_attack_card in ["near", "heavy"]:
-				_rogue_rob(attacker_idx, defender_idx, attacker_idx)
+				_rogue_rob(attacker_idx, defender_idx, attacker_idx, -1)
 		# 反击（圣骑士）：被动圣盾减伤把伤害完全抵挡（归0）也触发（无需使用响应卡）
 		if final_damage <= 0 and before_skill > 0 and players[defender_idx].char_id == "paladin":
 			players[defender_idx].buffs.append({type="paladin_counter", value=1, duration=2, turn=turn_number})
@@ -1215,7 +1215,7 @@ func _apply_vine_entangle(player_idx: int):
 # 劫富（盗贼）：近战命中或受击后，来源手牌≥盗贼手牌 → 随机夺取其1张（每回合限1次）
 # 偷牌成功后进入潜行（turn_source = 触发来源攻击者：命中=盗贼自己/受击=攻击者，
 # 潜行在其下一次回合开始时自然消失）
-func _rogue_rob(rogue_idx: int, source_idx: int, turn_source: int):
+func _rogue_rob(rogue_idx: int, source_idx: int, turn_source: int, exclude_uid: int = -1):
 	if rogue_idx < 0 or source_idx < 0 or rogue_idx == source_idx: return
 	var rogue = players[rogue_idx]
 	if rogue.char_id != "rogue": return
@@ -1224,7 +1224,7 @@ func _rogue_rob(rogue_idx: int, source_idx: int, turn_source: int):
 	var r_hand = card_systems[rogue_idx].hand.size()
 	var s_hand = card_systems[source_idx].hand.size()
 	if s_hand < r_hand: return  # 只劫比自己富的（手牌不少于自己）
-	var taken = card_systems[source_idx].random_take()
+	var taken = card_systems[source_idx].random_take(exclude_uid)
 	if taken.is_empty(): return
 	card_systems[rogue_idx].add_to_hand(taken)
 	rogue["rogue_stole_this_turn"] = true
@@ -1704,3 +1704,4 @@ func _record_snapshot(st: Dictionary):
 	rec.deck = cur_p.get("deck_size", st.get("deck_size", 0))
 	rec.discard = cur_p.get("discard_size", st.get("discard_size", 0))
 	battle_record.append(rec)
+

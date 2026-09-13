@@ -379,7 +379,9 @@ func _test_skill_materials():
 		fake.sent.clear()
 		b._exec_skill(skill)
 		_expect(b._skill_pick == skill and b.get_child_count() == count, skill + " starts in the hand without a popup")
-		_expect(b._skill_scrim.visible and b._skill_description.text.contains(Config.CHARACTER_DB.vine_ent.skill_desc), skill + " shows the full description on the focus backdrop")
+		# 描述经 Style.wj 插入 U+2060（防断行），比较时先剥离该零宽字符
+		var shown_desc: String = b._skill_description.text.replace("\u2060", "")
+		_expect(b._skill_scrim.visible and shown_desc.contains(Config.CHARACTER_DB.vine_ent.skill_desc), skill + " shows the full description on the focus backdrop")
 		_expect(b.confirm_btn.disabled, skill + " cannot confirm without a material")
 		b._on_card_clicked(cases[skill], "")
 		var material_uid: int = b._selected_uid

@@ -227,7 +227,7 @@ func start_bp():
 	game = MatchStateClass.new()
 	game.disable_timeout = true  # 自我对战 BP：不限时
 	game.bp_state_changed.connect(_on_bp_state_changed)
-	game.bp.reset()
+	game.bp.reset(true)
 	bp_state_cache = game.bp.get_bp_state()
 	bp_state_cache["t"] = "bp_state"
 

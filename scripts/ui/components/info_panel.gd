@@ -285,10 +285,10 @@ func _refresh_status(p: Dictionary):
 		if a.duration == -2: dur = "·永久"
 		elif a.duration > 0: dur = "·%d回" % a.duration
 		elif a.duration == -1: dur = "·本回"
+		if k in ["神隐", "rogue_stealth"]: dur = "·待解除"
 		var cnt := "×%d" % a.count if a.count > 1 else ""
 		slots.append(_slot_data(k, "%s%d%s%s" % [sgn, a.value, dur, cnt],
-			"%s：%s%d，%s%s" % [_status_name(k), sgn, a.value, _dur_text(a.duration),
-				("（%d层）" % a.count) if a.count > 1 else ""]))
+			_buff_detail(k, int(a.value), int(a.duration), int(a.count))))
 	# 反击/追击槽：按叠加回合分组，每回合一个槽（组内层数合计，组内各层同时衰减）
 	for bt in counter_groups:
 		var g: Dictionary = counter_groups[bt]
@@ -323,6 +323,22 @@ func _slot_data(kind: String, value: String, tooltip: String) -> Dictionary:
 
 func _status_name(kind: String) -> String:
 	return _STATUS_ICONS.get(kind, {}).get("name", kind)
+
+func _buff_detail(kind: String, value: int, duration: int, count: int = 1) -> String:
+	var effect := ""
+	match kind:
+		"near_up": effect = "近战与重击伤害%+d。" % value
+		"attack_up", "attack_down": effect = "所有类型的攻击伤害%+d。" % value
+		"calibration": effect = "远程与穿心伤害+%d；远程或法术攻击未造成伤害时清空，可用追击抵消一次清空。" % value
+		"mage_empower": effect = "下次魔法或吟唱攻击伤害+%d，打出时消耗全部强化层数。" % value
+		"exposed": effect = "手牌对其他玩家可见，可被夺取指定手牌。"
+		"rogue_stealth": return "潜行：不能被远程或法术攻击瞄准；打出手牌或受到近战伤害时现形。触发来源角色的下个回合开始时解除。"
+		"ap_attack_down", "vine_entangle_ap": effect = "回合开始时获得的攻击行动点%+d。" % value
+		"vine_cripple": effect = "当前%d层。每次位移受到2点真实伤害（无视护甲），消耗1层；层数不会增加单次伤害。" % value
+		"wither_weapon": effect = "每次回复生命的数值%+d；再次施加刷新持续时间，不叠加。" % value
+		"神隐": return "神隐：下个回合判定伤害结算后，跳过摸牌、出牌和弃牌阶段，然后解除。"
+		_: effect = "效果数值%+d。" % value
+	return "%s：%s\n%s%s" % [_status_name(kind), effect, _dur_text(duration), "（%d次叠加）" % count if count > 1 else ""]
 
 func _dur_text(duration: int) -> String:
 	if duration == -1: return "本回合结束清除"

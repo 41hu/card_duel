@@ -569,6 +569,9 @@ func _on_state_updated(state: Dictionary):
 		or previous.get("turn_number", -1) != state.turn_number \
 		or previous.get("phase", -1) != state.phase \
 		or previous.get("waiting_for_discard", false) != state.get("waiting_for_discard", false)
+	context_changed = context_changed or previous.get("pending_target", -1) != state.get("pending_target", -1) \
+		or previous.get("pending_attack_segment", 0) != state.get("pending_attack_segment", 0) \
+		or previous.get("response_pending", false) != state.get("response_pending", false)
 	var hand_changed = previous.get("players", []) != state.get("players", [])
 	if not _is_my_turn or context_changed or hand_changed:
 		_on_cancel_select()
@@ -630,7 +633,8 @@ func _process(delta):
 
 var _timer_elapsed: float = 0.0
 var _status_msg_timer: float = 0.0
-var _end_confirm_at: int = 0  # 结束出牌防误触：进入确认态的时间戳（0=未确认）
+var _muted_warnings: Dictionary = {}
+var _warning_popup: Control
 
 func _refresh_all(state: Dictionary):
 	card_info.text = ""
@@ -723,7 +727,6 @@ func _refresh_all(state: Dictionary):
 		if _discard_focus or (_response_focus and not _is_response_target()):
 			_hide_skill_focus()
 		_discard_selected.clear()
-		_end_confirm_at = 0  # 状态刷新（出牌等操作）取消结束确认态
 		end_turn_btn.text = "结束出牌"
 		end_turn_btn.remove_theme_color_override("font_color")
 		end_turn_btn.visible = _is_my_turn
@@ -873,10 +876,13 @@ func _response_description(type_id: String) -> String:
 	if not type_id in card_types: return "此牌不能响应当前攻击"
 	if type_id == "magic": return "闪避：免疫此次伤害或冻结，不消耗行动点"
 	if type_id == "near": return "格挡：伤害减半，不消耗行动点"
+	return "牵制：减免%d伤害，不消耗行动点" % _restraint_reduction()
+
+func _restraint_reduction() -> int:
 	var me := _find_self()
 	var reduction := maxi(0, int(me.get("range_power", 0)) - int(_game_state.get("distance", 0)))
 	if me.get("weapon", {}).get("id", "") == "repeater": reduction += 2
-	return "牵制：减免%d伤害，不消耗行动点" % reduction
+	return mini(reduction, maxi(0, int(_game_state.get("pending_attack_damage", reduction))))
 
 func _restore_card_controls():
 	if not _skill_pick.is_empty():
@@ -1524,8 +1530,14 @@ func _submit_card(uid: int, extra: Dictionary = {}):
 	_on_cancel_select()
 	_n().send_play_card(uid, extra)
 
-func _submit_response(respond: bool, uid: int = -1):
+func _submit_response(respond: bool, uid: int = -1, confirmed: bool = false):
 	if _submitting or not _is_response_target(): return
+	if respond:
+		var card = hand_area.get_card(uid)
+		if card == null or not card._respondable: return
+		if not confirmed and card.type_id == "range" and _restraint_reduction() == 0 and not _warning_muted("restraint"):
+			_show_action_warning("restraint", "本次牵制只能减免 0 点伤害，但仍会消耗这张远程牌。确定要响应吗？", "仍然响应", func(): _submit_response(true, uid, true))
+			return
 	_submitting = true
 	hand_area.locked = true
 	_on_cancel_select()
@@ -2007,7 +2019,7 @@ func _show_fighter_popup():
 	hb.add_child(dbtn)
 	add_child(c)
 
-func _on_end_turn():
+func _on_end_turn(confirmed: bool = false):
 	if not _skill_pick.is_empty(): return
 	if _submitting: return
 	if not _is_my_turn:
@@ -2019,26 +2031,67 @@ func _on_end_turn():
 		_n().send_confirm_discard(_discard_selected.duplicate())
 		_discard_selected.clear()
 		return
-	# 结束出牌防误触：首次点击进入"确认中"（按钮变橙+提示），3 秒内再点才真正结束；
-	# 超时或操作其他卡牌（状态刷新）自动还原。撤销结束出牌需回滚弃牌/回合流转，
-	# 服务端权威下风险高，双击确认是更稳妥的方案。
-	var now = Time.get_ticks_msec()
-	if _end_confirm_at == 0 or now - _end_confirm_at > 3000:
-		_end_confirm_at = now
-		end_turn_btn.text = "再点一次确认结束"
-		end_turn_btn.add_theme_color_override("font_color", Color(1, 0.6, 0.3))
-		status_label.text = "再次点击「结束出牌」确认（3 秒后自动取消）"
-		var click_at: int = now
-		get_tree().create_timer(3.0).timeout.connect(func():
-			# 期间若有新的确认点击（_end_confirm_at 更新）或已真正结束，跳过还原
-			if is_instance_valid(self) and _end_confirm_at != 0 and _end_confirm_at == click_at:
-				_end_confirm_at = 0
-				end_turn_btn.text = "结束出牌"
-				end_turn_btn.remove_theme_color_override("font_color")
-				status_label.text = ""
-		)
+	if _game_state.get("turn_phase", -1) != Config.TurnPhase.ACTION or int(_game_state.get("waiting_for_weapon_choice", -1)) >= 0 or _game_state.get("wind_bow_pending", false): return
+	if not confirmed and not _warning_muted("end_turn") and _has_playable_hand():
+		_show_action_warning("end_turn", "你本回合还有可以打出的手牌。确定结束出牌并进入弃牌阶段吗？", "结束出牌", func(): _on_end_turn(true))
 		return
-	_end_confirm_at = 0
-	end_turn_btn.text = "结束出牌"
-	end_turn_btn.remove_theme_color_override("font_color")
+	_submitting = true
+	hand_area.locked = true
 	_n().send_end_turn()
+
+func _has_playable_hand() -> bool:
+	for card in hand_area.cards:
+		if not card._unaffordable: return true
+	return false
+
+func _warning_muted(kind: String) -> bool:
+	return bool(_muted_warnings.get("%d:%s" % [_player_index, kind], false))
+
+func _show_action_warning(kind: String, message: String, accept_text: String, accept: Callable):
+	if is_instance_valid(_warning_popup) and not _warning_popup.is_queued_for_deletion() and _warning_popup.visible: return
+	var popup := Control.new()
+	popup.name = "ActionWarning"
+	popup.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	popup.z_index = 30
+	var bg := ColorRect.new()
+	bg.color = Color(0, 0, 0, 0.65)
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	popup.add_child(bg)
+	var content := _popup_box(popup, 720, 420)
+	content.add_theme_constant_override("separation", 20)
+	var description := _lbl(message)
+	description.add_theme_font_size_override("font_size", 32)
+	description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	content.add_child(description)
+	var mute := CheckBox.new()
+	mute.name = "Mute"
+	mute.text = "本局不再提示此类操作"
+	mute.custom_minimum_size.y = 64
+	mute.add_theme_font_size_override("font_size", 28)
+	mute.add_theme_icon_override("unchecked", load("res://art/ui/checkbox_empty.svg"))
+	mute.add_theme_icon_override("checked", load("res://art/ui/checkbox_checked.svg"))
+	mute.add_theme_constant_override("h_separation", 14)
+	content.add_child(mute)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 24)
+	content.add_child(row)
+	var cancel := _mkbtn("取消")
+	cancel.name = "Cancel"
+	cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cancel.pressed.connect(func(): popup.hide(); popup.queue_free())
+	row.add_child(cancel)
+	var confirm := _mkbtn(accept_text)
+	confirm.name = "Accept"
+	confirm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var key := "%d:%s" % [_player_index, kind]
+	confirm.pressed.connect(func():
+		if popup.is_queued_for_deletion() or not popup.visible: return
+		_muted_warnings[key] = mute.button_pressed
+		popup.hide()
+		popup.queue_free()
+		accept.call()
+	)
+	row.add_child(confirm)
+	add_child(popup)
+	_warning_popup = popup
+	cancel.grab_focus()

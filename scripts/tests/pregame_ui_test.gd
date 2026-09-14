@@ -19,6 +19,7 @@ func shot(label: String):
 
 func _ready():
 	LocalGame.start_bp()
+	expect(LocalGame.game.bp.bp_phase == "first_pick" and LocalGame.game.bp.banned_chars.is_empty(), "Self-play skips bans")
 	LocalGame.game.bp._bp_first = 1
 	LocalGame.bp_state_cache = LocalGame.game.bp.get_bp_state()
 	var bp = load("res://scenes/bp_scene.tscn").instantiate()
@@ -33,9 +34,26 @@ func _ready():
 	bp._on_char_clicked("mage")
 	expect(LocalGame.game.bp.banned_chars.is_empty(), "Preview does not submit a ban")
 	bp._confirm_preview()
-	expect(LocalGame.game.bp.banned_chars == ["mage"], "Confirmation submits once")
-	expect(bp._side_labels[1].text.contains("禁用：" + Config.char_name("mage")), "P2 first ban appears on P2 side")
+	expect(LocalGame.game.bp.picked_chars[0] == "mage" and LocalGame.game.bp.bp_phase == "second_pick", "Confirmation picks once and rotates to second player")
+	expect(bp._side_picks[1].text.contains(Config.char_name("mage")), "P2 selection appears on P2 side")
 	expect(bp._preview_id.is_empty(), "New phase clears the old preview")
+	var announcement = bp._turn_tween
+	bp._on_bp_state(LocalGame.game.bp.get_bp_state())
+	expect(bp._turn_tween == announcement, "Timer refresh does not repeat the rotation animation")
+	bp._side_picks[1].pressed.emit()
+	expect(bp._preview_id == "mage" and not bp._preview_desc.text.is_empty() and bp._confirm.disabled, "Picked character remains inspectable without being selectable twice")
+	for button in bp._char_buttons:
+		if button.get_meta("char_id") == "mage":
+			expect(button.get_theme_stylebox("normal").border_width_left == 5 and button.get_meta("badge").text.contains("P2"), "Picked tile has a strong border and owner badge")
+	var banned_state = LocalGame.game.bp.get_bp_state()
+	banned_state.banned_chars = ["rogue"]
+	banned_state.available_chars.erase("rogue")
+	bp._is_local = false
+	bp._on_bp_state(banned_state)
+	bp._side_bans[1].pressed.emit()
+	expect(bp._preview_id == "rogue" and bp._confirm.disabled and bp._preview_stats.text.contains("生命"), "Banned result button opens stats and skills without allowing another pick")
+	bp._is_local = true
+	bp._on_bp_state(LocalGame.game.bp.get_bp_state())
 	bp._query = Config.char_name("gunslinger")
 	bp._paginate()
 	visible_cards = 0
@@ -49,6 +67,10 @@ func _ready():
 	await shot("bp")
 	bp.queue_free()
 	await settle()
+	var first: int = LocalGame.game.bp._bp_first
+	expect(LocalGame.game.bp.execute_action(1 - first, "pick", "rogue") and LocalGame.game.bp.is_done(), "Self-play finishes after only two selections")
+	LocalGame.game.bp.reset()
+	expect(LocalGame.game.bp.bp_phase == "first_ban", "Default BP retains bans for AI and online matches")
 	LocalGame.disconnect_from_server()
 	Network.player_index = 0
 	Network._handle_packet(JSON.stringify({"t": "deck_config", "chars": ["mage", "rogue"], "first": 0, "time_left": 90}))

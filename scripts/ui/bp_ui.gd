@@ -127,6 +127,10 @@ var _filter := 0
 var _preview_id := ""
 var _submitted := false
 var _side_labels: Array = []
+var _side_bans: Array = []
+var _side_picks: Array = []
+var _turn_tween: Tween
+var _turn_notice: Label
 var _page_label: Label
 var _previous: Button
 var _next: Button
@@ -166,17 +170,29 @@ func _build_layout():
 	phase_label.reparent(root)
 	phase_label.add_theme_font_size_override("font_size", 34)
 	turn_label.reparent(root)
-	turn_label.add_theme_font_size_override("font_size", 24)
+	turn_label.add_theme_font_size_override("font_size", 38)
 	var sides := HBoxContainer.new()
 	sides.add_theme_constant_override("separation", 32)
 	root.add_child(sides)
 	for i in range(2):
+		var side := VBoxContainer.new()
+		side.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		sides.add_child(side)
 		var label := _text("", 28)
-		label.custom_minimum_size.y = 106
+		label.custom_minimum_size.y = 40
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		label.add_theme_color_override("font_color", Style.ME_INFO if i == 0 else Style.OPP_INFO)
-		sides.add_child(label)
+		side.add_child(label)
 		_side_labels.append(label)
+		var choices := HBoxContainer.new()
+		side.add_child(choices)
+		for list in [_side_bans, _side_picks]:
+			var choice := _button("", func(): pass)
+			choice.custom_minimum_size.y = 50
+			choice.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			choice.pressed.connect(func(): _on_char_clicked(str(choice.get_meta("char_id", ""))))
+			choices.add_child(choice)
+			list.append(choice)
 	root.add_child(HSeparator.new())
 	var body := HBoxContainer.new()
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -302,6 +318,16 @@ func _create_char_buttons(ids: Array):
 		state_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		content.add_child(state_label)
 		btn.set_meta("state_label", state_label)
+		var badge := _text("", 24)
+		badge.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+		badge.offset_left = 10
+		badge.offset_right = -10
+		badge.offset_top = 8
+		badge.offset_bottom = 40
+		badge.autowrap_mode = TextServer.AUTOWRAP_OFF
+		badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		btn.add_child(badge)
+		btn.set_meta("badge", badge)
 		btn.set_meta("labels", [name_label, state_label])
 		char_grid.add_child(btn)
 		_char_buttons.append(btn)
@@ -332,7 +358,8 @@ func _paginate():
 	_size_tiles()
 
 func _on_bp_state(data: Dictionary):
-	if data.get("phase", "") != _bp_state.get("phase", ""):
+	var changed: bool = data.get("phase", "") != _bp_state.get("phase", "") or data.get("bp_first", 0) != _bp_state.get("bp_first", 0)
+	if changed:
 		_preview_id = ""
 		_submitted = false
 		status_label.text = ""
@@ -342,7 +369,17 @@ func _on_bp_state(data: Dictionary):
 	if t >= 0: _bp_timer = t; _bp_timer_acc = 0.0
 	else: _bp_timer = -1
 	_update_ui()
+	if changed: _announce_turn()
 	_check_version()
+
+func _announce_turn():
+	_turn_notice = turn_label
+	if _turn_tween != null: _turn_tween.kill()
+	_turn_notice.modulate = Color.WHITE
+	_turn_tween = create_tween()
+	for i in range(2):
+		_turn_tween.tween_property(_turn_notice, "modulate:a", 0.35, 0.18)
+		_turn_tween.tween_property(_turn_notice, "modulate:a", 1.0, 0.25)
 
 # 服务器版本/角色缺失提示：联机时服务器旧代码 → 明确告知，避免"按钮在却点不了"
 func _check_version():
@@ -387,15 +424,37 @@ func _update_ui():
 		var ban_name := Config.char_name(banned[order]) if banned.size() > order else "待禁用"
 		var pick_name := Config.char_name(picked[order]) if picked.size() > order and picked[order] != "" else "待选择"
 		var team := ("我方" if side == 0 else "对方") if not (_is_local and not LocalGame.ai_mode) else "玩家"
-		_side_labels[side].text = "%s P%d · %s%s\n禁用：%s    选择：%s" % [team, player + 1, "先手" if player == first else "后手", " · 正在" + verb if player == _acting() and phase != "done" else "", ban_name, pick_name]
+		var active := player == _acting() and phase != "done"
+		_side_labels[side].text = "%s P%d · %s%s" % [team, player + 1, "先手" if player == first else "后手", " · 正在" + verb if active else ""]
+		_side_labels[side].modulate = Color.WHITE if active else Color(0.65, 0.65, 0.65)
+		_side_bans[side].text = "禁用：" + ban_name
+		_side_bans[side].set_meta("char_id", banned[order] if banned.size() > order else "")
+		_side_bans[side].disabled = banned.size() <= order
+		_side_bans[side].visible = not (_is_local and not LocalGame.ai_mode)
+		_side_picks[side].text = "选择：" + pick_name
+		_side_picks[side].set_meta("char_id", picked[order] if picked.size() > order else "")
+		_side_picks[side].disabled = picked.size() <= order or picked[order] == ""
 	phase_label.text = "角色禁选 · %s阶段 · %s" % [verb, "%ds" % _bp_timer if _bp_timer >= 0 else "不限时"]
-	turn_label.text = "轮到你%s" % verb if _my_turn() else "等待 P%d %s" % [_acting() + 1, verb]
+	turn_label.text = "P%d · %s%s角色" % [_acting() + 1, "请" if _my_turn() else "等待", verb]
+	turn_label.add_theme_color_override("font_color", Style.SELECTED_CYAN if _my_turn() else Style.OPP_INFO)
 	for btn in _char_buttons:
 		var cid: String = btn.get_meta("char_id")
 		var st: Label = btn.get_meta("state_label")
 		st.text = "已禁用" if cid in banned else ("已选择" if cid in picked else ("预览中" if cid == _preview_id else " "))
 		btn.modulate = Color(0.6, 0.6, 0.6) if cid in banned else Color.WHITE
 		btn.self_modulate = Style.SELECTED_CYAN if cid == _preview_id else Color.WHITE
+		var picked_order := picked.find(cid)
+		var badge: Label = btn.get_meta("badge")
+		badge.text = "P%d 已锁定" % [(first if picked_order == 0 else 1 - first) + 1] if picked_order >= 0 else ("已禁用" if cid in banned else "")
+		var frame: StyleBoxFlat = btn.get_theme_stylebox("normal").duplicate()
+		frame.bg_color = Color("164b4b") if picked_order >= 0 else Color("202a30")
+		frame.border_color = Color("65e2d0") if picked_order >= 0 else Color("46565b")
+		frame.set_border_width_all(5 if picked_order >= 0 else 2)
+		btn.add_theme_stylebox_override("normal", frame)
+		var hover: StyleBoxFlat = frame.duplicate()
+		hover.border_color = Style.SELECTED_CYAN
+		btn.add_theme_stylebox_override("hover", hover)
+		btn.add_theme_stylebox_override("focus", hover)
 	_refresh_preview()
 	if phase == "done":
 		phase_label.text = "角色已确定"

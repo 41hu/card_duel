@@ -17,6 +17,7 @@ class Transport extends Node:
 	var sent: Array = []
 	func send_play_card(uid: int, extra: Dictionary = {}): sent.append({"uid": uid, "extra": extra.duplicate(true)})
 	func send_response(respond: bool, uid: int = -1): sent.append({"response": respond, "uid": uid})
+	func send_end_turn(): sent.append({"end_turn": true})
 	func send_use_skill(skill: String, params: Dictionary = {}): sent.append({"skill": skill, "params": params.duplicate(true)})
 
 class ProbeBattle extends "res://scripts/ui/battle_ui.gd":
@@ -58,6 +59,100 @@ func _snapshot(label: String):
 	get_viewport().get_texture().get_image().save_png(path)
 	print("SCREENSHOT: " + ProjectSettings.globalize_path(path))
 
+func _test_action_warnings(b, fake, state: Dictionary):
+	b._on_end_turn()
+	var warning = b._warning_popup
+	_expect(is_instance_valid(warning) and fake.sent.is_empty(), "Playable hand requires end-turn confirmation")
+	b._on_end_turn()
+	_expect(b._warning_popup == warning, "Repeated clicks do not stack warning dialogs")
+	warning.find_child("Mute", true, false).button_pressed = true
+	warning.find_child("Cancel", true, false).pressed.emit()
+	_expect(fake.sent.is_empty() and not b._warning_muted("end_turn"), "Cancel keeps the turn and does not save the checkbox")
+	b._on_end_turn()
+	warning = b._warning_popup
+	await _settle()
+	_expect(warning.get_node("PopupScroll").get_global_rect().encloses(warning.find_child("Accept", true, false).get_global_rect()), "End warning buttons fit without scrolling")
+	await _snapshot("end_warning")
+	warning.find_child("Mute", true, false).button_pressed = true
+	warning.find_child("Accept", true, false).pressed.emit()
+	_expect(fake.sent.size() == 1 and fake.sent[0].has("end_turn"), "Confirm ends the action phase exactly once")
+	b._on_end_turn()
+	_expect(fake.sent.size() == 1, "End-turn submission stays locked until acknowledgement")
+	b._on_state_updated(state)
+	b._on_end_turn()
+	_expect(fake.sent.size() == 2 and b._warning_muted("end_turn") and not b._warning_muted("restraint"), "End-turn mute lasts for the match without muting restraint")
+	b._muted_warnings.clear()
+	var empty = state.duplicate(true)
+	empty.players[0].hand = []
+	b._on_state_updated(empty)
+	b._on_end_turn()
+	_expect(fake.sent.size() == 3, "No playable hand ends without a warning")
+	fake.sent.clear()
+	var response = state.duplicate(true)
+	response.phase = Config.Phase.RESPONSE_WINDOW
+	response.response_pending = true
+	response.pending_target = 0
+	response.current_player = 1
+	response.pending_attack_card = "range"
+	response.pending_attack_damage = 5
+	response.distance = 8
+	response.players[0].range_power = 1
+	response.players[0].weapon = {}
+	response.players[0].hand = [{"uid": 181, "type_id": "range"}]
+	b._on_state_updated(response)
+	b._on_card_clicked(181, "range")
+	b._on_confirm_card()
+	warning = b._warning_popup
+	_expect(is_instance_valid(warning) and warning.visible and fake.sent.is_empty(), "Zero-value restraint warns before spending a card")
+	warning.find_child("Cancel", true, false).pressed.emit()
+	_expect(b._selected_uid == 181 and not b.hand_area.locked, "Cancel preserves the selected response card")
+	b._on_confirm_card()
+	warning = b._warning_popup
+	await _settle()
+	_expect(warning.get_node("PopupScroll").get_global_rect().encloses(warning.find_child("Accept", true, false).get_global_rect()), "Restraint warning buttons fit without scrolling")
+	await _snapshot("restraint_warning")
+	warning.find_child("Mute", true, false).button_pressed = true
+	warning.find_child("Accept", true, false).pressed.emit()
+	_expect(fake.sent.size() == 1 and fake.sent[0].uid == 181, "Explicit confirmation allows a zero-value response")
+	b._on_state_updated(response)
+	b._submit_response(true, 181)
+	_expect(fake.sent.size() == 2 and b._warning_muted("restraint"), "Restraint mute bypasses later warnings in the match")
+	b._muted_warnings.clear()
+	response.players[0].weapon = {"id": "repeater", "data": Config.WEAPON_DB.repeater}
+	b._on_state_updated(response)
+	b._submit_response(true, 181)
+	_expect(fake.sent.size() == 3 and b._restraint_reduction() == 2, "Repeater's positive reduction avoids the warning")
+	response.players[0].weapon = {}
+	b._on_state_updated(response)
+	b._submit_response(true, 181)
+	warning = b._warning_popup
+	b._on_state_updated(state)
+	warning.find_child("Accept", true, false).pressed.emit()
+	_expect(fake.sent.size() == 3 and not warning.visible, "Expired response dismisses the warning and cannot submit stale confirmation")
+	fake.sent.clear()
+	b._on_state_updated(state)
+	await _settle()
+	var blocked = state.duplicate(true)
+	for entry in blocked.players[0].hand: entry["blocked_reason"] = "行动点不足"
+	b._on_state_updated(blocked)
+	b._on_end_turn()
+	_expect(fake.sent.size() == 1, "A nonempty but entirely blocked hand does not trigger the warning")
+	fake.sent.clear()
+	b._on_state_updated(state)
+	b._on_end_turn()
+	warning = b._warning_popup
+	b._on_state_updated(state.duplicate(true))
+	_expect(warning.visible and not warning.is_queued_for_deletion(), "Unchanged timer snapshots preserve the open warning")
+	var next_turn = state.duplicate(true)
+	next_turn.turn_number += 1
+	b._on_state_updated(next_turn)
+	_expect(not warning.visible, "Turn change closes an obsolete end-turn warning")
+	var fresh = ProbeBattle.new()
+	_expect(fresh._muted_warnings.is_empty(), "A new battle starts with both warnings enabled")
+	fresh.free()
+	b._on_state_updated(state)
+	await _settle()
+
 func _run():
 	LocalGame.start_local_game("mage", "rogue", 0, [DeckData.default_deck(), DeckData.default_deck()], true)
 	var state = LocalGame.game.get_full_state().duplicate(true)
@@ -81,8 +176,15 @@ func _run():
 	b._on_state_updated(state)
 	await _settle()
 	var hand = b.hand_area
+	await _test_action_warnings(b, fake, state)
 	var card = hand.get_card(101)
 	var original_instance: int = card.get_instance_id()
+	_expect(card._name_label.get_theme_font("font").multichannel_signed_distance_field and card._face.texture_filter == CanvasItem.TEXTURE_FILTER_LINEAR, "Card text uses scale-independent rendering and linear filtering")
+	var panel = b._self_panel
+	_expect(panel._buff_detail("vine_cripple", 3, -2).contains("2点真实伤害"), "Cripple details explain damage and layer consumption")
+	_expect(panel._buff_detail("wither_weapon", -1, 2).contains("回复生命"), "Wither details explain reduced healing")
+	_expect(panel._buff_detail("calibration", 2, -2).contains("清空"), "Calibration details explain its bonus and reset")
+	_expect(not panel._buff_detail("神隐", 0, -2).contains("永久") and panel._buff_detail("神隐", 0, -2).contains("摸牌"), "Spirit-away explains skipped phases instead of claiming permanence")
 	var gap := Vector2(card.position.x + 90, hand.size.y - 264 - 8 + 2)
 	_expect(hand.card_at(gap) == -1, "Blank space above sunken cards cannot select a card")
 	var before_focus: Vector2 = card.face_rect().position

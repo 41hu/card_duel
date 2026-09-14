@@ -8,6 +8,14 @@ const GRAYSCALE = preload("res://scripts/ui/components/card_grayscale.gdshader")
 const APBadge = preload("res://scripts/ui/components/action_point_badge.gd")
 # 类型色（免费/攻击/移动/功能）：鲜明高区分度，卡面顶部色带+AP徽章+主体染色共用
 const ACCENTS := [Color("d4a017"), Color("c0392b"), Color("2980b9"), Color("27ae60")]
+static var _readable_font: FontFile
+
+static func card_font() -> FontFile:
+	if _readable_font == null:
+		_readable_font = preload("res://assets/fonts/NotoSansCJKsc-Black.otf").duplicate()
+		_readable_font.multichannel_signed_distance_field = true
+		_readable_font.msdf_size = 64
+	return _readable_font
 
 class SelectionOverlay extends Control:
 	var selected := false
@@ -126,6 +134,7 @@ func _init():
 	_face.size = CARD_SIZE
 	_face.pivot_offset = Vector2(CARD_SIZE.x / 2, CARD_SIZE.y)
 	_face.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_face.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	add_child(_face)
 	# 顶部类型色带（全宽 8px，醒目区分牌类型）
 	_top_band = ColorRect.new()
@@ -134,10 +143,11 @@ func _init():
 	_top_band.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_face.add_child(_top_band)
 	_ap_badge = APBadge.new()
+	_ap_badge._value.add_theme_font_override("font", card_font())
 	_ap_badge.position = Vector2(3, 4)
 	_ap_badge.size = Vector2(46, 42)
 	_face.add_child(_ap_badge)
-	_name_label = _label(Vector2(50, 13), Vector2(120, 30), 22)
+	_name_label = _label(Vector2(50, 13), Vector2(120, 32), 24)
 	_name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_art_bg = ColorRect.new()
 	_art_bg.position = Vector2(10, 48)
@@ -151,8 +161,8 @@ func _init():
 	_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_art_bg.add_child(_art)
-	_ap_label = _label(Vector2(10, 164), Vector2(160, 26), 19)
-	_description = _label(Vector2(10, 194), Vector2(160, 54), 19)
+	_ap_label = _label(Vector2(10, 164), Vector2(160, 28), 22)
+	_description = _label(Vector2(10, 194), Vector2(160, 60), 22)
 	_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_description.max_lines_visible = 2
 	_description.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -168,6 +178,7 @@ func _label(pos: Vector2, extent: Vector2, font_size: int) -> Label:
 	label.position = pos
 	label.size = extent
 	label.add_theme_font_size_override("font_size", font_size)
+	label.add_theme_font_override("font", card_font())
 	label.add_theme_color_override("font_color", INK)
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_face.add_child(label)

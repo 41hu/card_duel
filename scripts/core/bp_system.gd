@@ -21,9 +21,9 @@ func _init(match):
 	match_ref = match
 	reset()
 
-func reset():
+func reset(skip_bans: bool = false):
 	_bp_first = randi() % 2
-	bp_phase = "first_ban"
+	bp_phase = "first_pick" if skip_bans else "first_ban"
 	banned_chars.clear()
 	picked_chars = ["", ""]
 	available_chars = Config.CHARACTER_IDS.duplicate()
